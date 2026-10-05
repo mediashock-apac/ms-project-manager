@@ -3014,8 +3014,12 @@ Three things it deliberately does NOT do, each of which is the obvious version o
 **Scoping goes two ways on purpose**, and this is the part most likely to be "fixed" by mistake:
 
 - It **respects the teamspace switcher** — that is a workspace-level scope whose current value is
-  permanently visible in the rail, and running a Production-only WIP is a real use. Leave is
-  scoped by `personInTeamspace`, the same rule `taskInTeamspace` applies to tasks.
+  permanently visible in the rail, and running a Production-only WIP is a real use. **Except the
+  Away list, which is never scoped** — it lists everyone's leave in the window. It used to be scoped
+  by `personInTeamspace`, which hid the leave of people whose tasks were still on screen (a task
+  shows in every teamspace of the people on it, so an owner from another department appeared on the
+  timeline with their leave stripe while Away said "Everyone is in"). Changed on request: "WIP should
+  list everyone's leave."
 - It **ignores the search/priority/project/assignee filter bar**, and hides the toolbar outright
   (`TOOLBAR_FULLY_HIDDEN_VIEWS`). Those filters persist across sessions by design, so a narrowing
   somebody left set last Tuesday would silently delete items from a meeting agenda with nothing

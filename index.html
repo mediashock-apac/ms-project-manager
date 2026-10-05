@@ -10640,11 +10640,16 @@
      Who will not be here. One row per leave PERIOD overlapping the window -- including periods
      that started before today and run into it, which is the case someone joining the meeting
      late most needs to be told about.
+
+     NOT teamspace-scoped, unlike the rest of WIP: everyone's leave, whichever teamspace is picked.
+     It was scoped by department, which hid the leave of people whose tasks still appeared on the
+     screen (a task shows in every teamspace of the people on it). Asked for directly: "WIP should
+     list everyone's leave." At this team's size the list stays short.
   --------------------------------------------------------- */
   function wipAwayHtml(today, horizon) {
     var rows = [];
     teamPeople.forEach(function (person) {
-      if (!person.name || !personInTeamspace(person.name)) return;
+      if (!person.name) return;
       (person.leave || []).forEach(function (l) {
         if (!l || !l.start || !l.end) return;
         if (l.end < today || l.start > horizon) return;
@@ -10895,6 +10900,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-05g', date: '2026-10-05', items: [
+      { type: 'fixed', title: 'WIP Meeting shows everyone\'s leave', text: 'The Away list now includes everyone who\'s off, whichever teamspace you\'re viewing. Before, leave from people outside your teamspace was left out even when their tasks were on screen.' }
+    ] },
     { id: '2026-10-05f', date: '2026-10-05', items: [
       { type: 'improved', title: 'Faces instead of names on the Timeline', text: 'On the Timeline, who owns a task or checklist item now shows as their profile picture. Hover it to see the name. WIP Meeting keeps written names, since it\'s read together on one screen.' }
     ] },
@@ -12147,7 +12155,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T06:02:50Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T06:10:49Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
