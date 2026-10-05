@@ -182,6 +182,22 @@ tutorial should auto update on new features"** — so feature tours are generate
 - **A missing or off-screen target falls back to a centred card** (e.g. sidebar steps on a phone,
   where the sidebar is an off-canvas drawer), so a step never points at nothing.
 - **Replay**: profile menu → "Take the tour", or "Show me" on a New Updates item.
+- **Page tours** (`PAGE_TOURS`, `maybeStartPageTour`, asked for next: "guided tours should also be
+  applied to other pages when new users click into it. When new pages are added, existing users
+  should also be able to go through the tour"). One 1–2 step tour per view, seen as `page:<view>`.
+  - New joiners get each page's tour on their first visit. Existing teammates only get a page
+    whose `since` is after their account was created — **so a new page ships with
+    `since: '<ship date>'` and every existing teammate is toured through it on first visit.**
+    Pages that predate tours use `PAGE_TOURS_EXISTING` (2026-01-01, before every account).
+  - Fires from `setView` only, so never on the page you land on at sign-in (that's the welcome
+    tour's moment), and never while the welcome or a feature tour is due or running — tours
+    never stack.
+  - Replay: profile menu → "Tour this page". Targets are each view's own containers/controls;
+    `#calendar-scope-toggle`, `#wip-mode-toggle` and `#wip-range-toggle` ids exist for this. An
+    empty container (zero height, e.g. an empty archive) falls back to a centred card.
+  - Verified in Chromium (53 checks: every page's every step highlighted with the card on screen,
+    no repeat on second visit, no stacking on a due welcome tour, existing users skip old pages
+    but get a newer one, replay).
 - Verified in Chromium against the real markup with Firebase stubbed (24 checks: who gets which
   tour, every step's card on screen at 1440×900, auto-derived tour and welcome folding, mobile
   fallback, Escape/Skip, waits for a modal). Not yet clicked through signed in on the live app.

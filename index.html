@@ -708,6 +708,10 @@
           <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
           <span>Take the tour</span>
         </button>
+        <button type="button" id="btn-tour-page" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-600">
+          <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+          <span>Tour this page</span>
+        </button>
         <div class="border-t border-zinc-100 dark:border-zinc-600 my-1"></div>
         <button type="button" id="btn-sign-out" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-rose-50 dark:hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400">
           <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
@@ -958,7 +962,7 @@
             <!-- Defaults to "Mine" (see CALENDAR_SCOPE_KEY) -- requested directly, wanting this
                  view to replace checking a personal Google Calendar for deadlines, which centers
                  on your own agenda by default, not the whole team's. -->
-            <div class="flex items-center rounded-lg border border-zinc-200 dark:border-zinc-700 p-0.5 text-xs font-semibold">
+            <div id="calendar-scope-toggle" class="flex items-center rounded-lg border border-zinc-200 dark:border-zinc-700 p-0.5 text-xs font-semibold">
               <button type="button" id="calendar-scope-mine" class="calendar-scope-btn px-2.5 py-1 rounded-md">Mine</button>
               <button type="button" id="calendar-scope-all" class="calendar-scope-btn px-2.5 py-1 rounded-md">Everyone</button>
             </div>
@@ -1209,11 +1213,11 @@
         <!-- By project / Agenda. Opens on By project for everyone every time -- not remembered per
              person -- because Suits runs the meeting project by project and everyone should be
              looking at the same screen. -->
-        <div class="flex items-center rounded-lg border border-zinc-200 dark:border-zinc-700 p-0.5 text-xs font-semibold">
+        <div id="wip-mode-toggle" class="flex items-center rounded-lg border border-zinc-200 dark:border-zinc-700 p-0.5 text-xs font-semibold">
           <button type="button" data-wip-mode="projects" class="calendar-scope-btn px-2.5 py-1 rounded-md">By project</button>
           <button type="button" data-wip-mode="agenda" class="calendar-scope-btn px-2.5 py-1 rounded-md">Agenda</button>
         </div>
-        <div class="flex items-center rounded-lg border border-zinc-200 dark:border-zinc-700 p-0.5 text-xs font-semibold shrink-0">
+        <div id="wip-range-toggle" class="flex items-center rounded-lg border border-zinc-200 dark:border-zinc-700 p-0.5 text-xs font-semibold shrink-0">
           <button type="button" data-wip-range="7" class="calendar-scope-btn px-2.5 py-1 rounded-md">1 week</button>
           <button type="button" data-wip-range="14" class="calendar-scope-btn px-2.5 py-1 rounded-md">2 weeks</button>
           <button type="button" data-wip-range="28" class="calendar-scope-btn px-2.5 py-1 rounded-md">4 weeks</button>
@@ -12133,6 +12137,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-06d', date: '2026-10-06', items: [
+      { type: 'new', title: 'Page tours', text: 'New teammates get a quick tour of each page the first time they open it. When a new page is added, everyone gets its tour on their first visit. To replay the tour for the page you are on, choose "Tour this page" in your profile menu.' }
+    ] },
     { id: '2026-10-06c', date: '2026-10-06', items: [
       { type: 'improved', title: 'Open checklist steps by clicking the name', text: 'On the Timeline and the WIP Meeting timeline, clicking the project or task name now shows or hides its checklist steps, the same as the small arrow beside it.' }
     ] },
@@ -12461,7 +12468,88 @@
     }).concat(derived);
   }
 
-  function tourById(id) { return allTours().find(function (t) { return t.id === id; }) || null; }
+  /* PAGE TOURS -- asked for directly: "guided tours should also be applied to other pages when
+     new users click into it. When new pages are added, existing users should also be able to go
+     through the tour." One short tour per view, shown the first time someone opens that view:
+     - new joiners (account created on/after TOURS_LAUNCH): every page, on first visit;
+     - everyone else: only pages whose `since` (the date the page shipped) is after their
+       account was created -- so **a new page gets `since: '<ship date>'` and every existing
+       teammate is toured through it on their first visit**. Pages that existed before tours
+       carry PAGE_TOURS_EXISTING, which predates every account.
+     Only fires on switching views (setView), never on the page you land on at sign-in -- that
+     is the welcome tour's moment -- and never while the welcome or a feature tour is due or
+     running, so tours don't stack. Seen as 'page:<view>' in the same toursSeen list. Replay from
+     the profile menu ("Tour this page"). Targets must be on that view and present when it is
+     empty; 1-3 steps. */
+  var PAGE_TOURS_EXISTING = '2026-01-01';
+  var PAGE_TOURS = {
+    board: { since: PAGE_TOURS_EXISTING, steps: [
+      { target: '#board-columns', title: 'The Board', text: 'Tasks sit in columns by stage, grouped into one card per project. Drag a task to move it along, or click it to open it.' },
+      { target: '#toolbar-row', title: 'Find things fast', text: 'Search tasks, checklists and comments, filter by priority, project or people, and change the sort order.' }
+    ] },
+    gantt: { since: PAGE_TOURS_EXISTING, steps: [
+      { target: '#gantt-wrap', title: 'The Timeline', text: 'Each bar runs from a task\'s start date to its deadline. Click a task\'s name to show its checklist steps, with diamonds on their due dates.' },
+      { target: '#gantt-progress-toggle', title: 'Progress', text: 'Choose whether the Progress column counts finished checklist steps or the task\'s stage.' }
+    ] },
+    calendar: { since: PAGE_TOURS_EXISTING, steps: [
+      { target: '#calendar-scope-toggle', title: 'Mine or everyone', text: 'Mine shows only your work. Everyone shows the whole team.' },
+      { target: '#calendar-grid', title: 'The month at a glance', text: 'Tasks stretch across their dates, and anyone away is listed on the day. Click a day number to see everything on it.' }
+    ] },
+    people: { since: PAGE_TOURS_EXISTING, steps: [
+      { target: '#people-grid', title: 'Who is working on what', text: 'One card per person, with their open work and anything overdue. Book your own time off at the bottom of your card.' }
+    ] },
+    projects: { since: PAGE_TOURS_EXISTING, steps: [
+      { target: '#projects-grid', title: 'Every project', text: 'Ongoing projects come first, soonest deadline at the top. Open a card to see its tasks and hours, or give the project its own deadline.' }
+    ] },
+    chat: { since: PAGE_TOURS_EXISTING, steps: [
+      { target: '#chat-new-btn', title: 'Project chats', text: 'Start a group chat for a project here. Everyone working on the project is notified of new messages.' },
+      { target: '#chat-project-list-pane', title: 'Your chats', text: 'Filter to your chats, favourites or unread ones. Right-click a message to reply, forward, copy or react.' }
+    ] },
+    wip: { since: PAGE_TOURS_EXISTING, steps: [
+      { target: '#wip-mode-toggle', title: 'Two ways to run the meeting', text: 'By project walks through each project in turn. Agenda lists what needs a decision, what is coming up, and who is away.' },
+      { target: '#wip-range-toggle', title: 'How far ahead', text: 'Choose how many weeks ahead the meeting looks.' }
+    ] },
+    activity: { since: PAGE_TOURS_EXISTING, steps: [
+      { target: '#activity-feed', title: 'Activity', text: 'A record of every change on the board, newest first. Click a row to open what it is about.' }
+    ] },
+    suggestions: { since: PAGE_TOURS_EXISTING, steps: [
+      { target: '#suggestion-input', title: 'Suggest a change', text: 'Ideas for improving Project Manager go here. You will be notified when yours is fixed.' }
+    ] },
+    archived: { since: PAGE_TOURS_EXISTING, steps: [
+      { target: '#archived-list', title: 'Archived work', text: 'Finished tasks that have been put away. Search them from the toolbar, or restore one to the Board.' }
+    ] },
+    updates: { since: PAGE_TOURS_EXISTING, steps: [
+      { target: '#updates-list', title: 'New Updates', text: 'What changed in Project Manager, newest first. "Show me" plays a quick tour of a new feature.' }
+    ] }
+  };
+
+  function pageTour(view) {
+    var p = PAGE_TOURS[view];
+    return p ? { id: 'page:' + view, kind: 'page', date: p.since, steps: p.steps } : null;
+  }
+
+  var pageTourTimer = null;
+  function maybeStartPageTour(view) {
+    clearTimeout(pageTourTimer);
+    var tour = pageTour(view);
+    if (!tour || tourState || !auth.currentUser || !myPersonDoc()) return;
+    if (toursSeenList().indexOf(tour.id) !== -1) return;
+    var u = auth.currentUser;
+    var created = u.metadata && Date.parse(u.metadata.creationTime);
+    if (!created) return;
+    var dayStart = function (d) { return Date.parse(d + 'T00:00:00'); };
+    if (!(created >= dayStart(TOURS_LAUNCH) || created < dayStart(tour.date))) return;
+    // Let the page render first; drop it if they've already moved on or something else took over.
+    pageTourTimer = setTimeout(function () {
+      if (currentView !== view || tourState || dueTour() || anyModalOpen() || isUserEditing()) return;
+      startTour(tour.id);
+    }, 600);
+  }
+
+  function tourById(id) {
+    if (id.indexOf('page:') === 0) return pageTour(id.slice(5));
+    return allTours().find(function (t) { return t.id === id; }) || null;
+  }
 
   function toursSeenList() {
     var local = [];
@@ -12674,6 +12762,10 @@
     }
   }, true);
   window.addEventListener('resize', positionTourStep);
+  document.getElementById('btn-tour-page').addEventListener('click', function () {
+    document.getElementById('user-menu-panel').classList.add('hidden');
+    startTour('page:' + currentView);
+  });
   document.getElementById('btn-take-tour').addEventListener('click', function () {
     document.getElementById('user-menu-panel').classList.add('hidden');
     startTour('welcome');
@@ -12715,6 +12807,7 @@
     // as new on this visit.
     if (view === 'updates') { updatesUnseenAtOpen = unseenUpdateIds(); markUpdatesSeen(); }
     renderCurrentSecondaryView();
+    maybeStartPageTour(view);
   }
 
   // Only these views run their task list through applyFilters(). On the others the search box did
@@ -13813,7 +13906,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T16:15:05Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T16:20:31Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
