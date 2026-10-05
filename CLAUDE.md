@@ -2566,7 +2566,9 @@ client-side domain check in `isAllowedEmail` is UX only, not enforcement):
         hashing, because a hash of ~6 clients into 10 hues almost always collides; client keys
         ignore case and spaces ("Little Paddington" = "LittlePaddington"). `CLIENT_PALETTE` avoids
         rose/amber/emerald/purple/orange, which already mean overdue/decision/done/review/brand.
-        Not yet on Board, Projects, Chat, Calendar or Focus. Chat avatars keep their
+        **Deliberately not on Board, Projects, Chat, Calendar or Focus** — offered and declined
+        (2026-10-05) in favour of trialling it on WIP first; widen only if the team asks. On the
+        Board it would also sit next to the priority colours. Chat avatars keep their
         hashed colour (`PROJECT_AVATAR_PALETTE`): a filled circle needs some colour, and nobody
         reads meaning into it. History of the earlier two designs, kept for the reasoning:
       - `projectColor(t.project)` **also went through two designs.** The first gave each row a
