@@ -187,14 +187,20 @@ tutorial should auto update on new features"** — so feature tours are generate
   short sentences. No emoji (the icon rule). Tour strings are double-quoted so apostrophes need no
   escaping — single-quoted strings with a bare `'` have broken the syntax check twice this week.
   A step can set `cta` to replace the Next/Done label ("Show me around", "Let's go!").
-- **Hand-drawn sketches (`TOUR_ART`) on the welcome tour's first and last cards only.** Inline
-  SVG line art (person waving at a task board; person jumping beside a big tick), `currentColor`
-  lines for light/dark, Poppy accents, roughened by an `feTurbulence` + `feDisplacementMap`
-  filter so the strokes wobble like pen. Bookends only, by agreement: those two cards point at
-  nothing, so a picture adds warmth there, whereas a sketch on every step would compete with the
-  spotlight and make the tour feel longer. A step opts in with `art: '<key>'`. Filter ids must
-  be unique per sketch. In dark mode the pale fills are `brand-500/20`; `brand-900` made the tick
-  muddy.
+- **Vector graphics (`TOUR_ART`) on the welcome tour's first and last cards only.** Abstract
+  shapes with gradients in Mediashock's colours, as MS Creatives defines them: Poppy `#ff4e20`
+  leads, with the content-bucket accents indigo `#6366f1`, blue `#2563eb` and cyan `#0891b2`.
+  Amber and slate are left out on purpose, because amber already means Medium priority here.
+  Welcome = a glowing Poppy circle linked to a floating board of gradient cards; all set = a Poppy
+  tick badge in indigo/cyan orbit rings with floating shapes and sparkles.
+  - **Third design.** The first was hand-drawn stick figures (a wobble filter on line art); it was
+    changed on request to "vector lines and abstract shapes ... gradients and Mediashock's accent
+    colours" and "graphics instead" of sketches. Don't bring back people or the wobble.
+  - Bookends only, by agreement: those two cards point at nothing, so a graphic adds warmth there,
+    whereas one on every step would compete with the spotlight and make the tour feel longer. A
+    step opts in with `art: '<key>'`. Gradient ids are suffixed per graphic (`tg-w-*`,
+    `tg-d-*`). The gradients carry their own colour, so only the backdrop and the board panel
+    switch for dark mode.
 - **Page tours** (`PAGE_TOURS`, `maybeStartPageTour`, asked for next: "guided tours should also be
   applied to other pages when new users click into it. When new pages are added, existing users
   should also be able to go through the tour"). One 1–2 step tour per view, seen as `page:<view>`.

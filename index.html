@@ -12138,7 +12138,7 @@
   ========================================================= */
   var CHANGELOG = [
     { id: '2026-10-06e', date: '2026-10-06', items: [
-      { type: 'improved', title: 'Friendlier tours', text: 'The tours now talk to you like a teammate would, and the welcome tour opens and closes with a couple of hand-drawn sketches.' }
+      { type: 'improved', title: 'Friendlier tours', text: 'The tours now talk to you like a teammate would, and the welcome tour opens and closes with a splash of colourful Mediashock graphics.' }
     ] },
     { id: '2026-10-06d', date: '2026-10-06', items: [
       { type: 'new', title: 'Page tours', text: 'New teammates get a quick tour of each page the first time they open it. When a new page is added, everyone gets its tour on their first visit. To replay the tour for the page you are on, choose "Tour this page" in your profile menu.' }
@@ -12426,7 +12426,7 @@
   var FEATURE_TOUR_AUTO_DAYS = 60;
   // Copy is conversational on purpose (asked for: "conversational and friendly") -- talk to one
   // person, contractions, a question to open where it fits -- but still one or two short sentences
-  // per step. Double-quoted strings so apostrophes need no escaping. `art` names a sketch in
+  // per step. Double-quoted strings so apostrophes need no escaping. `art` names a graphic in
   // TOUR_ART (only the first and last welcome steps -- see there); `cta` overrides the button.
   var TOURS = [
     { id: 'welcome', kind: 'welcome', steps: [
@@ -12443,65 +12443,80 @@
     ] }
   ];
 
-  /* Hand-drawn sketches for the tour cards (asked for: "fun hand-drawn sketches in the tutorial").
-     Deliberately on the welcome tour's FIRST and LAST cards only: those two are the friendly
-     bookends with nothing on screen to point at, so a picture adds warmth without competing with
-     the spotlight. A sketch on every step would make every card taller and the tour feel longer,
-     which works against "not too long" -- agreed before drawing them.
-     Inline SVG line art like every other icon here (never emoji or images): currentColor strokes
-     follow light/dark mode, Poppy (brand-600) for the accents, and an feTurbulence +
-     feDisplacementMap filter roughens the lines so they read as drawn by hand rather than
-     geometric. Filter ids must stay unique per sketch. */
+  /* Tour graphics (TOUR_ART). First drawn as hand-drawn stick figures, then changed on request
+     to "vector lines and abstract shapes ... gradients and Mediashock's accent colours" and
+     "graphics instead" of sketches: clean flat vector compositions, no people, no wobble filter.
+     Colours are Mediashock's own, as MS Creatives defines them: Poppy #ff4e20 (BRAND.orange)
+     leads, with the content-bucket accents indigo #6366f1, blue #2563eb and cyan #0891b2, each as
+     a light-to-full gradient. Amber and slate (the other bucket accents) are left out on purpose:
+     amber already means Medium priority in this app.
+     Still on the welcome tour's FIRST and LAST cards only: those two point at nothing, so a
+     graphic adds warmth there, whereas one on every step would compete with the spotlight and make
+     the tour feel longer. Gradient ids are suffixed per graphic (tg-w-*, tg-d-*) so they can't
+     collide. The gradients carry their own colour, so only the backdrop and the board panel
+     switch for dark mode. */
   var TOUR_ART = {
+    // A glowing Poppy circle linked to a floating board of gradient task cards.
     welcome:
-      '<svg viewBox="0 0 240 120" class="w-full h-auto text-zinc-700 dark:text-zinc-200" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-        '<defs><filter id="tour-rough-welcome"><feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="2" seed="4"></feTurbulence><feDisplacementMap in="SourceGraphic" scale="2.5"></feDisplacementMap></filter></defs>' +
-        '<g filter="url(#tour-rough-welcome)">' +
-          '<path d="M14 108 Q120 104 226 108" stroke-width="1.6" opacity=".45"></path>' +
-          // Someone waving hello...
-          '<circle cx="58" cy="34" r="12"></circle>' +
-          '<path d="M47 30 Q52 20 62 22 Q70 24 70 31"></path>' +
-          '<path d="M54 33 v1.5 M62 33 v1.5" stroke-width="2.8"></path>' +
-          '<path d="M53 39 Q58 43.5 63 39"></path>' +
-          '<path d="M46 52 Q58 46 70 52 L72 82 L44 82 Z" class="fill-brand-600"></path>' +
-          '<path d="M51 82 L47 106 M65 82 L69 106"></path>' +
-          '<path d="M47 56 Q38 66 40 78"></path>' +
-          '<path d="M69 55 Q80 46 84 31"></path>' +
-          '<circle cx="85" cy="27" r="3.5"></circle>' +
-          '<path d="M92 20 q4 4 2 9 M98 14 q6 7 3 15" stroke-width="1.8"></path>' +
-          // ...beside a little task board.
-          '<rect x="118" y="16" width="104" height="80" rx="8"></rect>' +
-          '<path d="M140 96 L134 108 M200 96 L206 108"></path>' +
-          '<path d="M152 24 Q153 58 152 90 M187 24 Q186 58 187 90" stroke-width="1.6"></path>' +
-          '<rect x="125" y="27" width="21" height="12" rx="2.5" stroke-width="1.6" class="fill-brand-100 dark:fill-brand-500/20"></rect>' +
-          '<rect x="125" y="45" width="21" height="12" rx="2.5" stroke-width="1.6" class="fill-brand-100 dark:fill-brand-500/20"></rect>' +
-          '<rect x="159" y="27" width="21" height="12" rx="2.5" stroke-width="1.6" class="fill-brand-100 dark:fill-brand-500/20"></rect>' +
-          '<rect x="194" y="27" width="21" height="12" rx="2.5" stroke-width="1.6" class="fill-brand-100 dark:fill-brand-500/20"></rect>' +
-          '<path d="M199 33 l3 3 l6 -6" stroke-width="1.6"></path>' +
-          '<path d="M104 8 v8 M100 12 h8 M230 48 v6 M227 51 h6 M24 28 v6 M21 31 h6" class="stroke-brand-600" stroke-width="2"></path>' +
+      '<svg viewBox="0 0 240 120" class="w-full h-auto" fill="none" aria-hidden="true">' +
+        '<defs>' +
+          '<linearGradient id="tg-w-poppy" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff9470"></stop><stop offset="1" stop-color="#ff4e20"></stop></linearGradient>' +
+          '<linearGradient id="tg-w-indigo" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#a5b4fc"></stop><stop offset="1" stop-color="#6366f1"></stop></linearGradient>' +
+          '<linearGradient id="tg-w-cyan" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#67e8f9"></stop><stop offset="1" stop-color="#0891b2"></stop></linearGradient>' +
+          '<linearGradient id="tg-w-blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#93c5fd"></stop><stop offset="1" stop-color="#2563eb"></stop></linearGradient>' +
+          '<radialGradient id="tg-w-glow"><stop offset="0" stop-color="#ff4e20" stop-opacity=".35"></stop><stop offset="1" stop-color="#ff4e20" stop-opacity="0"></stop></radialGradient>' +
+        '</defs>' +
+        '<rect x="0" y="0" width="240" height="120" rx="14" class="fill-zinc-100 dark:fill-white/5"></rect>' +
+        '<circle cx="62" cy="62" r="58" fill="url(#tg-w-glow)"></circle>' +
+        '<circle cx="62" cy="62" r="47" stroke="url(#tg-w-indigo)" stroke-width="2" stroke-dasharray="2 7" stroke-linecap="round"></circle>' +
+        '<circle cx="62" cy="62" r="33" fill="url(#tg-w-poppy)"></circle>' +
+        '<circle cx="52" cy="52" r="9" fill="#ffffff" fill-opacity=".28"></circle>' +
+        '<path d="M95 62 C104 62 103 46 113 46" stroke="url(#tg-w-poppy)" stroke-width="2.5" stroke-linecap="round"></path>' +
+        '<rect x="113" y="20" width="106" height="78" rx="12" class="fill-white stroke-zinc-200 dark:fill-zinc-800 dark:stroke-zinc-600" stroke-width="1.5"></rect>' +
+        '<rect x="123" y="31" width="25" height="11" rx="4" fill="url(#tg-w-poppy)"></rect>' +
+        '<rect x="123" y="46" width="25" height="11" rx="4" fill="url(#tg-w-poppy)" fill-opacity=".5"></rect>' +
+        '<rect x="154" y="31" width="25" height="11" rx="4" fill="url(#tg-w-indigo)"></rect>' +
+        '<rect x="154" y="46" width="25" height="11" rx="4" fill="url(#tg-w-indigo)" fill-opacity=".5"></rect>' +
+        '<rect x="154" y="61" width="25" height="11" rx="4" fill="url(#tg-w-indigo)" fill-opacity=".25"></rect>' +
+        '<rect x="185" y="31" width="25" height="11" rx="4" fill="url(#tg-w-cyan)"></rect>' +
+        '<path d="M192 36.5 l3 3 l6 -6" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>' +
+        '<g transform="rotate(-8 121 92)">' +
+          '<rect x="100" y="80" width="44" height="24" rx="7" fill="url(#tg-w-blue)"></rect>' +
+          '<path d="M108 89 h22 M108 96 h14" stroke="#ffffff" stroke-opacity=".85" stroke-width="2.5" stroke-linecap="round"></path>' +
         '</g>' +
+        '<path d="M22 24 l11 -3 l-3 11 z" fill="url(#tg-w-cyan)"></path>' +
+        '<rect x="194" y="104" width="28" height="8" rx="4" fill="url(#tg-w-indigo)"></rect>' +
+        '<circle cx="227" cy="16" r="3.5" fill="url(#tg-w-poppy)"></circle>' +
+        '<circle cx="24" cy="102" r="4.5" fill="url(#tg-w-blue)"></circle>' +
+        '<circle cx="104" cy="13" r="2.5" fill="url(#tg-w-indigo)"></circle>' +
       '</svg>',
+    // A Poppy badge with a tick, orbit rings in indigo and cyan, and floating shapes and sparkles.
     done:
-      '<svg viewBox="0 0 240 120" class="w-full h-auto text-zinc-700 dark:text-zinc-200" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-        '<defs><filter id="tour-rough-done"><feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="2" seed="9"></feTurbulence><feDisplacementMap in="SourceGraphic" scale="2.5"></feDisplacementMap></filter></defs>' +
-        '<g filter="url(#tour-rough-done)">' +
-          // Someone jumping for joy...
-          '<ellipse cx="74" cy="111" rx="22" ry="3" stroke-width="1.4" opacity=".45"></ellipse>' +
-          '<circle cx="74" cy="28" r="12"></circle>' +
-          '<path d="M67 27 q2.5 -2.5 5 0 M76 27 q2.5 -2.5 5 0" stroke-width="1.8"></path>' +
-          '<path d="M67 33 Q74 40 81 33"></path>' +
-          '<path d="M62 46 Q74 40 86 46 L88 74 L60 74 Z" class="fill-brand-600"></path>' +
-          '<path d="M63 49 Q52 38 48 22 M85 49 Q96 38 100 22"></path>' +
-          '<circle cx="47" cy="18" r="3.5"></circle><circle cx="101" cy="18" r="3.5"></circle>' +
-          '<path d="M66 74 Q58 86 65 97 M82 74 Q91 85 84 97"></path>' +
-          '<path d="M58 104 h9 M80 104 h9" stroke-width="1.4" opacity=".6"></path>' +
-          // ...next to a big tick.
-          '<circle cx="170" cy="58" r="32" class="fill-brand-100 dark:fill-brand-500/20"></circle>' +
-          '<path d="M155 58 l10 10 l20 -22" class="stroke-brand-600" stroke-width="4.5"></path>' +
-          '<path d="M170 16 v-9 M212 58 h9 M200 28 l6 -6 M140 28 l-6 -6 M200 88 l6 6" stroke-width="1.8"></path>' +
-          '<path d="M120 20 l7 4 M126 94 q3 -4 6 0 q3 4 6 0 M218 96 l4 6 M24 40 l6 -3 M22 82 q3 -3 6 0 M124 56 l5 -2" class="stroke-brand-600" stroke-width="2"></path>' +
-          '<path d="M114 72 v.5 M226 28 v.5 M34 60 v.5" stroke-width="3.5"></path>' +
-        '</g>' +
+      '<svg viewBox="0 0 240 120" class="w-full h-auto" fill="none" aria-hidden="true">' +
+        '<defs>' +
+          '<linearGradient id="tg-d-poppy" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff9470"></stop><stop offset="1" stop-color="#ff4e20"></stop></linearGradient>' +
+          '<linearGradient id="tg-d-indigo" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#a5b4fc"></stop><stop offset="1" stop-color="#6366f1"></stop></linearGradient>' +
+          '<linearGradient id="tg-d-cyan" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#67e8f9"></stop><stop offset="1" stop-color="#0891b2"></stop></linearGradient>' +
+          '<linearGradient id="tg-d-blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#93c5fd"></stop><stop offset="1" stop-color="#2563eb"></stop></linearGradient>' +
+          '<radialGradient id="tg-d-glow"><stop offset="0" stop-color="#ff4e20" stop-opacity=".35"></stop><stop offset="1" stop-color="#ff4e20" stop-opacity="0"></stop></radialGradient>' +
+        '</defs>' +
+        '<rect x="0" y="0" width="240" height="120" rx="14" class="fill-zinc-100 dark:fill-white/5"></rect>' +
+        '<circle cx="120" cy="60" r="60" fill="url(#tg-d-glow)"></circle>' +
+        '<circle cx="120" cy="60" r="50" stroke="url(#tg-d-indigo)" stroke-width="1.8" stroke-dasharray="3 8" stroke-linecap="round"></circle>' +
+        '<circle cx="120" cy="60" r="41" stroke="url(#tg-d-cyan)" stroke-width="1.8" stroke-opacity=".7"></circle>' +
+        '<circle cx="120" cy="60" r="31" fill="url(#tg-d-poppy)"></circle>' +
+        '<circle cx="110" cy="49" r="9" fill="#ffffff" fill-opacity=".25"></circle>' +
+        '<path d="M106 61 l10 10 l19 -21" stroke="#ffffff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"></path>' +
+        '<rect x="38" y="30" width="32" height="11" rx="5.5" transform="rotate(-25 54 35)" fill="url(#tg-d-indigo)"></rect>' +
+        '<path d="M182 22 l13 -2 l-6 12 z" fill="url(#tg-d-cyan)"></path>' +
+        '<circle cx="192" cy="92" r="7" fill="url(#tg-d-blue)"></circle>' +
+        '<rect x="56" y="86" width="10" height="10" rx="2" transform="rotate(20 61 91)" fill="url(#tg-d-poppy)"></rect>' +
+        '<path d="M206 40 Q207 47 214 48 Q207 49 206 56 Q205 49 198 48 Q205 47 206 40 Z" fill="url(#tg-d-poppy)"></path>' +
+        '<path d="M34 64 Q35 69 40 70 Q35 71 34 76 Q33 71 28 70 Q33 69 34 64 Z" fill="url(#tg-d-indigo)"></path>' +
+        '<circle cx="24" cy="38" r="3" fill="url(#tg-d-cyan)"></circle>' +
+        '<circle cx="218" cy="88" r="3" fill="url(#tg-d-poppy)"></circle>' +
+        '<circle cx="152" cy="13" r="2.5" fill="url(#tg-d-indigo)"></circle>' +
+        '<circle cx="88" cy="108" r="2.5" fill="url(#tg-d-blue)"></circle>' +
       '</svg>'
   };
 
@@ -13976,7 +13991,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T16:26:01Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T16:32:41Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
