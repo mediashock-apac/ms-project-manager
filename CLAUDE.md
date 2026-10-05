@@ -2994,8 +2994,22 @@ hidden. **Needs a decision stays on top in both modes, but in By project it is s
 `wipAlertsOpen`, session-only). Chosen over leaving it in full (it duplicated items the project
 walkthrough covers anyway and pushed the projects down) and over moving it to the bottom (easy to
 skip; crunch and leave-clash items appear nowhere else). Agenda mode keeps the full list, since
-there it is the first agenda item. The day list, Away and the timeline are the **Agenda** mode. Status history and the sheet's commercial Notes column are not built yet — they
-wait on whether notes are confidential and who writes status updates.
+there it is the first agenda item. The day list, Away and the timeline are the **Agenda** mode.
+
+**Project updates, client contact and key links** (from the Suits "WIP Tracker" sheet's Status /
+Client contact / Key links columns) sit under each project's header on By project
+(`wipProjectInfoHtml`; data functions under PROJECT UPDATES). Stored on the project's own
+`projects/{id}` doc: `updates` [{id, date, text, author, at, editedBy?}], `clientContact`, and
+`links` — **the same array as the project chat's Pinned links**, so a link added in either place
+shows in both. Because of that, `createProjectChat` no longer resets `links` when it already exists,
+and `deleteProjectChat` removes messages only, not links. Decisions made with the user: **anyone on
+the team can add, edit or remove** (so no rules change — `projects` update only guards `chat`);
+**money columns (cost SGD/USD, PO, quotation, invoice) stay in the sheet** — add the sheet as a key
+link; **Lost Jobs stay in the sheet**. Latest 2 updates shown, older behind "Show N older"; an
+empty project shows one muted line of "+ Client contact · + Link · + Add update". One inline
+editor at a time (`wipEdit`), drafts in `wipDraft` and focus restored after each live re-render so
+someone else's save doesn't wipe what you're typing. Enter saves, Escape cancels. Not logged to
+Activity (routine traffic, same reasoning as chat messages).
 
 Agenda mode — three sections, and the shape of them is where the design work is:
 

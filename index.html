@@ -1882,6 +1882,62 @@
   }
 
   /* =========================================================
+     PROJECT UPDATES -- the Suits WIP sheet's Status / Client contact / Key links columns, kept on
+     the project's own `projects/{id}` doc: `updates` [{id, date, text, author, at, editedBy?}],
+     `clientContact` (string) and `links` -- the SAME array as the project chat's Pinned links, so
+     a link added in either place shows in both. Anyone on the team can add, edit or remove
+     (asked for: "1B"); no rules change -- `projects` update only guards `chat`. Money columns
+     (cost, PO, quotation, invoice) deliberately stay in the sheet. Not logged to Activity, same
+     reasoning as chat messages: routine traffic that would flood a task-focused log.
+  ========================================================= */
+  function ensureProjectDoc(name) {
+    var existing = projectDeadlineDoc(name);
+    if (existing) return Promise.resolve(existing.id);
+    return addDoc(projectsCol, { name: name, deadline: null }).then(function (ref) { return ref.id; });
+  }
+  function myDisplayName() {
+    var u = auth.currentUser;
+    return u ? (u.displayName || u.email) : 'unknown';
+  }
+  function addProjectUpdate(name, date, text) {
+    var entry = { id: uid(), date: date, text: text, author: myDisplayName(), at: new Date().toISOString() };
+    return ensureProjectDoc(name).then(function (id) {
+      return updateDoc(doc(projectsCol, id), { updates: arrayUnion(entry) });
+    }).catch(function (err) { showToast('Could not add the update: ' + err.message, 'error'); throw err; });
+  }
+  function editProjectUpdate(name, updateId, date, text) {
+    var pdoc = projectDeadlineDoc(name);
+    if (!pdoc) return Promise.resolve();
+    var list = (pdoc.updates || []).map(function (u) {
+      return u.id === updateId ? Object.assign({}, u, { date: date, text: text, editedBy: myDisplayName() }) : u;
+    });
+    return updateDoc(doc(projectsCol, pdoc.id), { updates: list })
+      .catch(function (err) { showToast('Could not save the update: ' + err.message, 'error'); throw err; });
+  }
+  function removeProjectUpdate(name, updateId) {
+    var pdoc = projectDeadlineDoc(name);
+    if (!pdoc) return;
+    updateDoc(doc(projectsCol, pdoc.id), { updates: (pdoc.updates || []).filter(function (u) { return u.id !== updateId; }) })
+      .catch(function (err) { showToast('Could not remove the update: ' + err.message, 'error'); });
+  }
+  function setProjectClientContact(name, value) {
+    return ensureProjectDoc(name).then(function (id) {
+      return updateDoc(doc(projectsCol, id), { clientContact: value || null });
+    }).catch(function (err) { showToast('Could not save the client contact: ' + err.message, 'error'); throw err; });
+  }
+  function addProjectKeyLink(name, label, url) {
+    return ensureProjectDoc(name).then(function (id) {
+      return updateDoc(doc(projectsCol, id), { links: arrayUnion({ id: uid(), label: label, url: url }) });
+    }).catch(function (err) { showToast('Could not add the link: ' + err.message, 'error'); throw err; });
+  }
+  function removeProjectKeyLink(name, linkId) {
+    var pdoc = projectDeadlineDoc(name);
+    if (!pdoc) return;
+    updateDoc(doc(projectsCol, pdoc.id), { links: (pdoc.links || []).filter(function (l) { return l.id !== linkId; }) })
+      .catch(function (err) { showToast('Could not remove the link: ' + err.message, 'error'); });
+  }
+
+  /* =========================================================
      PROJECT GROUP CHAT -- a standalone "Chat" tab (sidebar nav item,
      #view-chat), not a modal -- reported directly ("the chat should be
      a standalone tab"). A project list on the left selects which
@@ -2059,7 +2115,9 @@
   function createProjectChat(name) {
     var existing = projectDeadlineDoc(name);
     var write = existing
-      ? updateDoc(doc(projectsCol, existing.id), { chat: [], links: [] })
+      // links is only initialised when missing: it is also the project's Key links on WIP, so a
+      // chat being (re)created must not wipe links someone already added there.
+      ? updateDoc(doc(projectsCol, existing.id), Array.isArray(existing.links) ? { chat: [] } : { chat: [], links: [] })
       : addDoc(projectsCol, { name: name, deadline: null, chat: [], links: [] });
     return write.then(function () {
       showToast('Group chat created for ' + name, 'success');
@@ -2073,7 +2131,7 @@
     });
   }
 
-  // Wipes the whole thread (every message and pinned link) rather than setting them to empty
+  // Wipes every message (pinned links stay -- they double as WIP key links) rather than setting it to empty
   // arrays -- deleteField() removes `chat`/`links` entirely so Array.isArray(doc.chat) goes back
   // to false, which is the one signal the Chat tab's list and "New chat" picker both key off of.
   // A plain `{chat: [], links: []}` write would have left the project showing up as an empty-but-
@@ -2086,7 +2144,8 @@
   function deleteProjectChat(name) {
     var pdoc = projectDeadlineDoc(name);
     if (!pdoc) return;
-    updateDoc(doc(projectsCol, pdoc.id), { chat: deleteField(), links: deleteField() }).then(function () {
+    // Messages only. links stays: it is also the project's Key links on WIP (see PROJECT UPDATES).
+    updateDoc(doc(projectsCol, pdoc.id), { chat: deleteField() }).then(function () {
       showToast('Deleted the group chat for ' + name, 'info');
       logActivity('project_chat_deleted', 'Deleted the group chat for "' + name + '"');
       if (currentChatProjectName === name) {
@@ -2110,7 +2169,7 @@
     var name = currentChatProjectName;
     openConfirm(
       'Delete the "' + name + '" group chat?',
-      'Permanently removes every message and pinned link in this chat for the whole team. This cannot be undone.',
+      'Permanently removes every message in this chat for the whole team. Pinned links stay, since they are also the project\'s key links on WIP Meeting. This cannot be undone.',
       function () { deleteProjectChat(name); },
       { confirmText: 'Delete chat', cancelText: 'Cancel' }
     );
@@ -10918,6 +10977,120 @@
   var wipStepsExpanded = {};
   var WIP_STEPS_SHOWN = 3;
 
+  // Project updates / client contact / key links, shown under each project's header on By project
+  // (see PROJECT UPDATES for the data). Quiet when empty: one muted line of "+" actions, so a
+  // project nobody has written anything for costs one line, not an empty form. Latest
+  // WIP_UPDATES_SHOWN updates visible, older ones behind "Show N older". One inline editor open at
+  // a time (wipEdit); drafts live in wipDraft so a live re-render from someone else's save
+  // doesn't wipe what's being typed.
+  var WIP_UPDATES_SHOWN = 2;
+  var wipEdit = null;            // {project, kind: 'update'|'contact'|'link', id?}
+  var wipDraft = {};
+  var wipUpdatesExpanded = {};
+
+  function wipIsEditing(name, kind, id) {
+    return !!(wipEdit && wipEdit.project === name && wipEdit.kind === kind && (id === undefined || wipEdit.id === id));
+  }
+
+  function wipInputCls(extra) {
+    return 'text-xs rounded border border-zinc-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-500/40 ' + (extra || '');
+  }
+
+  function wipEditorButtons(name) {
+    return '<button type="button" data-wip-act="save" data-project="' + escapeHtml(name) + '" class="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">Save</button>' +
+      '<button type="button" data-wip-act="cancel" class="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200">Cancel</button>';
+  }
+
+  function wipProjectInfoHtml(name) {
+    var pdoc = projectDeadlineDoc(name) || {};
+    var en = escapeHtml(name);
+    var updates = (pdoc.updates || []).slice().sort(function (a, b) {
+      if (a.date !== b.date) return (a.date || '') < (b.date || '') ? 1 : -1;
+      return (a.at || '') < (b.at || '') ? 1 : -1;
+    });
+    var links = pdoc.links || [];
+    var contact = pdoc.clientContact || '';
+    var quietBtn = 'text-xs text-zinc-400 hover:text-brand-600 dark:hover:text-brand-400';
+
+    // Meta line: client contact and key links.
+    var contactHtml = wipIsEditing(name, 'contact')
+      ? '<span class="flex items-center gap-1.5"><input data-wip-field="contact" data-wip-autofocus placeholder="Client contact" class="' + wipInputCls('w-44') + '" value="' + escapeHtml(wipDraft.contact != null ? wipDraft.contact : contact) + '">' + wipEditorButtons(name) + '</span>'
+      : contact
+        ? '<span class="text-xs text-zinc-500 dark:text-zinc-400">Client: <button type="button" data-wip-act="edit-contact" data-project="' + en + '" title="Edit client contact" class="font-medium text-zinc-700 dark:text-zinc-200 hover:text-brand-600 dark:hover:text-brand-400">' + escapeHtml(contact) + '</button></span>'
+        : '<button type="button" data-wip-act="edit-contact" data-project="' + en + '" class="' + quietBtn + '">+ Client contact</button>';
+    var linksHtml = links.map(function (l) {
+      return '<span class="group/link inline-flex items-center gap-1 text-xs">' +
+        '<a href="' + escapeHtml(l.url) + '" target="_blank" rel="noopener noreferrer" class="text-emerald-600 dark:text-emerald-400 hover:underline">' + escapeHtml(l.label || l.url) + '</a>' +
+        '<button type="button" data-wip-act="remove-link" data-project="' + en + '" data-id="' + escapeHtml(l.id) + '" title="Remove link" class="opacity-0 group-hover/link:opacity-100 text-zinc-400 hover:text-rose-500">&times;</button>' +
+      '</span>';
+    }).join('');
+    var linkEditor = wipIsEditing(name, 'link')
+      ? '<span class="flex items-center gap-1.5 flex-wrap"><input data-wip-field="label" data-wip-autofocus placeholder="Label" class="' + wipInputCls('w-32') + '" value="' + escapeHtml(wipDraft.label || '') + '">' +
+          '<input data-wip-field="url" placeholder="https://…" class="' + wipInputCls('w-56') + '" value="' + escapeHtml(wipDraft.url || '') + '">' + wipEditorButtons(name) + '</span>'
+      : '<button type="button" data-wip-act="add-link" data-project="' + en + '" class="' + quietBtn + '">+ Link</button>';
+    var metaLine = '<div class="flex items-center gap-x-3 gap-y-1 flex-wrap">' + contactHtml +
+      (links.length ? '<span class="text-xs text-zinc-400">·</span>' + linksHtml : '') + linkEditor + '</div>';
+
+    // Updates: newest first.
+    var showAll = !!wipUpdatesExpanded[name];
+    var shown = showAll ? updates : updates.slice(0, WIP_UPDATES_SHOWN);
+    var updatesHtml = shown.map(function (u) {
+      if (wipIsEditing(name, 'update', u.id)) {
+        return '<div class="flex items-center gap-1.5 flex-wrap">' +
+          '<input type="date" data-wip-field="date" class="' + wipInputCls('[color-scheme:light] dark:[color-scheme:dark]') + '" value="' + escapeHtml(wipDraft.date || u.date || '') + '">' +
+          '<input data-wip-field="text" data-wip-autofocus class="' + wipInputCls('flex-1 min-w-[12rem]') + '" value="' + escapeHtml(wipDraft.text != null ? wipDraft.text : u.text) + '">' + wipEditorButtons(name) + '</div>';
+      }
+      return '<div class="group/upd flex items-start gap-2 text-xs">' +
+        '<span class="shrink-0 w-14 font-semibold text-zinc-600 dark:text-zinc-300">' + escapeHtml(u.date ? formatShortDate(u.date) : '') + '</span>' +
+        '<span class="min-w-0 flex-1 text-zinc-700 dark:text-zinc-200 break-words">' + escapeHtml(u.text) +
+          ' <span class="text-zinc-400 dark:text-zinc-500">— ' + escapeHtml(u.author || '') + (u.editedBy && u.editedBy !== u.author ? ', edited by ' + escapeHtml(u.editedBy) : '') + '</span></span>' +
+        '<span class="shrink-0 flex items-center gap-1.5 opacity-0 group-hover/upd:opacity-100">' +
+          '<button type="button" data-wip-act="edit-update" data-project="' + en + '" data-id="' + escapeHtml(u.id) + '" class="text-zinc-400 hover:text-brand-600" title="Edit">' + svgIcon('pencil', 'w-3 h-3') + '</button>' +
+          '<button type="button" data-wip-act="remove-update" data-project="' + en + '" data-id="' + escapeHtml(u.id) + '" class="text-zinc-400 hover:text-rose-500" title="Remove">&times;</button>' +
+        '</span>' +
+      '</div>';
+    }).join('');
+    var addUpdate = wipIsEditing(name, 'update', '__new')
+      ? '<div class="flex items-center gap-1.5 flex-wrap">' +
+          '<input type="date" data-wip-field="date" class="' + wipInputCls('[color-scheme:light] dark:[color-scheme:dark]') + '" value="' + escapeHtml(wipDraft.date || toDateInputValue(todayMidnight())) + '">' +
+          '<input data-wip-field="text" data-wip-autofocus placeholder="What happened, or what\'s next" class="' + wipInputCls('flex-1 min-w-[12rem]') + '" value="' + escapeHtml(wipDraft.text || '') + '">' + wipEditorButtons(name) + '</div>'
+      : '<div class="flex items-center gap-3">' +
+          '<button type="button" data-wip-act="add-update" data-project="' + en + '" class="' + quietBtn + '">+ Add update</button>' +
+          (updates.length > WIP_UPDATES_SHOWN
+            ? '<button type="button" data-wip-act="toggle-updates" data-project="' + en + '" class="' + quietBtn + '">' + (showAll ? 'Show fewer' : 'Show ' + (updates.length - WIP_UPDATES_SHOWN) + ' older') + '</button>'
+            : '') +
+        '</div>';
+
+    // Nothing written yet and nothing being edited: all three "+" actions share ONE line.
+    if (!updates.length && !wipIsEditing(name, 'update', '__new')) {
+      metaLine = metaLine.replace(/<\/div>$/, '<button type="button" data-wip-act="add-update" data-project="' + en + '" class="' + quietBtn + '">+ Add update</button></div>');
+      addUpdate = '';
+    }
+    return '<div class="px-4 pt-2 pb-2.5 flex flex-col gap-1.5 border-b border-zinc-100 dark:border-zinc-700/60">' +
+      metaLine + updatesHtml + addUpdate + '</div>';
+  }
+
+  function wipSaveEdit(name) {
+    if (!wipEdit) return;
+    var e = wipEdit, d = wipDraft, p;
+    var done = function () { wipEdit = null; wipDraft = {}; renderWipView(); };
+    if (e.kind === 'contact') {
+      p = setProjectClientContact(name, (d.contact != null ? d.contact : ((projectDeadlineDoc(name) || {}).clientContact || '')).trim());
+    } else if (e.kind === 'link') {
+      var url = (d.url || '').trim();
+      if (!url) { showToast('Add a link address', 'info'); return; }
+      if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
+      p = addProjectKeyLink(name, (d.label || '').trim() || url.replace(/^https?:\/\//i, ''), url);
+    } else if (e.kind === 'update') {
+      var existing = e.id !== '__new' ? ((projectDeadlineDoc(name) || {}).updates || []).find(function (u) { return u.id === e.id; }) : null;
+      var text = (d.text != null ? d.text : (existing ? existing.text : '')).trim();
+      var date = d.date || (existing && existing.date) || toDateInputValue(todayMidnight());
+      if (!text) { showToast('Write the update first', 'info'); return; }
+      p = e.id === '__new' ? addProjectUpdate(name, date, text) : editProjectUpdate(name, e.id, date, text);
+    }
+    if (p) p.then(done, function () { /* toast already shown; keep the draft */ });
+  }
+
   function wipProjectsHtml(open, today) {
     var byProject = {};
     open.forEach(function (t) { (byProject[t.project || ''] = byProject[t.project || ''] || []).push(t); });
@@ -10987,7 +11160,7 @@
           '<span class="shrink-0 text-xs text-zinc-500 dark:text-zinc-400">' + list.length + ' open' +
             (due ? ' · ' + (own ? 'Project due ' : 'Due ') + escapeHtml(formatShortDate(due)) : '') + '</span>' +
         '</button>' +
-        (folded ? '' : '<div class="divide-y divide-zinc-50 dark:divide-zinc-700/50">' + rows + '</div>') +
+        (folded ? '' : (name ? wipProjectInfoHtml(name) : '') + '<div class="divide-y divide-zinc-50 dark:divide-zinc-700/50">' + rows + '</div>') +
       '</div>';
     }).join('');
 
@@ -10995,6 +11168,27 @@
   }
 
   document.getElementById('wip-projects').addEventListener('click', function (e) {
+    var act = e.target.closest('[data-wip-act]');
+    if (act) {
+      var kind = act.getAttribute('data-wip-act');
+      var proj = act.getAttribute('data-project');
+      var aid = act.getAttribute('data-id');
+      if (kind === 'save') { wipSaveEdit(proj); return; }
+      if (kind === 'cancel') { wipEdit = null; wipDraft = {}; renderWipView(); return; }
+      if (kind === 'remove-link') { removeProjectKeyLink(proj, aid); return; }
+      if (kind === 'remove-update') {
+        openConfirm('Remove this update?', 'It will be removed for everyone.', function () { removeProjectUpdate(proj, aid); }, { confirmText: 'Remove', cancelText: 'Cancel' });
+        return;
+      }
+      if (kind === 'toggle-updates') { if (wipUpdatesExpanded[proj]) delete wipUpdatesExpanded[proj]; else wipUpdatesExpanded[proj] = true; renderWipView(); return; }
+      wipDraft = {};
+      if (kind === 'edit-contact') wipEdit = { project: proj, kind: 'contact' };
+      else if (kind === 'add-link') wipEdit = { project: proj, kind: 'link' };
+      else if (kind === 'add-update') wipEdit = { project: proj, kind: 'update', id: '__new' };
+      else if (kind === 'edit-update') wipEdit = { project: proj, kind: 'update', id: aid };
+      renderWipView();
+      return;
+    }
     var fold = e.target.closest('[data-wip-fold]');
     if (fold) {
       var n = fold.getAttribute('data-wip-fold');
@@ -11009,6 +11203,17 @@
       renderWipView();
     }
   });
+  // Drafts survive live re-renders (someone else saving anything redraws WIP).
+  document.getElementById('wip-projects').addEventListener('input', function (e) {
+    var f = e.target.getAttribute && e.target.getAttribute('data-wip-field');
+    if (f) wipDraft[f] = e.target.value;
+  });
+  document.getElementById('wip-projects').addEventListener('keydown', function (e) {
+    if (!e.target.getAttribute || !e.target.getAttribute('data-wip-field') || !wipEdit) return;
+    if (e.key === 'Enter') { e.preventDefault(); wipSaveEdit(wipEdit.project); }
+    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); wipEdit = null; wipDraft = {}; renderWipView(); }
+  });
+
   document.getElementById('wip-alerts').addEventListener('click', function (e) {
     if (!e.target.closest('[data-wip-alerts-toggle]')) return;
     wipAlertsOpen = !wipAlertsOpen;
@@ -11078,7 +11283,14 @@
     document.getElementById('wip-projects').classList.toggle('hidden', !byProject);
     document.getElementById('wip-agenda-body').classList.toggle('hidden', byProject);
     if (byProject) {
+      // Keep focus in an open editor across the re-render, caret at the end.
+      var focusedField = document.activeElement && document.activeElement.getAttribute && document.activeElement.getAttribute('data-wip-field');
       document.getElementById('wip-projects').innerHTML = wipProjectsHtml(open, today);
+      var target = document.querySelector('#wip-projects [data-wip-field="' + (focusedField || '') + '"]') || document.querySelector('#wip-projects [data-wip-autofocus]');
+      if (target && wipEdit) {
+        target.focus();
+        if (target.type !== 'date' && target.setSelectionRange) { var L = target.value.length; target.setSelectionRange(L, L); }
+      }
       return;
     }
     document.getElementById('wip-ahead').innerHTML = wipAheadHtml(open, today, horizon, scopedProjects);
@@ -11107,6 +11319,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-05l', date: '2026-10-05', items: [
+      { type: 'new', title: 'Project updates on WIP Meeting', text: 'Under each project in WIP Meeting you can now add dated updates, the client contact and key links, like the Status, Client contact and Key links columns of the WIP sheet. Anyone can add or edit. Key links are the same list as the project chat\'s pinned links.' }
+    ] },
     { id: '2026-10-05k', date: '2026-10-05', items: [
       { type: 'improved', title: 'Shorter top of WIP Meeting', text: 'In the By project view, Needs a decision is now one line at the top saying how many items there are. Click it to see them.' }
     ] },
@@ -12375,7 +12590,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T06:53:15Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T07:15:34Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
