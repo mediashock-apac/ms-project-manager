@@ -187,27 +187,29 @@ tutorial should auto update on new features"** — so feature tours are generate
   short sentences. No emoji (the icon rule). Tour strings are double-quoted so apostrophes need no
   escaping — single-quoted strings with a bare `'` have broken the syntax check twice this week.
   A step can set `cta` to replace the Next/Done label ("Show me around", "Let's go!").
-- **Vector graphics (`TOUR_ART`) on the welcome tour's first and last cards only.** Abstract
-  shapes with gradients in Mediashock's colours, as MS Creatives defines them: Poppy `#ff4e20`
-  leads, with the content-bucket accents indigo `#6366f1`, blue `#2563eb` and cyan `#0891b2`.
-  Amber and slate are left out on purpose, because amber already means Medium priority here.
-  Welcome = **the life of a piece of work as one journey**: a gradient road with four labelled
-  stops, each a small card (Plan = mini board, Track = mini timeline, Talk = chat bubble with three
-  team avatars, Done = Poppy tick badge). The welcome text says the same thing in words ("plans
-  the work, tracks it, talks it through and gets it done"). All set = a Poppy tick badge in
-  indigo/cyan orbit rings with floating shapes and sparkles.
-  - **Every shape in the welcome graphic must stand for something.** Its previous version led
-    with a big glowing abstract circle, and the first question about it was "what does the orange
-    circle mean?" It meant nothing. Asked for instead: "creative yet it explains what this PM
-    tool is for".
-  - **Third design.** The first was hand-drawn stick figures (a wobble filter on line art); it was
-    changed on request to "vector lines and abstract shapes ... gradients and Mediashock's accent
-    colours" and "graphics instead" of sketches. Don't bring back people or the wobble.
+- **Product illustrations (`TOUR_ART`) on the welcome tour's first and last cards only. Fourth
+  design: don't walk it back.** Drawn the way Linear/Notion/Stripe draw them: one bold branded
+  backdrop (a Poppy-to-indigo gradient, blurred colour orbs, a fine dot texture), real-looking UI
+  cards floating in layers at different angles with soft shadows, a hero moment, floating chips,
+  and motion (a dashed swoosh, sparkles, confetti).
+  - **Welcome:** a tilted task card with a checklist, two items ticked and a cursor mid-click on
+    the third; a timeline card behind it; a "done" pill, a typing chat bubble and team avatars.
+  - **All set:** a white medallion with a Poppy tick inside rings, a fully ticked mini task card, a
+    cheering chat bubble with the team, and a confetti burst.
+  - No labels. The picture shows the tool being used, and the card text says what it is for. Every
+    element is still a real part of the app, so it explains as well as delights.
+  - **History, so nobody repeats it:** (1) hand-drawn stick figures, changed to "graphics instead";
+    (2) abstract gradient shapes, which prompted "what does the orange circle mean?" (it meant
+    nothing); (3) a labelled Plan/Track/Talk/Done road, judged "not fun nor creative. Give me
+    something that a designer would create." It read as a flowchart: labels, dotted stems, evenly
+    spaced stops.
+  - **Colours:** Mediashock's, from MS Creatives' `BRAND`/`BUCKET_COLORS`. Poppy `#ff4e20` leads,
+    with indigo `#6366f1` and cyan `#0891b2` in support. No amber: it means Medium priority here.
+  - The art is a self-contained coloured panel, so it needs no dark-mode variant. Ids are prefixed
+    per graphic (`ta-w-*`, `ta-d-*`).
   - Bookends only, by agreement: those two cards point at nothing, so a graphic adds warmth there,
     whereas one on every step would compete with the spotlight and make the tour feel longer. A
-    step opts in with `art: '<key>'`. Gradient ids are suffixed per graphic (`tg-w-*`,
-    `tg-d-*`). The gradients carry their own colour, so only the backdrop and the board panel
-    switch for dark mode.
+    step opts in with `art: '<key>'`.
 - **Page tours** (`PAGE_TOURS`, `maybeStartPageTour`, asked for next: "guided tours should also be
   applied to other pages when new users click into it. When new pages are added, existing users
   should also be able to go through the tour"). One 1–2 step tour per view, seen as `page:<view>`.

@@ -12477,85 +12477,111 @@
     ] }
   ];
 
-  /* Tour graphics (TOUR_ART). First drawn as hand-drawn stick figures, then changed on request
-     to "vector lines and abstract shapes ... gradients and Mediashock's accent colours" and
-     "graphics instead" of sketches: clean flat vector compositions, no people, no wobble filter.
-     Colours are Mediashock's own, as MS Creatives defines them: Poppy #ff4e20 (BRAND.orange)
-     leads, with the content-bucket accents indigo #6366f1, blue #2563eb and cyan #0891b2, each as
-     a light-to-full gradient. Amber and slate (the other bucket accents) are left out on purpose:
-     amber already means Medium priority in this app.
-     Still on the welcome tour's FIRST and LAST cards only: those two point at nothing, so a
-     graphic adds warmth there, whereas one on every step would compete with the spotlight and make
-     the tour feel longer. Gradient ids are suffixed per graphic (tg-w-*, tg-d-*) so they can't
-     collide. The gradients carry their own colour, so only the backdrop and the board panel
-     switch for dark mode. */
+  /* Tour graphics (TOUR_ART) -- FOURTH design. History, so nobody walks it back:
+     1. hand-drawn stick figures -> "graphics instead";
+     2. abstract gradient shapes -> "what does the orange circle mean?" (it meant nothing);
+     3. a labelled Plan/Track/Talk/Done road -> "not fun nor creative. Give me something that a
+        designer would create." It read as a flowchart: labels, dotted stems, evenly spaced stops.
+     This one is a product illustration, the way Linear/Notion/Stripe draw them: one bold branded
+     backdrop (Poppy -> indigo gradient, blurred colour orbs, a fine dot texture), real-looking UI
+     cards floating in layers at different angles with soft shadows, a hero moment (a cursor about
+     to tick the last checklist item), floating chips (done pill, typing chat bubble, team
+     avatars), and motion (a dashed swoosh, sparkles, confetti). No labels -- the picture shows the
+     tool being used; the card's text says what it's for. Every element is still a real part of
+     the app (task + checklist, timeline, chat, team, done), so it explains as well as delights.
+     Colours are Mediashock's (MS Creatives' BRAND/BUCKET_COLORS): Poppy leads; indigo and cyan
+     support; no amber (it means Medium priority here). The art is a self-contained coloured
+     panel, so it needs no dark-mode variant. Ids are prefixed per graphic (ta-w-*, ta-d-*).
+     Still the welcome tour's FIRST and LAST cards only. */
   var TOUR_ART = {
-    // The life of a piece of work as one journey: Plan (board) -> Track (timeline) -> Talk
-    // (chat, with the team) -> Done (tick), stops on a gradient road, each labelled. Replaced an
-    // abstract glowing circle that was asked about directly ("what does the orange circle mean?")
-    // -- it meant nothing. Asked for instead: "creative yet it explains what this PM tool is for".
-    // Every shape here stands for something; keep it that way.
     welcome:
-      '<svg viewBox="0 0 240 128" class="w-full h-auto" fill="none" aria-hidden="true">' +
-        '<defs><linearGradient id="tg-w-poppy" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff9470"></stop><stop offset="1" stop-color="#ff4e20"></stop></linearGradient><linearGradient id="tg-w-indigo" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#a5b4fc"></stop><stop offset="1" stop-color="#6366f1"></stop></linearGradient><linearGradient id="tg-w-cyan" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#67e8f9"></stop><stop offset="1" stop-color="#0891b2"></stop></linearGradient><linearGradient id="tg-w-blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#93c5fd"></stop><stop offset="1" stop-color="#2563eb"></stop></linearGradient><linearGradient id="tg-w-road" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ff4e20"></stop><stop offset=".5" stop-color="#6366f1"></stop><stop offset=".8" stop-color="#0891b2"></stop><stop offset="1" stop-color="#ff4e20"></stop></linearGradient><radialGradient id="tg-w-glow"><stop offset="0" stop-color="#ff4e20" stop-opacity=".3"></stop><stop offset="1" stop-color="#ff4e20" stop-opacity="0"></stop></radialGradient></defs>' +
-        '<rect x="0" y="0" width="240" height="128" rx="14" class="fill-zinc-100 dark:fill-white/5"></rect>' +
-        '<path d="M12 108 Q120 92 228 108" stroke="url(#tg-w-road)" stroke-width="3" stroke-linecap="round"></path>' +
-        '<rect x="18" y="30" width="50" height="44" rx="8" class="fill-white stroke-zinc-200 dark:fill-zinc-800 dark:stroke-zinc-600" stroke-width="1.4"></rect>' +
-        '<rect x="24" y="38" width="11" height="7" rx="2.5" fill="url(#tg-w-poppy)"></rect>' +
-        '<rect x="24" y="48" width="11" height="7" rx="2.5" fill="url(#tg-w-poppy)" fill-opacity=".5"></rect>' +
-        '<rect x="37.5" y="38" width="11" height="7" rx="2.5" fill="url(#tg-w-indigo)"></rect>' +
-        '<rect x="37.5" y="48" width="11" height="7" rx="2.5" fill="url(#tg-w-indigo)" fill-opacity=".5"></rect>' +
-        '<rect x="37.5" y="58" width="11" height="7" rx="2.5" fill="url(#tg-w-indigo)" fill-opacity=".25"></rect>' +
-        '<rect x="51" y="38" width="11" height="7" rx="2.5" fill="url(#tg-w-cyan)"></rect>' +
-        '<path d="M54 41.5 l1.8 1.8 l3.4 -3.4" stroke="#ffffff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path>' +
-        '<path d="M43 76 V100" class="stroke-zinc-300 dark:stroke-zinc-600" stroke-width="1.4" stroke-dasharray="1.5 3.5" stroke-linecap="round"></path><circle cx="43" cy="104" r="4" class="fill-white dark:fill-zinc-800" stroke="url(#tg-w-poppy)" stroke-width="2.2"></circle><text x="43" y="123" text-anchor="middle" font-size="9" font-weight="700" class="fill-zinc-500 dark:fill-zinc-400" style="font-family:inherit">Plan</text>' +
-        '<rect x="84" y="14" width="56" height="42" rx="8" class="fill-white stroke-zinc-200 dark:fill-zinc-800 dark:stroke-zinc-600" stroke-width="1.4"></rect>' +
-        '<path d="M92 50 H132" class="stroke-zinc-200 dark:stroke-zinc-600" stroke-width="1"></path>' +
-        '<rect x="91" y="21" width="22" height="6" rx="3" fill="url(#tg-w-poppy)"></rect>' +
-        '<rect x="99" y="31" width="28" height="6" rx="3" fill="url(#tg-w-indigo)"></rect>' +
-        '<rect x="109" y="41" width="24" height="6" rx="3" fill="url(#tg-w-cyan)"></rect>' +
-        '<path d="M127 18 l2.5 2.5 l-2.5 2.5 l-2.5 -2.5 z" fill="url(#tg-w-poppy)"></path>' +
-        '<path d="M112 58 V95" class="stroke-zinc-300 dark:stroke-zinc-600" stroke-width="1.4" stroke-dasharray="1.5 3.5" stroke-linecap="round"></path><circle cx="112" cy="99" r="4" class="fill-white dark:fill-zinc-800" stroke="url(#tg-w-indigo)" stroke-width="2.2"></circle><text x="112" y="123" text-anchor="middle" font-size="9" font-weight="700" class="fill-zinc-500 dark:fill-zinc-400" style="font-family:inherit">Track</text>' +
-        '<path d="M153 44 h26 a9 9 0 0 1 9 9 v10 a9 9 0 0 1 -9 9 h-18 l-8 7 l1 -7 a9 9 0 0 1 -9 -9 v-10 a9 9 0 0 1 8 -9 z" fill="url(#tg-w-blue)"></path>' +
-        '<path d="M155 54 h24 M155 62 h15" stroke="#ffffff" stroke-opacity=".9" stroke-width="2.5" stroke-linecap="round"></path>' +
-        '<circle cx="156" cy="34" r="7.5" fill="url(#tg-w-poppy)" class="stroke-white dark:stroke-zinc-800" stroke-width="1.8"></circle><circle cx="156" cy="32.2" r="2.3" fill="#ffffff"></circle><path d="M152 39 Q156 34.5 160 39" fill="#ffffff"></path>' +
-        '<circle cx="167" cy="32" r="7.5" fill="url(#tg-w-indigo)" class="stroke-white dark:stroke-zinc-800" stroke-width="1.8"></circle><circle cx="167" cy="30.2" r="2.3" fill="#ffffff"></circle><path d="M163 37 Q167 32.5 171 37" fill="#ffffff"></path>' +
-        '<circle cx="178" cy="34" r="7.5" fill="url(#tg-w-cyan)" class="stroke-white dark:stroke-zinc-800" stroke-width="1.8"></circle><circle cx="178" cy="32.2" r="2.3" fill="#ffffff"></circle><path d="M174 39 Q178 34.5 182 39" fill="#ffffff"></path>' +
-        '<path d="M166 82 V96" class="stroke-zinc-300 dark:stroke-zinc-600" stroke-width="1.4" stroke-dasharray="1.5 3.5" stroke-linecap="round"></path><circle cx="166" cy="100" r="4" class="fill-white dark:fill-zinc-800" stroke="url(#tg-w-cyan)" stroke-width="2.2"></circle><text x="166" y="123" text-anchor="middle" font-size="9" font-weight="700" class="fill-zinc-500 dark:fill-zinc-400" style="font-family:inherit">Talk</text>' +
-        '<circle cx="216" cy="52" r="24" fill="url(#tg-w-glow)"></circle>' +
-        '<circle cx="216" cy="52" r="15" fill="url(#tg-w-poppy)"></circle>' +
-        '<path d="M209 52 l5 5 l9 -10" stroke="#ffffff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"></path>' +
-        '<path d="M229 21 Q230 26 235 27 Q230 28 229 33 Q228 28 223 27 Q228 26 229 21 Z" fill="url(#tg-w-indigo)"></path>' +
-        '<circle cx="198" cy="26" r="2.2" fill="url(#tg-w-cyan)"></circle>' +
-        '<path d="M216 68 V102" class="stroke-zinc-300 dark:stroke-zinc-600" stroke-width="1.4" stroke-dasharray="1.5 3.5" stroke-linecap="round"></path><circle cx="216" cy="106" r="4" class="fill-white dark:fill-zinc-800" stroke="url(#tg-w-poppy)" stroke-width="2.2"></circle><text x="216" y="123" text-anchor="middle" font-size="9" font-weight="700" class="fill-zinc-500 dark:fill-zinc-400" style="font-family:inherit">Done</text>' +
+      '<svg viewBox="0 0 320 170" class="w-full h-auto rounded-2xl" fill="none" aria-hidden="true">' +
+        '<defs><linearGradient id="ta-w-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff4e20"></stop><stop offset=".5" stop-color="#ff7a52"></stop><stop offset="1" stop-color="#6366f1"></stop></linearGradient><linearGradient id="ta-w-poppy" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff9470"></stop><stop offset="1" stop-color="#ff4e20"></stop></linearGradient><linearGradient id="ta-w-indigo" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#a5b4fc"></stop><stop offset="1" stop-color="#6366f1"></stop></linearGradient><linearGradient id="ta-w-cyan" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#67e8f9"></stop><stop offset="1" stop-color="#0891b2"></stop></linearGradient><radialGradient id="ta-w-orb-cyan"><stop offset="0" stop-color="#22d3ee" stop-opacity=".85"></stop><stop offset="1" stop-color="#22d3ee" stop-opacity="0"></stop></radialGradient><radialGradient id="ta-w-orb-indigo"><stop offset="0" stop-color="#4338ca" stop-opacity=".7"></stop><stop offset="1" stop-color="#4338ca" stop-opacity="0"></stop></radialGradient><radialGradient id="ta-w-orb-peach"><stop offset="0" stop-color="#ffd2c4" stop-opacity=".75"></stop><stop offset="1" stop-color="#ffd2c4" stop-opacity="0"></stop></radialGradient><pattern id="ta-w-dots" width="12" height="12" patternUnits="userSpaceOnUse"><circle cx="1.5" cy="1.5" r="1" fill="#ffffff" fill-opacity=".16"></circle></pattern><filter id="ta-w-shadow" x="-30%" y="-30%" width="160%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#1e1b4b" flood-opacity=".3"></feDropShadow></filter><clipPath id="ta-w-clip"><rect width="320" height="170" rx="16"></rect></clipPath></defs>' +
+        '<g clip-path="url(#ta-w-clip)">' +
+        '<rect width="320" height="170" fill="url(#ta-w-bg)"></rect><circle cx="292" cy="18" r="96" fill="url(#ta-w-orb-cyan)"></circle><circle cx="26" cy="168" r="100" fill="url(#ta-w-orb-peach)"></circle><circle cx="300" cy="176" r="90" fill="url(#ta-w-orb-indigo)"></circle><rect width="320" height="170" fill="url(#ta-w-dots)"></rect>' +
+        '<path d="M-10 150 C70 96 150 176 330 58" stroke="#ffffff" stroke-opacity=".45" stroke-width="1.6" stroke-dasharray="2 7" stroke-linecap="round"></path>' +
+        '<g transform="rotate(8 232 76)" filter="url(#ta-w-shadow)">' +
+        '<rect x="176" y="34" width="112" height="80" rx="12" fill="#ffffff"></rect>' +
+        '<circle cx="189" cy="46" r="2.6" fill="#e4e4e7"></circle><circle cx="197" cy="46" r="2.6" fill="#e4e4e7"></circle><circle cx="205" cy="46" r="2.6" fill="#e4e4e7"></circle>' +
+        '<path d="M188 104 H276" stroke="#f4f4f5" stroke-width="1.5"></path>' +
+        '<rect x="188" y="58" width="46" height="8" rx="4" fill="url(#ta-w-poppy)"></rect>' +
+        '<rect x="204" y="73" width="58" height="8" rx="4" fill="url(#ta-w-indigo)"></rect>' +
+        '<rect x="222" y="88" width="50" height="8" rx="4" fill="url(#ta-w-cyan)"></rect>' +
+        '<path d="M266 58 l4 4 l-4 4 l-4 -4 z" fill="#ff4e20"></path>' +
+        '</g>' +
+        '<g transform="rotate(-6 110 92)" filter="url(#ta-w-shadow)">' +
+        '<rect x="42" y="38" width="136" height="104" rx="14" fill="#ffffff"></rect>' +
+        '<rect x="56" y="52" width="62" height="7" rx="3.5" fill="#18181b" fill-opacity=".88"></rect>' +
+        '<rect x="56" y="64" width="38" height="5" rx="2.5" fill="#a1a1aa" fill-opacity=".7"></rect>' +
+        '<circle cx="136" cy="58" r="7.5" fill="url(#ta-w-poppy)" stroke="#ffffff" stroke-width="2"></circle><circle cx="136" cy="56.2" r="2.3" fill="#ffffff"></circle><path d="M132 63 Q136 58.5 140 63" fill="#ffffff"></path>' +
+        '<circle cx="148" cy="58" r="7.5" fill="url(#ta-w-indigo)" stroke="#ffffff" stroke-width="2"></circle><circle cx="148" cy="56.2" r="2.3" fill="#ffffff"></circle><path d="M144 63 Q148 58.5 152 63" fill="#ffffff"></path>' +
+        '<circle cx="160" cy="58" r="7.5" fill="url(#ta-w-cyan)" stroke="#ffffff" stroke-width="2"></circle><circle cx="160" cy="56.2" r="2.3" fill="#ffffff"></circle><path d="M156 63 Q160 58.5 164 63" fill="#ffffff"></path>' +
+        '<rect x="56" y="80" width="13" height="13" rx="4" fill="url(#ta-w-poppy)"></rect>' +
+        '<path d="M59 86.5 l3 3 l6 -6.5" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"></path>' +
+        '<rect x="76" y="84" width="64" height="5" rx="2.5" fill="#e4e4e7"></rect>' +
+        '<rect x="56" y="100" width="13" height="13" rx="4" fill="url(#ta-w-poppy)"></rect>' +
+        '<path d="M59 106.5 l3 3 l6 -6.5" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"></path>' +
+        '<rect x="76" y="104" width="50" height="5" rx="2.5" fill="#e4e4e7"></rect>' +
+        '<rect x="56.8" y="120.8" width="11.4" height="11.4" rx="3.5" stroke="#d4d4d8" stroke-width="1.6" fill="#ffffff"></rect>' +
+        '<rect x="76" y="124" width="58" height="5" rx="2.5" fill="#d4d4d8"></rect>' +
+        '</g>' +
+        '<path d="M54 131 h-6 M55 124 l-4.5 -4 M55 138 l-4.5 4" stroke="#ff4e20" stroke-width="2" stroke-linecap="round"></path>' +
+        '<path d="M69 132 v17 l4.6 -4.3 l3.4 7.3 l3.2 -1.5 l-3.4 -7.1 l6.2 -.4 z" fill="#18181b" stroke="#ffffff" stroke-width="1.6" stroke-linejoin="round" filter="url(#ta-w-shadow)"></path>' +
+        '<g filter="url(#ta-w-shadow)">' +
+        '<rect x="20" y="14" width="74" height="24" rx="12" fill="#ffffff"></rect>' +
+        '<circle cx="33" cy="26" r="7.5" fill="url(#ta-w-poppy)"></circle>' +
+        '<path d="M29.5 26 l2.4000000000000004 2.4000000000000004 l4.800000000000001 -5.2" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"></path>' +
+        '<rect x="46" y="23" width="38" height="6" rx="3" fill="#18181b" fill-opacity=".8"></rect>' +
+        '</g>' +
+        '<g filter="url(#ta-w-shadow)">' +
+        '<rect x="216" y="120" width="76" height="32" rx="14" fill="#ffffff"></rect>' +
+        '<path d="M228 151 l-7 10 l15 -9 z" fill="#ffffff"></path>' +
+        '<circle cx="239" cy="136" r="3.6" fill="#6366f1"></circle><circle cx="254" cy="136" r="3.6" fill="#6366f1" fill-opacity=".6"></circle><circle cx="269" cy="136" r="3.6" fill="#6366f1" fill-opacity=".3"></circle>' +
+        '</g>' +
+        '<path d="M302 96 Q303.2 102.8 310 104 Q303.2 105.2 302 112 Q300.8 105.2 294 104 Q300.8 102.8 302 96 Z" fill="#ffffff"></path>' +
+        '<path d="M150 14.5 Q150.825 19.175 155.5 20 Q150.825 20.825 150 25.5 Q149.175 20.825 144.5 20 Q149.175 19.175 150 14.5 Z" fill="#ffffff" fill-opacity=".9"></path>' +
+        '<path d="M18 91.5 Q18.675 95.325 22.5 96 Q18.675 96.675 18 100.5 Q17.325 96.675 13.5 96 Q17.325 95.325 18 91.5 Z" fill="#ffffff" fill-opacity=".85"></path>' +
+        '<circle cx="196" cy="18" r="5" stroke="#ffffff" stroke-opacity=".7" stroke-width="2"></circle>' +
+        '<rect x="128" y="152" width="7" height="7" rx="1.5" transform="rotate(25 131.5 155.5)" fill="#ffffff" fill-opacity=".55"></rect>' +
+        '</g>' +
       '</svg>',
-    // A Poppy badge with a tick, orbit rings in indigo and cyan, and floating shapes and sparkles.
     done:
-      '<svg viewBox="0 0 240 120" class="w-full h-auto" fill="none" aria-hidden="true">' +
-        '<defs>' +
-          '<linearGradient id="tg-d-poppy" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff9470"></stop><stop offset="1" stop-color="#ff4e20"></stop></linearGradient>' +
-          '<linearGradient id="tg-d-indigo" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#a5b4fc"></stop><stop offset="1" stop-color="#6366f1"></stop></linearGradient>' +
-          '<linearGradient id="tg-d-cyan" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#67e8f9"></stop><stop offset="1" stop-color="#0891b2"></stop></linearGradient>' +
-          '<linearGradient id="tg-d-blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#93c5fd"></stop><stop offset="1" stop-color="#2563eb"></stop></linearGradient>' +
-          '<radialGradient id="tg-d-glow"><stop offset="0" stop-color="#ff4e20" stop-opacity=".35"></stop><stop offset="1" stop-color="#ff4e20" stop-opacity="0"></stop></radialGradient>' +
-        '</defs>' +
-        '<rect x="0" y="0" width="240" height="120" rx="14" class="fill-zinc-100 dark:fill-white/5"></rect>' +
-        '<circle cx="120" cy="60" r="60" fill="url(#tg-d-glow)"></circle>' +
-        '<circle cx="120" cy="60" r="50" stroke="url(#tg-d-indigo)" stroke-width="1.8" stroke-dasharray="3 8" stroke-linecap="round"></circle>' +
-        '<circle cx="120" cy="60" r="41" stroke="url(#tg-d-cyan)" stroke-width="1.8" stroke-opacity=".7"></circle>' +
-        '<circle cx="120" cy="60" r="31" fill="url(#tg-d-poppy)"></circle>' +
-        '<circle cx="110" cy="49" r="9" fill="#ffffff" fill-opacity=".25"></circle>' +
-        '<path d="M106 61 l10 10 l19 -21" stroke="#ffffff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"></path>' +
-        '<rect x="38" y="30" width="32" height="11" rx="5.5" transform="rotate(-25 54 35)" fill="url(#tg-d-indigo)"></rect>' +
-        '<path d="M182 22 l13 -2 l-6 12 z" fill="url(#tg-d-cyan)"></path>' +
-        '<circle cx="192" cy="92" r="7" fill="url(#tg-d-blue)"></circle>' +
-        '<rect x="56" y="86" width="10" height="10" rx="2" transform="rotate(20 61 91)" fill="url(#tg-d-poppy)"></rect>' +
-        '<path d="M206 40 Q207 47 214 48 Q207 49 206 56 Q205 49 198 48 Q205 47 206 40 Z" fill="url(#tg-d-poppy)"></path>' +
-        '<path d="M34 64 Q35 69 40 70 Q35 71 34 76 Q33 71 28 70 Q33 69 34 64 Z" fill="url(#tg-d-indigo)"></path>' +
-        '<circle cx="24" cy="38" r="3" fill="url(#tg-d-cyan)"></circle>' +
-        '<circle cx="218" cy="88" r="3" fill="url(#tg-d-poppy)"></circle>' +
-        '<circle cx="152" cy="13" r="2.5" fill="url(#tg-d-indigo)"></circle>' +
-        '<circle cx="88" cy="108" r="2.5" fill="url(#tg-d-blue)"></circle>' +
+      '<svg viewBox="0 0 320 170" class="w-full h-auto rounded-2xl" fill="none" aria-hidden="true">' +
+        '<defs><linearGradient id="ta-d-bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff4e20"></stop><stop offset=".5" stop-color="#ff7a52"></stop><stop offset="1" stop-color="#6366f1"></stop></linearGradient><linearGradient id="ta-d-poppy" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff9470"></stop><stop offset="1" stop-color="#ff4e20"></stop></linearGradient><linearGradient id="ta-d-indigo" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#a5b4fc"></stop><stop offset="1" stop-color="#6366f1"></stop></linearGradient><linearGradient id="ta-d-cyan" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#67e8f9"></stop><stop offset="1" stop-color="#0891b2"></stop></linearGradient><radialGradient id="ta-d-orb-cyan"><stop offset="0" stop-color="#22d3ee" stop-opacity=".85"></stop><stop offset="1" stop-color="#22d3ee" stop-opacity="0"></stop></radialGradient><radialGradient id="ta-d-orb-indigo"><stop offset="0" stop-color="#4338ca" stop-opacity=".7"></stop><stop offset="1" stop-color="#4338ca" stop-opacity="0"></stop></radialGradient><radialGradient id="ta-d-orb-peach"><stop offset="0" stop-color="#ffd2c4" stop-opacity=".75"></stop><stop offset="1" stop-color="#ffd2c4" stop-opacity="0"></stop></radialGradient><pattern id="ta-d-dots" width="12" height="12" patternUnits="userSpaceOnUse"><circle cx="1.5" cy="1.5" r="1" fill="#ffffff" fill-opacity=".16"></circle></pattern><filter id="ta-d-shadow" x="-30%" y="-30%" width="160%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#1e1b4b" flood-opacity=".3"></feDropShadow></filter><clipPath id="ta-d-clip"><rect width="320" height="170" rx="16"></rect></clipPath></defs>' +
+        '<g clip-path="url(#ta-d-clip)">' +
+        '<rect width="320" height="170" fill="url(#ta-d-bg)"></rect><circle cx="292" cy="18" r="96" fill="url(#ta-d-orb-cyan)"></circle><circle cx="26" cy="168" r="100" fill="url(#ta-d-orb-peach)"></circle><circle cx="300" cy="176" r="90" fill="url(#ta-d-orb-indigo)"></circle><rect width="320" height="170" fill="url(#ta-d-dots)"></rect>' +
+        '<circle cx="160" cy="84" r="66" stroke="#ffffff" stroke-opacity=".28" stroke-width="1.6" stroke-dasharray="2 8" stroke-linecap="round"></circle>' +
+        '<circle cx="160" cy="84" r="52" stroke="#ffffff" stroke-opacity=".35" stroke-width="5"></circle>' +
+        '<g transform="rotate(-10 62 92)" filter="url(#ta-d-shadow)">' +
+        '<rect x="26" y="60" width="74" height="66" rx="12" fill="#ffffff"></rect>' +
+        '<rect x="36" y="72" width="11" height="11" rx="3.5" fill="url(#ta-d-poppy)"></rect><path d="M38.5 77.5 l2.55 2.55 l5.1 -5.5249999999999995" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"></path><rect x="53" y="75" width="38" height="5" rx="2.5" fill="#e4e4e7"></rect><rect x="36" y="90" width="11" height="11" rx="3.5" fill="url(#ta-d-poppy)"></rect><path d="M38.5 95.5 l2.55 2.55 l5.1 -5.5249999999999995" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"></path><rect x="53" y="93" width="38" height="5" rx="2.5" fill="#e4e4e7"></rect><rect x="36" y="108" width="11" height="11" rx="3.5" fill="url(#ta-d-poppy)"></rect><path d="M38.5 113.5 l2.55 2.55 l5.1 -5.5249999999999995" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"></path><rect x="53" y="111" width="38" height="5" rx="2.5" fill="#e4e4e7"></rect>' +
+        '</g>' +
+        '<g transform="rotate(8 262 86)" filter="url(#ta-d-shadow)">' +
+        '<rect x="226" y="72" width="74" height="36" rx="14" fill="#ffffff"></rect>' +
+        '<path d="M286 107 l7 10 l-15 -9 z" fill="#ffffff"></path>' +
+        '<rect x="238" y="84" width="40" height="5" rx="2.5" fill="#18181b" fill-opacity=".8"></rect>' +
+        '<rect x="238" y="94" width="26" height="5" rx="2.5" fill="#d4d4d8"></rect>' +
+        '</g>' +
+        '<circle cx="238" cy="58" r="7.5" fill="url(#ta-d-poppy)" stroke="#ffffff" stroke-width="2"></circle><circle cx="238" cy="56.2" r="2.3" fill="#ffffff"></circle><path d="M234 63 Q238 58.5 242 63" fill="#ffffff"></path>' +
+        '<circle cx="250" cy="54" r="7.5" fill="url(#ta-d-indigo)" stroke="#ffffff" stroke-width="2"></circle><circle cx="250" cy="52.2" r="2.3" fill="#ffffff"></circle><path d="M246 59 Q250 54.5 254 59" fill="#ffffff"></path>' +
+        '<circle cx="262" cy="58" r="7.5" fill="url(#ta-d-cyan)" stroke="#ffffff" stroke-width="2"></circle><circle cx="262" cy="56.2" r="2.3" fill="#ffffff"></circle><path d="M258 63 Q262 58.5 266 63" fill="#ffffff"></path>' +
+        '<g filter="url(#ta-d-shadow)"><circle cx="160" cy="84" r="40" fill="#ffffff"></circle></g>' +
+        '<circle cx="160" cy="84" r="31" fill="url(#ta-d-poppy)"></circle>' +
+        '<circle cx="150" cy="73" r="10" fill="#ffffff" fill-opacity=".22"></circle>' +
+        '<path d="M144 85 l11 11 l21 -24" stroke="#ffffff" stroke-width="7.5" stroke-linecap="round" stroke-linejoin="round"></path>' +
+        '<rect x="118" y="22" width="9" height="4" rx="1.5" transform="rotate(30 122.5 24)" fill="#ffffff"></rect>' +
+        '<rect x="196" y="26" width="9" height="4" rx="1.5" transform="rotate(-35 200.5 28)" fill="#67e8f9"></rect>' +
+        '<rect x="128" y="138" width="8" height="4" rx="1.5" transform="rotate(-20 132 140)" fill="#a5b4fc"></rect>' +
+        '<rect x="200" y="140" width="9" height="4" rx="1.5" transform="rotate(40 204.5 142)" fill="#ffffff" fill-opacity=".85"></rect>' +
+        '<rect x="106" y="70" width="7" height="3.5" rx="1.5" transform="rotate(70 109.5 71.75)" fill="#ffd2c4"></rect>' +
+        '<rect x="214" y="50" width="7" height="3.5" rx="1.5" transform="rotate(15 217.5 51.75)" fill="#ffffff" fill-opacity=".9"></rect>' +
+        '<circle cx="140" cy="26" r="3" fill="#67e8f9"></circle><circle cx="186" cy="146" r="3" fill="#ffffff"></circle><circle cx="104" cy="112" r="2.5" fill="#ffffff" fill-opacity=".8"></circle><circle cx="222" cy="122" r="2.5" fill="#a5b4fc"></circle>' +
+        '<path d="M178 18 q3 -4 6 0 q3 4 6 0 M126 150 q3 -4 6 0 q3 4 6 0" stroke="#ffffff" stroke-width="2" stroke-linecap="round"></path>' +
+        '<path d="M212 22 Q213.2 28.8 220 30 Q213.2 31.2 212 38 Q210.8 31.2 204 30 Q210.8 28.8 212 22 Z" fill="#ffffff"></path>' +
+        '<path d="M108 34.5 Q108.825 39.175 113.5 40 Q108.825 40.825 108 45.5 Q107.175 40.825 102.5 40 Q107.175 39.175 108 34.5 Z" fill="#ffffff" fill-opacity=".9"></path>' +
+        '<path d="M298 140 Q298.9 145.1 304 146 Q298.9 146.9 298 152 Q297.1 146.9 292 146 Q297.1 145.1 298 140 Z" fill="#ffffff" fill-opacity=".85"></path>' +
+        '<path d="M22 25 Q22.75 29.25 27 30 Q22.75 30.75 22 35 Q21.25 30.75 17 30 Q21.25 29.25 22 25 Z" fill="#ffffff" fill-opacity=".8"></path>' +
+        '</g>' +
       '</svg>'
   };
 
@@ -14030,7 +14056,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T16:43:56Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T16:46:53Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
