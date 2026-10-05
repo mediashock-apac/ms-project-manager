@@ -4707,6 +4707,8 @@
   // its bar drops its own small diamonds, since the rows below now carry exactly those.
   var ganttExpanded = {};
   var GANTT_ITEM_ROW_HEIGHT = 34;
+  // Bar thickness on the Timeline AND the WIP timeline -- one constant so the two can't drift.
+  var GANTT_BAR_HEIGHT = 20;
 
   // Due-date order, undated last, original order as the tie-break -- the diamonds step down the
   // rows left to right, which is what makes them easy to follow.
@@ -8707,8 +8709,12 @@
         html += '<div class="gantt-leave absolute inset-y-0" title="' + escapeHtml(seg.label) + '" style="left:' + Math.max(seg.left, 0) + 'px;width:' + seg.width + 'px;"></div>';
       });
       html += '<button data-open-task="' + t.id + '" title="' + escapeHtml(t.name + ' · ' + t.assignee + ' · ' + t.priority + ' priority · ' + formatShortDate(t.startDate) + ' – ' + formatShortDate(t.deadline) + (showChecklistProgress ? ' · ' + checklistDoneCount + '/' + t.checklist.length + ' checklist items' : '')) + escapeHtml(stackTitle) + escapeHtml(leaveTitle) + '" ' +
-        'class="gantt-bar absolute top-1.5 rounded-md ' + pm.barLight + ' border border-black/5 dark:border-white/5 overflow-hidden text-left" ' +
-        'style="left:' + Math.max(barLeft, 0) + 'px;width:' + Math.max(barWidth, 18) + 'px;height:' + (rowHeight - 12) + 'px;">' +
+        // GANTT_BAR_HEIGHT (20px), centred in the 52px row -- not the old rowHeight - 12 (40px).
+        // Once bars went solid, a near-row-height block of colour per task drowned the weekend/today
+        // shading, leave stripes and diamonds, and left no gap to tell rows apart. The row stays 52px
+        // for the two-line label; only the bar shrank. WIP uses the same height.
+        'class="gantt-bar absolute rounded-md ' + pm.barLight + ' border border-black/5 dark:border-white/5 overflow-hidden text-left" ' +
+        'style="left:' + Math.max(barLeft, 0) + 'px;width:' + Math.max(barWidth, 18) + 'px;top:' + ((rowHeight - GANTT_BAR_HEIGHT) / 2) + 'px;height:' + GANTT_BAR_HEIGHT + 'px;">' +
           // NO task name inside the bar. It duplicated the name already rendered in the label
           // column on this same row -- and that column is `sticky left-0`, so it stays on screen
           // no matter how far the chart is scrolled sideways: the in-bar copy was never the only
@@ -10723,8 +10729,8 @@
         '</div>' +
         '<div class="relative flex-1 min-w-0" style="min-height:40px;">' + bands +
           '<button type="button" data-open-task="' + t.id + '" title="' + escapeHtml(t.name + ' · ' + t.assignee + ' · ' + t.priority + ' priority · ' + formatShortDate(t.startDate) + ' – ' + formatShortDate(t.deadline)) + '" ' +
-            'class="gantt-bar absolute top-2 bottom-2 rounded-md ' + pm.barLight + ' border border-black/5 dark:border-white/5 overflow-hidden text-left" ' +
-            'style="left:' + left + '%;width:calc(' + width + '% - 3px);min-width:14px;">' +
+            'class="gantt-bar absolute rounded-md ' + pm.barLight + ' border border-black/5 dark:border-white/5 overflow-hidden text-left" ' +
+            'style="left:' + left + '%;width:calc(' + width + '% - 3px);min-width:14px;top:calc(50% - ' + (GANTT_BAR_HEIGHT / 2) + 'px);height:' + GANTT_BAR_HEIGHT + 'px;">' +
             '<div class="' + pm.bar + ' h-full w-full"></div>' +
             (overdue ? '<span class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-zinc-800"></span>' : '') +
           '</button>' +
@@ -10831,6 +10837,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-05d', date: '2026-10-05', items: [
+      { type: 'improved', title: 'Slimmer Timeline bars', text: 'Bars on the Timeline and WIP Meeting are thinner, so rows are easier to tell apart and the diamonds, overdue dots and leave stripes stand out.' }
+    ] },
     { id: '2026-10-05c', date: '2026-10-05', items: [
       { type: 'new', title: 'New Updates tab', text: 'This page. The sidebar item lights up whenever something new ships, and settles back once you\'ve had a look.' }
     ] },
@@ -12073,7 +12082,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T05:03:07Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T05:07:00Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

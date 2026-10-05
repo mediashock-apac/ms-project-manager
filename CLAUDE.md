@@ -398,6 +398,13 @@ to bottom:
    `renderCalendar`, `renderPeople`, `renderProjects`, `renderActivityFeed`, `renderArchived`,
    `renderFocus` ("Focus of the Day"), `renderSuggestions`. `setView`/`renderCurrentSecondaryView`
    switch between them; `renderAll` re-runs the relevant renderer(s) after any data change.
+   - **Standing rule: a change to the Timeline is also made to the WIP Meeting timeline**
+     (`wipTimelineHtml`), unless it would add confusion or isn't needed there — stated directly
+     after the two drifted apart several times. If WIP is deliberately skipped, say why.
+   - **Bars are `GANTT_BAR_HEIGHT` (20px), centred in the row, on both timelines.** They were
+     `rowHeight - 12` (40px) on the Timeline and ~30px on WIP; once bars went solid, a near
+     row-height block per task drowned the weekend/today shading, leave stripes and diamonds and
+     left no gap between rows. The Timeline row stays 52px for the two-line label.
    - **The Timeline has two frozen columns, not one: `Task` (track 1) and `Progress`
      (track 2, `GANTT_PCT_WIDTH`).** Day columns therefore start at grid track **3**, and the
      bar rows span `3 / -1` — the single easiest thing to break when touching this grid, since
