@@ -1479,14 +1479,15 @@
 
       <div id="task-comments-section" class="hidden pt-1 border-t border-zinc-100 dark:border-zinc-700">
         <label class="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mt-3 mb-1.5">Comments</label>
-        <div id="task-comments-log" class="flex flex-col gap-2 max-h-96 overflow-y-auto mb-2"></div>
         <div class="flex items-end gap-2">
           <div class="relative flex-1">
             <textarea id="task-comment-input" rows="2" placeholder="Add a comment… (type @ to mention someone)" class="w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400"></textarea>
-            <div id="mention-menu" class="hidden absolute left-0 bottom-full mb-1 z-20 w-full min-w-max bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 panel-pop-in"></div>
+            <div id="mention-menu" class="hidden absolute left-0 top-full mt-1 z-20 w-full min-w-max bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 panel-pop-in"></div>
           </div>
           <button type="button" id="task-comment-add-btn" class="shrink-0 text-sm font-semibold px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">Add</button>
         </div>
+        <!-- Newest comment first (asked for directly), so the box to write one sits above the list. -->
+        <div id="task-comments-log" class="flex flex-col gap-2 max-h-96 overflow-y-auto mt-2"></div>
       </div>
     </form>
     <div class="flex items-center justify-between gap-2 px-5 py-4 border-t border-zinc-100 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700/50">
@@ -6855,6 +6856,19 @@
       );
     }
 
+    // Newest thread first; replies stay oldest-first under their parent, so a conversation still
+    // reads top to bottom. A thread is placed by its LATEST activity (root or any reply), so a
+    // fresh reply to an old comment brings that thread back to the top instead of burying it.
+    // Stored order is untouched (comments are append-only via arrayUnion).
+    function latestActivity(c) {
+      var d = String(c.date || '');
+      (childrenOf[c.id] || []).forEach(function (k) { var x = latestActivity(k); if (x > d) d = x; });
+      return d;
+    }
+    roots.sort(function (a, b) {
+      var d = latestActivity(b).localeCompare(latestActivity(a));
+      return d || (list.indexOf(b) - list.indexOf(a));
+    });
     logEl.innerHTML = list.length
       ? roots.map(function (c) { return commentNode(c, 0); }).join('')
       : '<p class="text-xs text-zinc-400 dark:text-zinc-500">No comments yet.</p>';
@@ -11394,7 +11408,7 @@
   --------------------------------------------------------- */
   var wipMode = 'projects';       // opens on By project for everyone; deliberately not persisted
   var wipAlertsOpen = false;      // By project mode: Needs a decision collapsed to one line until clicked
-  var wipProjectFolded = {};
+  var wipProjectOpen = {};         // By project: projects start COLLAPSED; this holds the ones opened (session-only)
   var wipStepsExpanded = {};
   var WIP_STEPS_SHOWN = 3;
 
@@ -11709,7 +11723,9 @@
       var own = name ? projectDeadlineFor(name) : '';
       var latest = list.map(function (t) { return t.deadline; }).filter(Boolean).sort().pop() || '';
       var due = own || latest;
-      var folded = !!wipProjectFolded[name];
+      // Collapsed unless opened -- or unless something on it is being edited / its Contact & links
+      // panel was opened from the ⋯ row, which would otherwise happen invisibly inside a fold.
+      var folded = !wipProjectOpen[name] && !(wipEdit && wipEdit.project === name) && !wipDetailsOpen[name];
 
       var rows = folded ? '' : list.map(function (t) {
         var until = t.deadline ? daysUntil(t.deadline) : null;
@@ -11805,11 +11821,28 @@
       var countText = list.length ? list.length + ' open'
         : delivs.length ? delivs.length + ' deliverable' + (delivs.length === 1 ? '' : 's') : '';
 
+      // Collapsed, a project must not look calmer than it is: its header says how many tasks are
+      // overdue (red) or behind on a checklist step (amber, same rule as the Behind alert), and
+      // flashes when a teammate edits a task inside it. Nothing extra while open -- the rows show it.
+      var riskHtml = '', hdrFlash = { cls: '', style: '' };
+      if (folded) {
+        var foldToday = toDateInputValue(todayMidnight());
+        var overdueN = 0, behindN = 0;
+        list.forEach(function (t) {
+          if (dueUrgency(t).overdue) overdueN++;
+          else if ((t.checklist || []).some(function (it) { return it && !it.done && it.due && parseDate(it.due) && it.due < foldToday; })) behindN++;
+          if (!hdrFlash.cls) hdrFlash = remoteFlashAttrs(t.id);
+        });
+        riskHtml = (overdueN ? '<span class="shrink-0 text-xs font-semibold text-rose-600 dark:text-rose-400">' + overdueN + ' overdue</span>' : '') +
+          (behindN ? '<span class="shrink-0 text-xs font-semibold text-amber-600 dark:text-amber-400">' + behindN + ' behind</span>' : '');
+      }
+
       cardHtml[name] = '<div class="border-b border-zinc-100 dark:border-zinc-700 last:border-b-0">' +
-        '<div class="group/hdr flex items-stretch bg-zinc-50 dark:bg-zinc-700/40">' +
+        '<div class="group/hdr flex items-stretch bg-zinc-50 dark:bg-zinc-700/40' + hdrFlash.cls + '"' + hdrFlash.style + '>' +
           '<button type="button" data-wip-fold="' + escapeHtml(name) + '" aria-expanded="' + !folded + '" class="min-w-0 flex-1 flex items-center gap-2 px-4 py-2.5 text-left hover:bg-zinc-100 dark:hover:bg-zinc-700/70">' +
             svgIcon('chevronDown', 'w-3.5 h-3.5 shrink-0 text-zinc-400 transition-transform' + (folded ? ' -rotate-90' : '')) +
             '<span class="min-w-0 flex-1 text-sm font-bold text-zinc-800 dark:text-zinc-100 break-words">' + (name ? projectNameHtml(name) : 'No project') + '</span>' +
+            riskHtml +
             '<span class="shrink-0 text-xs text-zinc-500 dark:text-zinc-400">' + countText +
               (due ? (countText ? ' · ' : '') + (own ? 'Project due ' : 'Due ') + escapeHtml(formatShortDate(due)) : '') + '</span>' +
           '</button>' +
@@ -11836,7 +11869,7 @@
     }).join('');
 
     // Collapse all / Expand all: flips to Expand all once every project is folded.
-    var allFolded = names.every(function (n) { return !!wipProjectFolded[n]; });
+    var allFolded = names.every(function (n) { return !wipProjectOpen[n]; });
     var foldAllBtn = '<button type="button" data-wip-fold-all class="' + (addBtn ? 'ml-4' : 'ml-auto') + ' inline-flex items-center gap-1 text-xs font-semibold text-zinc-500 dark:text-zinc-400 hover:text-brand-600 dark:hover:text-brand-400">' +
       svgIcon('chevronDown', 'w-3.5 h-3.5' + (allFolded ? ' -rotate-90' : '')) + (allFolded ? 'Expand all' : 'Collapse all') + '</button>';
     return wipSectionHtml('By project', names.length, addEntry + cards, addBtn + foldAllBtn);
@@ -11900,17 +11933,16 @@
       return;
     }
     if (e.target.closest('[data-wip-fold-all]')) {
-      var allFolded = wipProjectNamesShown.every(function (n) { return !!wipProjectFolded[n]; });
-      wipProjectFolded = {};
-      if (!allFolded) wipProjectNamesShown.forEach(function (n) { wipProjectFolded[n] = true; });
-      else wipProjectNamesShown.forEach(function (n) { markJustOpened('wipproj:' + n); });
+      var allFolded = wipProjectNamesShown.every(function (n) { return !wipProjectOpen[n]; });
+      wipProjectOpen = {};
+      if (allFolded) wipProjectNamesShown.forEach(function (n) { wipProjectOpen[n] = true; markJustOpened('wipproj:' + n); });
       renderWipView();
       return;
     }
     var fold = e.target.closest('[data-wip-fold]');
     if (fold) {
       var n = fold.getAttribute('data-wip-fold');
-      if (wipProjectFolded[n]) { delete wipProjectFolded[n]; markJustOpened('wipproj:' + n); } else wipProjectFolded[n] = true;
+      if (wipProjectOpen[n]) delete wipProjectOpen[n]; else { wipProjectOpen[n] = true; markJustOpened('wipproj:' + n); }
       renderWipView();
       return;
     }
@@ -12047,6 +12079,10 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-05zd', date: '2026-10-05', items: [
+      { type: 'improved', title: 'Newest comments first', text: 'In a task, the latest comment is now at the top, with the box for writing a comment above the list. Replies still sit under the comment they answer, and a new reply brings its thread back to the top.' },
+      { type: 'improved', title: 'WIP Meeting starts collapsed', text: 'In WIP Meeting\'s By project view, every project now starts folded to its title line. A folded project still shows how many of its tasks are overdue (red) or behind (amber). Click a project to open it, or use "Expand all".' }
+    ] },
     { id: '2026-10-05zc', date: '2026-10-05', items: [
       { type: 'improved', title: 'Clearer "new version" notice', text: 'When a new version of Project Manager is out, the notice at the bottom of the screen is now orange, says what it is, and has a "Refresh now" button, so it is hard to miss.' }
     ] },
@@ -13391,7 +13427,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T15:16:21Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T15:26:21Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

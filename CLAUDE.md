@@ -257,6 +257,7 @@ to bottom:
        `data-suggestion-id`), always rendered directly under that one suggestion — there's no
        "reply to a specific earlier reply" concept there at all, so nothing was ever ambiguous
        about where a reply belongs.
+     - **Newest comment thread first** (asked for directly): `renderCommentsLog` sorts root threads by their LATEST activity (root or any reply, `latestActivity`) descending, so a fresh reply to an old comment brings the thread back up; replies stay oldest-first under their parent. The compose box moved ABOVE the log, and the task box's `#mention-menu` now opens below it (`top-full`) since the section label sits above. Storage order is unchanged.
      - **`#task-comments-log`'s `max-h-40` (160px) was reported as too cramped once threading
        made the log taller** — bumped to `max-h-96` (384px). Safe to grow generously: Comments is
        the last section in the task modal's own internally-scrolling form
@@ -3045,7 +3046,7 @@ Project Brief" sheet. So WIP opens on **By project** (`wipProjectsHtml`) for eve
 everyone"). Each project (open work in the teamspace, ordered by soonest open deadline, undated
 last) lists its open tasks by deadline with owner, status and due/overdue, and under each task its
 open checklist steps (the sheet's "Next steps") with owner and date, capped at `WIP_STEPS_SHOWN` (3)
-with "+N more". Projects can be folded (`wipProjectFolded`, session-only, start open). Done tasks are
+with "+N more". Projects **start collapsed** to their title line (`wipProjectOpen` holds the ones opened, session-only; asked for directly -- they used to start open). A project also shows open while something on it is being edited or its Contact & links panel is open, so a ⋯-row action never happens invisibly inside a fold. **A folded header must not look calmer than it is**: it shows "N overdue" (rose, `dueUrgency`) and "N behind" (amber, the Behind alert's late-checklist-step rule), and takes the live-change flash for any task inside it. Done tasks are
 hidden. **Needs a decision stays on top in both modes, but in By project it is shrunk to one line**
 ("4 items need a decision · Overdue 2 · Behind 1 …", amber; the same row opens and closes it, the list hanging under it in one card -- it used to become a section header with a small "Hide" at the far right, reported as the wrong place to close it;
 `wipAlertsOpen`, session-only). Chosen over leaving it in full (it duplicated items the project
