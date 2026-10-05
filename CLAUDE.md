@@ -2475,6 +2475,15 @@ client-side domain check in `isAllowedEmail` is UX only, not enforcement):
       grouping** (`projectColor`, `computeGanttDeadlineStacks`) — a comparison against TeamGantt
       found it doesn't group rows by project either (project color there is manual/optional, not
       automatic), which confirmed the flat list here isn't a compromise to fix later.
+      - **`projectColor` and `PROJECT_BADGE_PALETTE` are gone (third design: no colour).** The
+        project name in the Timeline and WIP timeline labels is now plain bold text. Asked
+        directly what the colours meant, then agreed to remove them: 8 hashed hues across far
+        more projects than that meant two rows matching did NOT mean the same project (three
+        different projects showed in near-identical pink), and the pills competed with the bars'
+        priority/status colours next to them. Colouring by `[Client]` was considered and rejected —
+        most projects are `[Google]`, so nearly every row would match. Chat avatars keep their
+        hashed colour (`PROJECT_AVATAR_PALETTE`): a filled circle needs some colour, and nobody
+        reads meaning into it. History of the earlier two designs, kept for the reasoning:
       - `projectColor(t.project)` **also went through two designs.** The first gave each row a
         plain color bar/swatch next to the existing priority dot -- shipped, then reported back
         as "not immediately intuitive": two unlabeled colored marks sitting side by side with no

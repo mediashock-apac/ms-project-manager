@@ -2399,7 +2399,7 @@
     return counts;
   }
 
-  // Deliberately NOT reusing PROJECT_BADGE_PALETTE (which hashes a project NAME to a colour) or
+  // Deliberately NOT reusing PROJECT_AVATAR_PALETTE (which hashes a project NAME to a colour) or
   // PRIORITY_META's hues -- a department is a third kind of thing, and borrowing either palette
   // would make a teamspace chip read as a priority or as a project identity. Fixed, not hashed:
   // there are exactly three, and they should look the same on every card.
@@ -4775,33 +4775,11 @@
 
   var AVATAR_PALETTE = ['bg-brand-500', 'bg-rose-500', 'bg-amber-500', 'bg-emerald-500', 'bg-sky-500', 'bg-violet-500', 'bg-fuchsia-500', 'bg-teal-500'];
 
-  // Same soft-badge shape as PRIORITY_META/DONE_META/READY_FOR_REVIEW_META's `.badge` classes --
-  // deliberately full class strings (bg + text + ring, not a bare `bg-*-400`), because a bare
-  // color swatch next to the existing priority dot on a Gantt row read as two unlabeled marks
-  // with no way to tell which is which (reported directly: "not immediately intuitive"). Putting
-  // the same color ON the project name's own badge/pill instead ties the color straight to
-  // readable text, matching a pattern already used everywhere else in this app for exactly this
-  // purpose. Hues here (orange/teal/indigo/fuchsia/cyan/lime/pink/violet) are deliberately none of
-  // rose/amber/sky/emerald/purple -- those already mean High/Medium/Low/Done/Ready-for-review
-  // elsewhere, and a project coincidentally landing on one of those would read as a false status
-  // signal. Same name-hash trick as avatarColor, kept as its own function/palette (not reused
-  // verbatim from AVATAR_PALETTE) so a project and a person can never coincidentally share a
-  // color and read as "these are related" when they aren't.
-  var PROJECT_BADGE_PALETTE = [
-    'bg-orange-100 text-orange-700 ring-1 ring-inset ring-orange-200 dark:bg-orange-500/10 dark:text-orange-300 dark:ring-orange-500/25',
-    'bg-teal-100 text-teal-700 ring-1 ring-inset ring-teal-200 dark:bg-teal-500/10 dark:text-teal-300 dark:ring-teal-500/25',
-    'bg-indigo-100 text-indigo-700 ring-1 ring-inset ring-indigo-200 dark:bg-indigo-500/10 dark:text-indigo-300 dark:ring-indigo-500/25',
-    'bg-fuchsia-100 text-fuchsia-700 ring-1 ring-inset ring-fuchsia-200 dark:bg-fuchsia-500/10 dark:text-fuchsia-300 dark:ring-fuchsia-500/25',
-    'bg-cyan-100 text-cyan-700 ring-1 ring-inset ring-cyan-200 dark:bg-cyan-500/10 dark:text-cyan-300 dark:ring-cyan-500/25',
-    'bg-lime-100 text-lime-700 ring-1 ring-inset ring-lime-200 dark:bg-lime-500/10 dark:text-lime-300 dark:ring-lime-500/25',
-    'bg-pink-100 text-pink-700 ring-1 ring-inset ring-pink-200 dark:bg-pink-500/10 dark:text-pink-300 dark:ring-pink-500/25',
-    'bg-violet-100 text-violet-700 ring-1 ring-inset ring-violet-200 dark:bg-violet-500/10 dark:text-violet-300 dark:ring-violet-500/25'
-  ];
-
-  // Same 8 hues as PROJECT_BADGE_PALETTE, solid instead of soft-tinted -- for a filled circle
-  // (white initials text needs real contrast, which the badge palette's light tints don't give).
-  // Same order, same hash formula (projectAvatarColor below), so a project's chat avatar and its
-  // badge elsewhere always land on the same hue -- one identity color per project, two renderings.
+  // Chat avatars only. Project LABELS (Timeline, WIP timeline) used to carry a hashed colour pill
+  // too; removed on request because 8 hues across far more projects meant a matching colour did
+  // not mean the same project, and the pills competed with the bars' priority/status colours.
+  // Hues deliberately avoid rose/amber/sky/emerald/purple (High/Medium/Low/Done/Ready-for-review).
+  // A chat avatar needs some fill behind its white initials, which is why this one stays.
   var PROJECT_AVATAR_PALETTE = ['bg-orange-500', 'bg-teal-500', 'bg-indigo-500', 'bg-fuchsia-500', 'bg-cyan-500', 'bg-lime-500', 'bg-pink-500', 'bg-violet-500'];
 
   /* =========================================================
@@ -5201,20 +5179,7 @@
     '</span>';
   }
 
-  // Same hash, PROJECT_BADGE_PALETTE instead of AVATAR_PALETTE -- lets the Gantt's flat,
-  // chronologically sorted task list still make same-project rows visually obvious (a colored
-  // badge around the project name on the sticky label column) WITHOUT clustering rows by
-  // project, which was tried once already (project header rows + summary bars) and reverted for
-  // breaking the chart's actual job: seeing who's doing what at the same time across the whole
-  // team. Don't re-add row grouping; this is the alternative that keeps chronological order
-  // intact.
-  function projectColor(name) {
-    var hash = 0;
-    for (var i = 0; i < (name || '').length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
-    return PROJECT_BADGE_PALETTE[hash % PROJECT_BADGE_PALETTE.length];
-  }
-
-  // Same hash as projectColor, PROJECT_AVATAR_PALETTE instead -- see that array's comment.
+  // Name-hash to one of PROJECT_AVATAR_PALETTE's hues -- see that array's comment.
   function projectAvatarColor(name) {
     var hash = 0;
     for (var i = 0; i < (name || '').length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0;
@@ -8552,7 +8517,7 @@
         '<div class="min-w-0">' +
           // text-sm, not text-xs -- reported directly ("make the project title slightly bigger
           // so it is easier to identify and discern") against a screenshot of this exact badge.
-          '<p class="min-w-0 mb-0.5"><span data-tooltip="' + escapeHtml(t.project) + '" class="tooltip-top inline-block max-w-full truncate align-bottom px-1.5 py-0.5 rounded text-sm font-bold ' + projectColor(t.project) + '">' + escapeHtml(t.project) + '</span></p>' +
+          '<p class="min-w-0 mb-0.5"><span data-tooltip="' + escapeHtml(t.project) + '" class="tooltip-top inline-block max-w-full truncate align-bottom text-sm font-bold text-zinc-800 dark:text-zinc-100">' + escapeHtml(t.project) + '</span></p>' +
           // dark:text-white, not the previous dark:text-zinc-500 -- reported directly against a
           // screenshot as too dim to read against the row's dark background.
           '<p class="text-xs text-zinc-400 dark:text-white truncate">' + escapeHtml(t.assignee) + ' · ' + escapeHtml(t.name) + '</p>' +
@@ -10595,7 +10560,7 @@
 
       return '<div class="flex border-b border-zinc-50 dark:border-zinc-700/50 last:border-b-0">' +
         '<div class="shrink-0 px-4 py-1.5 min-w-0" style="width:' + LABEL_W + 'px;">' +
-          '<p class="min-w-0 mb-0.5"><span class="inline-block max-w-full truncate align-bottom px-1.5 py-0.5 rounded text-xs font-bold ' + projectColor(t.project) + '">' + escapeHtml(t.project) + '</span></p>' +
+          '<p class="min-w-0 mb-0.5"><span class="inline-block max-w-full truncate align-bottom text-xs font-bold text-zinc-800 dark:text-zinc-100">' + escapeHtml(t.project) + '</span></p>' +
           '<p class="text-xs text-zinc-500 dark:text-zinc-400 truncate">' + escapeHtml(t.assignee) + ' · ' + escapeHtml(t.name) + '</p>' +
         '</div>' +
         '<div class="relative flex-1 min-w-0" style="min-height:40px;">' + bands +
@@ -11802,7 +11767,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T04:26:28Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T04:34:39Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
