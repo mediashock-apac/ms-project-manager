@@ -7213,7 +7213,12 @@
 
   var enhancedSelectCounter = 0;
 
-  function enhanceSelect(selectId) {
+  // opts (optional): menuWidthClass replaces the default 20rem menu cap; optionHtml(value, text)
+  // replaces pillOptionHtml for both the menu items and the trigger. Only the Projects filter
+  // uses them (wider menu, coloured [Client] tags) -- everything else keeps the defaults.
+  function enhanceSelect(selectId, opts) {
+    opts = opts || {};
+    var optionHtml = opts.optionHtml || pillOptionHtml;
     var select = document.getElementById(selectId);
     var wrapper = select.parentElement;
     var chevron = wrapper.querySelector('svg');
@@ -7238,14 +7243,14 @@
     // corner cells are z-25/z-26 and the toolbar precedes the chart in the DOM, so a z-20 menu
     // was painted through on the Timeline tab. Harmless inside the task modal, which is z-50 and
     // establishes its own stacking context, so its menus only ever compete with their siblings.
-    menu.className = 'absolute left-0 mt-1 z-[28] hidden min-w-full max-w-[min(20rem,calc(100vw-2rem))] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 max-h-60 overflow-y-auto panel-pop-in';
+    menu.className = 'absolute left-0 mt-1 z-[28] hidden min-w-full ' + (opts.menuWidthClass || 'max-w-[min(20rem,calc(100vw-2rem))]') + ' bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 max-h-60 overflow-y-auto panel-pop-in';
     wrapper.appendChild(menu);
 
     var entry = { wrapper: wrapper, menu: menu, trigger: trigger };
 
     function sync() {
       var opt = select.options[select.selectedIndex];
-      trigger.innerHTML = pillOptionHtml(select.value, opt ? opt.textContent : '');
+      trigger.innerHTML = optionHtml(select.value, opt ? opt.textContent : '');
       // Toolbar filters only: outlined at their default (the first option), brand-tinted once set.
       if (wrapper.closest('#toolbar-row')) {
         trigger.classList.add('filter-pill');
@@ -7268,6 +7273,10 @@
       closeOtherEnhancedSelectMenus(wrapper);
       closeOtherHeaderPanels(null);
       menu.classList.remove('hidden');
+      // A wide menu opened from a pill near the right edge (the toolbar sits at the right of the
+      // header on wide screens) would run off-screen; right-align it to its pill instead.
+      menu.style.left = ''; menu.style.right = '';
+      if (menu.getBoundingClientRect().right > window.innerWidth - 8) { menu.style.left = 'auto'; menu.style.right = '0'; }
       trigger.setAttribute('aria-expanded', 'true');
       var list = items();
       var selected = list.findIndex(function (el) { return el.getAttribute('aria-selected') === 'true'; });
@@ -7287,7 +7296,7 @@
         item.setAttribute('aria-selected', opt.value === select.value ? 'true' : 'false');
         item.tabIndex = -1;
         item.className = 'w-full text-left px-3 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-700/60 focus:bg-zinc-50 dark:focus:bg-zinc-700/60 focus:outline-none';
-        item.innerHTML = pillOptionHtml(opt.value, opt.textContent);
+        item.innerHTML = optionHtml(opt.value, opt.textContent);
         item.addEventListener('click', function () {
           select.value = opt.value;
           select.dispatchEvent(new Event('change', { bubbles: true }));
@@ -7340,7 +7349,16 @@
   }
 
   var filterPriorityPill = enhanceSelect('filter-priority');
-  var filterProjectPill = enhanceSelect('filter-project');
+  // Wider menu and coloured [Client] tags (asked for directly: "Projects drop down should have a
+  // wider width. [Title] should also follow the color rule"). Same projectNameHtml as WIP, so a
+  // client is the same colour here as on the meeting screen. Long names still truncate past 36rem.
+  var filterProjectPill = enhanceSelect('filter-project', {
+    menuWidthClass: 'w-max max-w-[min(36rem,calc(100vw-2rem))]',
+    optionHtml: function (value, text) {
+      if (!value) return pillOptionHtml(value, text);
+      return '<span class="block truncate text-zinc-700 dark:text-zinc-200">' + projectNameHtml(text) + '</span>';
+    }
+  });
   var sortByPill = enhanceSelect('sort-by');
   var taskPriorityPill = enhanceSelect('task-priority');
   var taskStatusPill = enhanceSelect('task-status');
@@ -12227,6 +12245,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-06k', date: '2026-10-06', items: [
+      { type: 'improved', title: 'Easier project picking', text: 'The Projects filter list is wider so long names fit, and each client tag like [Google] is coloured the same way as in WIP Meeting, so you can spot a client at a glance.' }
+    ] },
     { id: '2026-10-06j', date: '2026-10-06', items: [
       { type: 'improved', title: 'A cleaner top bar', text: 'On a wide screen, search and filters now sit in the top bar instead of a row of their own, so every page has more room. Filters stay outlined until you set one, then turn orange, so you can always see what is narrowing the board. Click "overdue" or "high priority" at the top to show just those tasks; click again to show everything. This Week has its own checklist icon, the sidebar title now reads Project Manager, and the teamspace button stands out a little more.' }
     ] },
@@ -14167,7 +14188,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T17:03:54Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T17:09:31Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

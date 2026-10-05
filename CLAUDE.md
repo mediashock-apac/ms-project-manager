@@ -2799,7 +2799,7 @@ client-side domain check in `isAllowedEmail` is UX only, not enforcement):
         hashing, because a hash of ~6 clients into 10 hues almost always collides; client keys
         ignore case and spaces ("Little Paddington" = "LittlePaddington"). `CLIENT_PALETTE` avoids
         rose/amber/emerald/purple/orange, which already mean overdue/decision/done/review/brand.
-        **Deliberately not on Board, Projects, Chat, Calendar or Focus** — offered and declined
+        **Also in the toolbar's Projects filter dropdown** (asked for directly, 2026-10-06, with the menu widened to 36rem via `enhanceSelect's` new `opts.menuWidthClass`/`opts.optionHtml`; a wide menu near the right edge flips to right-align). **Otherwise deliberately not on Board, Projects, Chat, Calendar or Focus** — offered and declined
         (2026-10-05) in favour of trialling it on WIP first; widen only if the team asks. On the
         Board it would also sit next to the priority colours. Chat avatars keep their
         hashed colour (`PROJECT_AVATAR_PALETTE`): a filled circle needs some colour, and nobody
