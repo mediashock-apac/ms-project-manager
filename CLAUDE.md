@@ -2664,6 +2664,49 @@ Asked "what can be improved here?" against a 4K screenshot, then "build all seve
 - **Teamspace button**: light fill and a firmer border so it lifts off the sidebar; icon centred on
   the collapsed rail (`#sidebar.collapsed #teamspace-trigger`).
 
+### Creative briefs (version 1, built to be reverted cleanly)
+
+Briefs are written here instead of a Google Doc: one per project, `projects/{id}.brief`. Asked for after
+reviewing seven real Suits briefs (two first, then five more), via a mockup that went through four rounds:
+"make it modular so suits can create the modules needed ... It looks like alot right now". Then: "build
+version 1 first but I want to be able to revert cleanly if it is not for me."
+
+- **Builder:** pick a template (Quick job, Video or social ads, Event, Campaign or series, Pitch, Blank).
+  Each opens only its 4-6 essential sections and suggests the rest as highlighted chips. Any section can
+  be added, moved or removed, and "Custom section" takes its own name. Section types live in
+  `BRIEF_TYPES`, templates in `BRIEF_TEMPLATES`; adding one is one entry.
+- **Card:** the job sentence, then the sections in the chosen order. The side column has key dates (with
+  tracks, past ticked, NEXT on the upcoming one), dated updates (which replace sub-briefs), links, the
+  budget link (Suits and admins only), and **gaps to chase**, worked out without AI: no job, nothing to
+  make, no dates, steps with no date or person, "TBA/TBC" anywhere, speaker headshots still needed.
+  "Closing report" is not chased for a date.
+- **Key dates become checklist steps** on a chosen task in the project, matched by step name, so saving
+  again updates the date and person instead of duplicating. Steps are never deleted. **If that task is
+  open in the task window, the steps go into its checklist instead of the database**, so the task's own
+  Save can't write the older list back over them.
+- **Budget** is a link to a Sheet locked in Google Drive. The field and link only show for Suits members
+  and admins; that hiding is tidiness, and the real lock is Drive sharing (departments are self-chosen,
+  so the app can't enforce "Suits only"). Saving by a non-Suits person keeps the existing budget link.
+- **Copy for partners** puts the brief on the clipboard as plain text, never including the budget.
+- **After saving, the card shows the just-saved copy until the snapshot arrives** (`briefOpen.lastSaved`,
+  newest by `updatedAt` wins), so it never falls back to an empty form.
+- **Opened from:** "+ Brief" / "Brief" on the Projects card, the task window (Project field's helper
+  line), and the WIP project header (only when a brief exists).
+- **No AI, no cost, no setup:** no Google OAuth, no API key, no rules change (`projects` update only
+  restricts `chat`).
+- Verified end to end in Chromium against the real page with an in-memory Firestore stand-in that stores
+  writes and re-fires snapshots (27 checks, plus the switched-off run).
+
+**How to revert:**
+1. **Switch it off:** set `BRIEFS_ENABLED = false` in the "CREATIVE BRIEFS" section of `index.html`, bump
+   the build version as usual, and ship. Every button disappears and nothing else changes. Verified with
+   the switch off: no buttons anywhere, no errors.
+2. **Remove it entirely:** `git revert` the commit titled "Creative briefs". It was shipped on its own
+   on purpose: the section, three call sites each commented "see CREATIVE BRIEFS", one activity icon, the
+   changelog entry and this note. Expect conflicts only in the build stamp and the changelog, as with the
+   brief-links revert. Keep the changelog release object with `items: []` for read tracking.
+- Either way, saved `brief` fields on projects can stay in Firestore harmlessly.
+
 ### Creative brief links: built and removed (2026-10-06)
 
 A per-project "Creative Brief" button (`projects/{id}.briefUrl`, set via "+ Brief" on the Projects card, shown

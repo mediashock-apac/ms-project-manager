@@ -1401,6 +1401,8 @@
               <button type="button" id="task-drive-copy" class="shrink-0 font-medium text-zinc-500 dark:text-zinc-400 hover:text-brand-600 dark:hover:text-brand-400">Copy</button>
               <button type="button" id="task-drive-remove" class="shrink-0 font-medium text-zinc-500 dark:text-zinc-400 hover:text-rose-500 dark:hover:text-rose-400">Remove</button>
             </span>
+            <!-- Creative brief button for this project (see CREATIVE BRIEFS); empty and hidden otherwise. -->
+            <span id="task-brief-link" class="hidden ml-auto shrink-0"></span>
           </div>
           <p class="field-error text-xs text-rose-500 dark:text-rose-400 mt-1 hidden"></p>
         </div>
@@ -6461,6 +6463,7 @@
     openEl.href = hasLink ? normalizeUrl(url) : '#';
     openEl.textContent = hasLink ? url.replace(/^https?:\/\//i, '') : '';
     openEl.title = url;
+    syncTaskBriefLink();   // creative brief (see CREATIVE BRIEFS)
   }
 
   // Pulls a link out of the Project field and parks it in task-drive, leaving whatever else
@@ -7609,6 +7612,626 @@
     projectDeadlineEditing = null;
     renderProjects();
   });
+
+  /* =========================================================
+     CREATIVE BRIEFS  (self-contained -- see "Creative briefs" in CLAUDE.md)
+     A brief is filled in here instead of a Google Doc: one per project, stored as
+     projects/{id}.brief. Suits pick a template (Quick job, Video or social ads, Event,
+     Campaign or series, Pitch, Blank), which opens a few essential sections and suggests the
+     rest; any section can be added, moved or removed, and custom sections take their own name.
+     Shaped by seven real Suits briefs -- see CLAUDE.md for what they showed.
+     Read as a "Brief" card: the job, then the sections in the chosen order, with key dates,
+     links, a locked budget link, dated updates and automatic "gaps to chase" in the side column.
+     Key dates can be added to a task's checklist in one tick (same date and person).
+     No AI, no cost, no rules change (projects update is only restricted on `chat`).
+
+     TO TURN IT OFF: set BRIEFS_ENABLED to false. Every call site outside this section goes
+     through briefButtonHtml / syncTaskBriefLink, which do nothing when it is false. To remove it
+     entirely, git revert the commit titled "Creative briefs". Saved `brief` fields on projects
+     can stay in Firestore harmlessly either way.
+  ========================================================= */
+  var BRIEFS_ENABLED = true;
+
+  var BRIEF_LOCK_ICON = '<svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>';
+  var BRIEF_DOC_ICON = '<svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="13" x2="16" y2="13"></line><line x1="8" y1="17" x2="13" y2="17"></line></svg>';
+
+  // Section types. `kind` decides how a section is edited and shown: text, list (comma tags),
+  // rows (repeating rows of fields), fields (a small fixed set of labelled boxes).
+  var BRIEF_TYPES = {
+    deliv:       { title: 'What to make', icon: 'checklist', kind: 'rows', cols: ['Deliverable', 'Sizes and specs'], addLabel: 'Add another' },
+    msg:         { title: 'Key message or copy', icon: 'message', kind: 'text', ph: 'The one thing people should take away' },
+    dates:       { title: 'Key dates', icon: 'calendar', kind: 'dates' },
+    links:       { title: 'Links', icon: 'link', kind: 'rows', cols: ['Label', 'Link'], addLabel: 'Add a link' },
+    goal:        { title: 'Goal', icon: 'flame', kind: 'text', ph: 'What success looks like' },
+    audience:    { title: 'Audience', icon: 'users', kind: 'text', ph: 'Who we are talking to' },
+    look:        { title: 'Look and feel', icon: 'image', kind: 'text', ph: 'Tone, style and references. Put the brand guide under Links.' },
+    channels:    { title: 'Where it runs', icon: 'arrowRight', kind: 'list', ph: 'e.g. LinkedIn ads, YouTube, event screens' },
+    given:       { title: "What we're given", icon: 'drive', kind: 'text', ph: 'Footage, files or past work to reuse, and where to find them' },
+    rules:       { title: 'Rules and must-haves', icon: 'alertCircle', kind: 'text', ph: 'Legal, compliance, mandatory logos or lines' },
+    competitors: { title: 'Competitors', icon: 'columns', kind: 'list', ph: 'Separate with commas' },
+    budget:      { title: 'Budget', icon: 'lock', kind: 'budget' },
+    event:       { title: 'Event details', icon: 'calendar', kind: 'fields', cols: ['Date and time', 'Venue', 'Number of guests', 'Format'] },
+    speakers:    { title: 'Speakers and agenda', icon: 'users', kind: 'rows', cols: ['Speaker', 'Session and length', 'Headshot'], addLabel: 'Add a speaker' },
+    video:       { title: 'Video specs', icon: 'image', kind: 'fields', cols: ['Length', 'Aspect ratio', 'Number of versions', 'Music'] },
+    scope:       { title: 'Scope of work', icon: 'checklist', kind: 'text', ph: 'Services we provide, e.g. scripting, speaker management, rendering' },
+    onsite:      { title: 'Onsite support', icon: 'clock', kind: 'text', ph: 'Rehearsal and show days, who is on site' },
+    custom:      { title: '', icon: 'pencil', kind: 'text', ph: 'Anything this brief needs' }
+  };
+  var BRIEF_CHIPS_COMMON = ['deliv', 'msg', 'dates', 'links', 'goal', 'audience', 'look', 'channels', 'given', 'rules', 'competitors', 'budget'];
+  var BRIEF_CHIPS_EVENTS = ['event', 'speakers', 'video', 'scope', 'onsite'];
+  // Each template OPENS only its essentials and SUGGESTS the rest, so a long one like Event
+  // doesn't open as a wall of empty boxes.
+  var BRIEF_TEMPLATES = {
+    quick:    { label: 'Quick job', open: ['deliv', 'msg', 'dates', 'links'], suggest: ['look'] },
+    video:    { label: 'Video or social ads', open: ['deliv', 'video', 'given', 'dates', 'links'], suggest: ['channels', 'msg', 'look'] },
+    event:    { label: 'Event', open: ['event', 'deliv', 'speakers', 'dates', 'links'], suggest: ['scope', 'audience', 'msg', 'look', 'onsite', 'budget'] },
+    campaign: { label: 'Campaign or series', open: ['goal', 'audience', 'deliv', 'dates', 'links'], suggest: ['msg', 'channels', 'rules', 'look', 'budget'] },
+    pitch:    { label: 'Pitch', open: ['goal', 'audience', 'competitors', 'deliv', 'dates', 'links'], suggest: ['msg', 'rules', 'budget'] },
+    blank:    { label: 'Blank', open: [], suggest: [] }
+  };
+  function briefDefaultRows(type, template) {
+    if (type !== 'dates') return [{}];
+    // Never a placeholder date: every unfinished Suits brief still carried the template's dummy one.
+    if (template === 'event') return [{ track: true, a: 'Scripts' }, {}, { track: true, a: 'Videos' }, {}, { track: true, a: 'On the day' }, { a: 'Rehearsal' }, { a: 'Show day' }, { a: 'Closing report' }];
+    return [{}, { a: 'Closing report' }];
+  }
+
+  function projectBrief(name) {
+    if (!BRIEFS_ENABLED || !name) return null;
+    var d = projectDeadlineDoc(name);
+    var stored = (d && d.brief && (d.brief.job || (d.brief.sections || []).length)) ? d.brief : null;
+    // Just saved, but the projects snapshot carrying it hasn't arrived yet: show whichever copy is
+    // newer, so the card never falls back to an empty form or an older version.
+    var local = briefOpen && briefOpen.name === name ? briefOpen.lastSaved : null;
+    if (local && (!stored || (local.updatedAt || '') > (stored.updatedAt || ''))) return local;
+    return stored;
+  }
+  function canSeeBriefBudget() { return isAdminUser() || myDepartments().indexOf('suits') !== -1; }
+  function briefEsc(v) { return escapeHtml(v == null ? '' : String(v)); }
+
+  // The button every surface uses: "Brief" when one exists, "+ Brief" when it doesn't.
+  // `quietAdd` hides the add form of it (WIP shows only existing briefs).
+  function briefButtonHtml(name, quietAdd) {
+    if (!BRIEFS_ENABLED || !name) return '';
+    var has = !!projectBrief(name);
+    if (!has && quietAdd) return '';
+    return has
+      ? '<button type="button" data-open-brief="' + briefEsc(name) + '" class="shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md bg-brand-50 text-brand-700 ring-1 ring-inset ring-brand-200 hover:bg-brand-100 dark:bg-brand-500/10 dark:text-brand-300 dark:ring-brand-500/30 dark:hover:bg-brand-500/20">' + BRIEF_DOC_ICON + 'Brief</button>'
+      : '<button type="button" data-open-brief="' + briefEsc(name) + '" class="shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400" title="Write the creative brief for this project">' + svgIcon('plus', 'w-3 h-3') + 'Brief</button>';
+  }
+
+  // Projects card: its own line under the dates. Nothing at all when the feature is off.
+  function briefCardRowHtml(name) {
+    return BRIEFS_ENABLED ? '<div class="flex items-center mt-1.5">' + briefButtonHtml(name) + '</div>' : '';
+  }
+
+  // Task window: the button sits on the Project field's helper line.
+  function syncTaskBriefLink() {
+    var el = document.getElementById('task-brief-link');
+    if (!el) return;
+    var name = (document.getElementById('task-project').value || '').trim();
+    var html = BRIEFS_ENABLED && name && projectDeadlineDoc(name) ? briefButtonHtml(name) : '';
+    el.innerHTML = html;
+    el.classList.toggle('hidden', !html);
+  }
+
+  // ---------- state for the open brief window ----------
+  var briefOpen = null; // { name, mode: 'view'|'edit', fromTaskId, draft }
+
+  function briefModalEl() {
+    var el = document.getElementById('brief-modal');
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = 'brief-modal';
+    el.className = 'fixed inset-0 z-50 hidden items-center justify-center p-2 sm:p-4 modal-backdrop';
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-modal', 'true');
+    el.setAttribute('aria-label', 'Creative brief');
+    el.innerHTML = '<div id="brief-modal-card" class="bg-white dark:bg-zinc-800 w-full max-w-5xl rounded-2xl shadow-pop overflow-hidden max-h-[92vh] flex flex-col modal-pop-in"></div>';
+    document.body.appendChild(el);
+    el.addEventListener('click', briefModalClick);
+    el.addEventListener('mousedown', function (e) { if (e.target === el) el.__downOnBackdrop = true; else el.__downOnBackdrop = false; });
+    return el;
+  }
+
+  function openBrief(name, fromTaskId) {
+    if (!BRIEFS_ENABLED || !name) return;
+    var existing = projectBrief(name);
+    briefOpen = { name: name, mode: existing ? 'view' : 'edit', fromTaskId: fromTaskId || null, draft: null };
+    if (!existing) briefStartDraft('quick');
+    var el = briefModalEl();
+    el.classList.remove('hidden'); el.classList.add('flex');
+    renderBriefModal();
+  }
+  function closeBrief() {
+    var el = document.getElementById('brief-modal');
+    if (el) { el.classList.add('hidden'); el.classList.remove('flex'); }
+    briefOpen = null;
+  }
+
+  var briefNextId = 1;
+  function briefStartDraft(template, keepJob) {
+    var t = BRIEF_TEMPLATES[template] || BRIEF_TEMPLATES.quick;
+    var job = keepJob && briefOpen.draft ? briefOpen.draft.job : '';
+    briefOpen.draft = {
+      template: template, job: job,
+      sections: t.open.map(function (type) { return { id: 'n' + (briefNextId++), type: type, rows: briefDefaultRows(type, template), f: {} }; }),
+      stepsTask: briefOpen.fromTaskId || '', addSteps: true
+    };
+  }
+  function briefEditExisting() {
+    var b = projectBrief(briefOpen.name);
+    var copy = JSON.parse(JSON.stringify(b));
+    briefOpen.draft = { template: copy.template || 'blank', job: copy.job || '', sections: copy.sections || [], stepsTask: briefOpen.fromTaskId || '', addSteps: false };
+    briefOpen.mode = 'edit';
+    renderBriefModal();
+  }
+
+  function renderBriefModal() {
+    var card = document.getElementById('brief-modal-card');
+    if (!card || !briefOpen) return;
+    card.innerHTML = briefOpen.mode === 'view' ? briefViewHtml() : briefEditHtml();
+    if (briefOpen.mode === 'edit') {
+      var first = card.querySelector('#brief-job');
+      if (first && !first.value) first.focus();
+    }
+  }
+
+  // ---------- reading view ----------
+  function briefGaps(b) {
+    var gaps = [];
+    var secs = b.sections || [];
+    if (!b.job) gaps.push('No one-sentence job yet.');
+    var deliv = secs.find(function (s) { return s.type === 'deliv'; });
+    if (!deliv || !(deliv.rows || []).some(function (r) { return r.a; })) gaps.push('Nothing listed under What to make.');
+    var dates = secs.find(function (s) { return s.type === 'dates'; });
+    var dateRows = dates ? (dates.rows || []).filter(function (r) { return !r.track && r.a; }) : [];
+    if (!dateRows.length) gaps.push('No key dates yet.');
+    // Closing report is a default row that's usually dated last, so it isn't chased from day one.
+    var undated = dateRows.filter(function (r) { return !r.b && r.a !== 'Closing report'; }).map(function (r) { return r.a; });
+    if (undated.length) gaps.push('No date for: ' + undated.join(', ') + '.');
+    var nobody = dateRows.filter(function (r) { return r.b && !r.c && r.a !== 'Closing report'; }).map(function (r) { return r.a; });
+    if (nobody.length) gaps.push('Nobody named for: ' + nobody.join(', ') + '.');
+    secs.forEach(function (s) {
+      var t = BRIEF_TYPES[s.type]; if (!t) return;
+      var name = s.type === 'custom' ? (s.title || 'Custom section') : t.title;
+      var blob = [s.text].concat((s.rows || []).map(function (r) { return [r.a, r.b, r.c].join(' '); })).concat(Object.keys(s.f || {}).map(function (k) { return s.f[k]; })).join(' ');
+      if (/\b(TBA|TBC|TBD)\b/i.test(blob)) gaps.push(name + ' still has something marked TBA or TBC.');
+      var speakersMissing = s.type === 'speakers' ? (s.rows || []).filter(function (r) { return r.a && r.c !== 'Headshot received'; }).length : 0;
+      if (speakersMissing) gaps.push(speakersMissing + ' speaker headshot' + (speakersMissing === 1 ? '' : 's') + ' still needed.');
+    });
+    return gaps;
+  }
+
+  function briefTextHtml(text) {
+    return '<p class="text-sm text-zinc-700 dark:text-zinc-200 whitespace-pre-line">' + briefEsc(text) + '</p>';
+  }
+  function briefSectionViewHtml(s) {
+    var t = BRIEF_TYPES[s.type]; if (!t) return '';
+    var title = s.type === 'custom' ? (s.title || 'Notes') : t.title;
+    var body = '';
+    if (t.kind === 'text') { if (!s.text) return ''; body = briefTextHtml(s.text); }
+    else if (t.kind === 'list') {
+      var items = (s.text || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean);
+      if (!items.length) return '';
+      body = '<div class="flex flex-wrap gap-1.5">' + items.map(function (x) { return '<span class="text-xs px-2 py-0.5 rounded-md border border-zinc-200 dark:border-zinc-700 text-zinc-700 dark:text-zinc-200">' + briefEsc(x) + '</span>'; }).join('') + '</div>';
+    } else if (t.kind === 'fields') {
+      var f = s.f || {};
+      var pairs = t.cols.map(function (c, i) { return f[i] ? '<div><dt class="text-[11px] font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">' + c + '</dt><dd class="text-sm text-zinc-800 dark:text-zinc-100">' + briefEsc(f[i]) + '</dd></div>' : ''; }).join('');
+      if (!pairs) return '';
+      body = '<dl class="grid grid-cols-2 gap-x-4 gap-y-2">' + pairs + '</dl>';
+    } else if (t.kind === 'rows') {
+      var rows = (s.rows || []).filter(function (r) { return r.a || r.b; });
+      if (!rows.length) return '';
+      if (s.type === 'links') {
+        body = '<div class="flex flex-col gap-1">' + rows.map(function (r) {
+          var url = r.b ? normalizeUrl(r.b) : '';
+          return url ? '<a href="' + briefEsc(url) + '" target="_blank" rel="noopener noreferrer" class="text-sm font-medium text-brand-600 dark:text-brand-400 hover:underline truncate">' + briefEsc(r.a || url) + '</a>' : '<span class="text-sm text-zinc-700 dark:text-zinc-200">' + briefEsc(r.a) + '</span>';
+        }).join('') + '</div>';
+      } else if (s.type === 'speakers') {
+        body = '<div class="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-700">' + rows.map(function (r) {
+          var got = r.c === 'Headshot received';
+          return '<div class="flex flex-wrap items-center gap-x-3 gap-y-1 py-1.5"><span class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">' + briefEsc(r.a) + '</span><span class="text-xs text-zinc-500 dark:text-zinc-400">' + briefEsc(r.b) + '</span>' +
+            '<span class="ml-auto text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + (got ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' : 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300') + '">' + (got ? 'Headshot received' : 'Headshot needed') + '</span></div>';
+        }).join('') + '</div>';
+      } else {
+        body = '<div class="flex flex-col gap-2">' + rows.map(function (r) {
+          var specs = (r.b || '').split(/[·,]/).map(function (x) { return x.trim(); }).filter(Boolean);
+          return '<div class="rounded-lg border border-zinc-200 dark:border-zinc-700 px-3 py-2"><p class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">' + briefEsc(r.a) + '</p>' +
+            (specs.length ? '<div class="flex flex-wrap gap-1.5 mt-1.5">' + specs.map(function (x) { return '<span class="text-[11px] font-semibold tabular-nums px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200">' + briefEsc(x) + '</span>'; }).join('') + '</div>' : '') + '</div>';
+        }).join('') + '</div>';
+      }
+    } else return '';
+    return '<section class="flex flex-col gap-2"><h3 class="text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">' + briefEsc(title) + '</h3>' + body + '</section>';
+  }
+
+  function briefDatesViewHtml(s) {
+    var rows = (s.rows || []).filter(function (r) { return r.a; });
+    if (!rows.length) return '';
+    var today = toDateInputValue(todayMidnight());
+    var nextMarked = false;
+    var html = rows.map(function (r) {
+      if (r.track) return '<li class="pt-2 text-[10px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">' + briefEsc(r.a) + '</li>';
+      var past = r.b && r.b < today;
+      var isNext = !past && r.b && !nextMarked; if (isNext) nextMarked = true;
+      var dot = past ? 'bg-emerald-500 border-emerald-500' : (isNext ? 'border-brand-500 ring-2 ring-brand-500/20' : 'border-zinc-300 dark:border-zinc-600');
+      return '<li class="grid grid-cols-[14px_56px_minmax(0,1fr)] gap-2 items-start py-1 text-xs">' +
+        '<span class="w-2.5 h-2.5 mt-1 rounded-full border-2 ' + dot + '"></span>' +
+        '<span class="tabular-nums font-semibold ' + (past ? 'text-zinc-400 dark:text-zinc-500' : 'text-zinc-700 dark:text-zinc-200') + '">' + (r.b ? briefEsc(formatShortDate(r.b)) : 'No date') + '</span>' +
+        '<span class="' + (past ? 'text-zinc-400 dark:text-zinc-500' : 'text-zinc-700 dark:text-zinc-200') + '">' + briefEsc(r.a) +
+          (isNext ? ' <span class="text-[9px] font-extrabold px-1 rounded bg-brand-500 text-white align-middle">NEXT</span>' : '') +
+          (r.c ? ' <span class="text-zinc-400 dark:text-zinc-500">· ' + briefEsc(r.c) + '</span>' : '') + '</span></li>';
+    }).join('');
+    return '<section class="flex flex-col gap-1"><h3 class="text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Key dates</h3><ol class="flex flex-col">' + html + '</ol></section>';
+  }
+
+  function briefViewHtml() {
+    var b = projectBrief(briefOpen.name);
+    if (!b) { briefOpen.mode = 'edit'; briefStartDraft('quick'); return briefEditHtml(); }
+    var secs = b.sections || [];
+    var mainTypes = secs.filter(function (s) { return ['dates', 'links', 'budget'].indexOf(s.type) === -1; });
+    var dates = secs.find(function (s) { return s.type === 'dates'; });
+    var links = secs.find(function (s) { return s.type === 'links'; });
+    var budget = secs.find(function (s) { return s.type === 'budget'; });
+    var gaps = briefGaps(b);
+    var updates = (b.updates || []).slice().sort(function (x, y) { return (y.at || '').localeCompare(x.at || ''); });
+    var tpl = BRIEF_TEMPLATES[b.template];
+
+    var rail = '';
+    if (dates) rail += briefDatesViewHtml(dates);
+    rail += '<section class="flex flex-col gap-2"><div class="flex items-center justify-between"><h3 class="text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Updates</h3>' +
+      '<button type="button" data-brief-act="add-update" class="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:text-brand-700">+ Add an update</button></div>' +
+      '<div id="brief-update-form" class="hidden flex-col gap-2"><textarea id="brief-update-text" rows="2" class="w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 px-2.5 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40" placeholder="What changed, e.g. client renamed the event"></textarea>' +
+      '<div class="flex gap-2 justify-end"><button type="button" data-brief-act="cancel-update" class="text-xs font-semibold text-zinc-500">Cancel</button><button type="button" data-brief-act="save-update" class="text-xs font-semibold px-2.5 py-1 rounded-md bg-brand-600 text-white hover:bg-brand-700">Add update</button></div></div>' +
+      (updates.length ? updates.map(function (u) {
+        return '<div class="rounded-lg border border-zinc-200 dark:border-zinc-700 px-3 py-2"><p class="text-[11px] font-bold text-brand-700 dark:text-brand-300">' + briefEsc(formatShortDate(localDateOf(u.at))) + ' · ' + briefEsc(u.author || '') + '</p>' +
+          '<p class="text-sm text-zinc-700 dark:text-zinc-200 whitespace-pre-line mt-0.5">' + briefEsc(u.text) + '</p></div>';
+      }).join('') : '<p class="text-xs text-zinc-400 dark:text-zinc-500">Changes after the first brief go here, newest first.</p>') + '</section>';
+    if (links) rail += briefSectionViewHtml(links);
+    if (budget && budget.text && canSeeBriefBudget()) {
+      rail += '<section class="flex flex-col gap-1.5"><h3 class="text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Budget</h3>' +
+        '<a href="' + briefEsc(normalizeUrl(budget.text)) + '" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 text-sm font-semibold text-zinc-800 dark:text-zinc-100 hover:text-brand-600">' + BRIEF_LOCK_ICON + 'Open the budget</a>' +
+        '<p class="text-[11px] text-zinc-400 dark:text-zinc-500">Suits and admins only. Locked in Google Drive.</p></section>';
+    }
+    if (gaps.length) {
+      rail += '<section class="flex flex-col gap-1.5"><h3 class="text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Gaps to chase</h3>' +
+        gaps.map(function (g) { return '<p class="text-xs rounded-lg px-2.5 py-1.5 bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">' + briefEsc(g) + '</p>'; }).join('') + '</section>';
+    }
+
+    return '<div class="flex items-center gap-2 px-4 sm:px-5 py-3 border-b border-zinc-100 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800">' +
+        '<span class="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-brand-700 dark:text-brand-300">' + BRIEF_DOC_ICON + 'Brief</span>' +
+        '<span class="min-w-0 truncate text-xs text-zinc-500 dark:text-zinc-400">' + projectNameHtml(briefOpen.name) + '</span>' +
+        '<span class="ml-auto flex items-center gap-1.5 shrink-0">' +
+          '<button type="button" data-brief-act="copy" class="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700">Copy for partners</button>' +
+          '<button type="button" data-brief-act="edit" class="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-brand-600 text-white hover:bg-brand-700">Edit</button>' +
+          '<button type="button" data-brief-act="close" aria-label="Close" class="w-8 h-8 inline-flex items-center justify-center rounded-lg text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700">' + svgIcon('x', 'w-4 h-4') + '</button>' +
+        '</span></div>' +
+      '<div class="overflow-y-auto">' +
+        '<div class="px-4 sm:px-6 pt-5 pb-4 flex flex-col gap-2 border-b border-zinc-100 dark:border-zinc-700">' +
+          '<p class="text-lg sm:text-xl font-bold leading-snug text-zinc-900 dark:text-white">' + briefEsc(b.job || 'No job sentence yet') + '</p>' +
+          '<p class="text-xs text-zinc-500 dark:text-zinc-400">' + (tpl ? briefEsc(tpl.label) + ' · ' : '') + (b.updatedBy ? 'Last edited by ' + briefEsc(b.updatedBy) : '') + (b.updatedAt ? ' on ' + briefEsc(formatShortDate(localDateOf(b.updatedAt))) : '') + '</p>' +
+        '</div>' +
+        '<div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_20rem]">' +
+          '<div class="px-4 sm:px-6 py-5 flex flex-col gap-5 min-w-0">' + (mainTypes.map(briefSectionViewHtml).join('') || '<p class="text-sm text-zinc-400 dark:text-zinc-500">No sections yet. Click Edit to add some.</p>') + '</div>' +
+          '<aside class="px-4 sm:px-5 py-5 flex flex-col gap-5 min-w-0 border-t lg:border-t-0 lg:border-l border-zinc-100 dark:border-zinc-700 bg-zinc-50/60 dark:bg-zinc-800/60">' + rail + '</aside>' +
+        '</div>' +
+      '</div>';
+  }
+
+  // ---------- builder ----------
+  var BRIEF_IN = 'w-full min-w-0 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 px-2.5 py-1.5 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40';
+  function briefRowHtml(type, r, cols) {
+    var x = '<button type="button" data-brief-act="rm-row" aria-label="Remove" class="w-7 h-7 inline-flex items-center justify-center rounded-md text-zinc-400 hover:text-rose-500 hover:bg-zinc-100 dark:hover:bg-zinc-700">' + svgIcon('x', 'w-3.5 h-3.5') + '</button>';
+    if (r.track) return '<div class="grid grid-cols-[minmax(0,1fr)_28px] gap-1.5 items-center mt-1" data-brief-row data-track="1"><input data-k="a" class="text-[11px] font-bold uppercase tracking-wide bg-transparent border-0 border-b border-dashed border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400 py-1 focus:outline-none" placeholder="Track name" value="' + briefEsc(r.a) + '">' + x + '</div>';
+    if (type === 'dates') {
+      return '<div class="grid grid-cols-[minmax(0,1fr)_28px] sm:grid-cols-[minmax(0,1.3fr)_9rem_minmax(0,1fr)_28px] gap-1.5 items-center" data-brief-row>' +
+        '<input data-k="a" class="' + BRIEF_IN + '" placeholder="Step" value="' + briefEsc(r.a) + '">' +
+        '<input data-k="b" type="date" class="' + BRIEF_IN + ' col-start-1 sm:col-start-auto" value="' + briefEsc(r.b) + '">' +
+        '<select data-k="c" class="' + BRIEF_IN + ' col-start-1 sm:col-start-auto"><option value="">Person</option>' + teamRoster().map(function (n) { return '<option' + (n === r.c ? ' selected' : '') + '>' + briefEsc(n) + '</option>'; }).join('') +
+          (r.c && teamRoster().indexOf(r.c) === -1 ? '<option selected>' + briefEsc(r.c) + '</option>' : '') + '</select>' +
+        '<span class="row-start-1 col-start-2 sm:row-start-auto sm:col-start-auto">' + x + '</span></div>';
+    }
+    if (type === 'speakers') {
+      return '<div class="grid grid-cols-[minmax(0,1fr)_28px] sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_10rem_28px] gap-1.5 items-center" data-brief-row>' +
+        '<input data-k="a" class="' + BRIEF_IN + '" placeholder="Speaker" value="' + briefEsc(r.a) + '">' +
+        '<input data-k="b" class="' + BRIEF_IN + ' col-start-1 sm:col-start-auto" placeholder="Session and length" value="' + briefEsc(r.b) + '">' +
+        '<select data-k="c" class="' + BRIEF_IN + ' col-start-1 sm:col-start-auto"><option' + (r.c !== 'Headshot received' ? ' selected' : '') + '>Headshot needed</option><option' + (r.c === 'Headshot received' ? ' selected' : '') + '>Headshot received</option></select>' +
+        '<span class="row-start-1 col-start-2 sm:row-start-auto sm:col-start-auto">' + x + '</span></div>';
+    }
+    return '<div class="grid grid-cols-[minmax(0,1fr)_28px] sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_28px] gap-1.5 items-center" data-brief-row>' +
+      '<input data-k="a" class="' + BRIEF_IN + '" placeholder="' + cols[0] + '" value="' + briefEsc(r.a) + '">' +
+      '<input data-k="b" class="' + BRIEF_IN + ' col-start-1 sm:col-start-auto" placeholder="' + cols[1] + '" value="' + briefEsc(r.b) + '">' +
+      '<span class="row-start-1 col-start-2 sm:row-start-auto sm:col-start-auto">' + x + '</span></div>';
+  }
+
+  function briefSectionEditHtml(s, i, n) {
+    var t = BRIEF_TYPES[s.type]; if (!t) return '';
+    var head = s.type === 'custom'
+      ? '<input data-k="title" class="min-w-0 flex-1 text-sm font-bold bg-transparent border-0 border-b border-dashed border-zinc-300 dark:border-zinc-600 text-zinc-800 dark:text-zinc-100 py-0.5 focus:outline-none" placeholder="Name this section" value="' + briefEsc(s.title) + '">'
+      : '<span class="text-sm font-bold text-zinc-800 dark:text-zinc-100">' + t.title + '</span>';
+    var btn = function (act, label, icon, dis) { return '<button type="button" data-brief-act="' + act + '" aria-label="' + label + '"' + (dis ? ' disabled' : '') + ' class="w-7 h-7 inline-flex items-center justify-center rounded-md text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700 disabled:opacity-30 disabled:hover:bg-transparent">' + icon + '</button>'; };
+    var body = '';
+    if (t.kind === 'text') body = '<textarea data-k="text" rows="2" class="' + BRIEF_IN + '" placeholder="' + t.ph + '">' + briefEsc(s.text) + '</textarea>';
+    else if (t.kind === 'list') body = '<input data-k="text" class="' + BRIEF_IN + '" placeholder="' + t.ph + '" value="' + briefEsc(s.text) + '">';
+    else if (t.kind === 'budget') body = canSeeBriefBudget()
+      ? '<input data-k="text" type="url" class="' + BRIEF_IN + '" placeholder="Link to the budget Sheet" value="' + briefEsc(s.text) + '"><p class="text-[11px] text-zinc-400 dark:text-zinc-500 flex items-center gap-1">' + BRIEF_LOCK_ICON + 'Only Suits and admins see this. Share the Sheet with Suits only in Google Drive.</p>'
+      : '<p class="text-xs text-zinc-400 dark:text-zinc-500 flex items-center gap-1">' + BRIEF_LOCK_ICON + 'Only Suits and admins can see or change the budget link.</p>';
+    else if (t.kind === 'fields') body = '<div class="grid grid-cols-1 sm:grid-cols-2 gap-1.5">' + t.cols.map(function (c, k) { return '<input data-f="' + k + '" class="' + BRIEF_IN + '" placeholder="' + c + '" value="' + briefEsc((s.f || {})[k]) + '">'; }).join('') + '</div>';
+    else if (t.kind === 'rows') body = '<div class="flex flex-col gap-1.5" data-rows>' + (s.rows && s.rows.length ? s.rows : [{}]).map(function (r) { return briefRowHtml(s.type, r, t.cols); }).join('') + '</div>' +
+      '<button type="button" data-brief-act="add-row" class="w-fit inline-flex items-center gap-1 text-xs font-semibold text-zinc-500 hover:text-brand-600">' + svgIcon('plus', 'w-3 h-3') + t.addLabel + '</button>';
+    else if (t.kind === 'dates') {
+      var tasksHere = activeTasks().filter(function (x) { return x.project === briefOpen.name; });
+      var sel = briefOpen.draft.stepsTask || (tasksHere[0] && tasksHere[0].id) || '';
+      body = '<div class="flex flex-col gap-1.5" data-rows>' + (s.rows && s.rows.length ? s.rows : [{}]).map(function (r) { return briefRowHtml('dates', r); }).join('') + '</div>' +
+        '<div class="flex flex-wrap gap-x-4 gap-y-1"><button type="button" data-brief-act="add-row" class="inline-flex items-center gap-1 text-xs font-semibold text-zinc-500 hover:text-brand-600">' + svgIcon('plus', 'w-3 h-3') + 'Add a date</button>' +
+        '<button type="button" data-brief-act="add-track" class="inline-flex items-center gap-1 text-xs font-semibold text-zinc-500 hover:text-brand-600">' + svgIcon('plus', 'w-3 h-3') + 'Add a track, e.g. Scripts or Videos</button></div>' +
+        (tasksHere.length
+          ? '<label class="flex flex-wrap items-center gap-2 text-xs text-zinc-600 dark:text-zinc-300"><input type="checkbox" id="brief-add-steps" class="w-4 h-4 accent-brand-600"' + (briefOpen.draft.addSteps ? ' checked' : '') + '> Add these dates as checklist steps on' +
+            '<select id="brief-steps-task" class="text-xs rounded-md border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-700 dark:text-zinc-200 px-1.5 py-1 max-w-[16rem]">' +
+            tasksHere.map(function (x) { return '<option value="' + x.id + '"' + (x.id === sel ? ' selected' : '') + '>' + briefEsc(x.name) + '</option>'; }).join('') + '</select></label>'
+          : '<p class="text-[11px] text-zinc-400 dark:text-zinc-500">Add a task to this project to turn these dates into checklist steps.</p>');
+    }
+    return '<div class="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-3.5 py-3 flex flex-col gap-2.5 focus-within:border-brand-300 dark:focus-within:border-brand-500/40" data-brief-sec="' + s.id + '">' +
+      '<div class="flex items-center gap-2"><span class="w-6 h-6 inline-flex items-center justify-center rounded-md bg-zinc-100 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-300 shrink-0">' + (s.type === 'budget' ? BRIEF_LOCK_ICON : svgIcon(t.icon, 'w-3.5 h-3.5')) + '</span>' + head +
+        '<span class="ml-auto flex">' + btn('up', 'Move up', svgIcon('chevronDown', 'w-3.5 h-3.5 rotate-180'), i === 0) + btn('down', 'Move down', svgIcon('chevronDown', 'w-3.5 h-3.5'), i === n - 1) + btn('rm-sec', 'Remove section', svgIcon('x', 'w-3.5 h-3.5'), false) + '</span></div>' +
+      body + '</div>';
+  }
+
+  function briefEditHtml() {
+    var d = briefOpen.draft;
+    var isNew = !projectBrief(briefOpen.name);
+    var used = d.sections.map(function (s) { return s.type; });
+    var sugg = ((BRIEF_TEMPLATES[d.template] || {}).suggest || []).filter(function (t) { return used.indexOf(t) === -1; });
+    var chip = function (t, strong) { return '<button type="button" data-brief-add="' + t + '" class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border ' + (strong ? 'border-brand-200 bg-brand-50 text-brand-700 dark:border-brand-500/30 dark:bg-brand-500/10 dark:text-brand-300' : 'border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:border-brand-300 hover:text-brand-600') + '">' + (t === 'budget' ? BRIEF_LOCK_ICON : svgIcon(BRIEF_TYPES[t].icon, 'w-3.5 h-3.5')) + BRIEF_TYPES[t].title + '</button>'; };
+    var common = BRIEF_CHIPS_COMMON.filter(function (t) { return used.indexOf(t) === -1 && sugg.indexOf(t) === -1; });
+    var events = BRIEF_CHIPS_EVENTS.filter(function (t) { return used.indexOf(t) === -1 && sugg.indexOf(t) === -1; });
+    var label = function (txt) { return '<p class="text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">' + txt + '</p>'; };
+
+    return '<div class="flex items-center gap-2 px-4 sm:px-5 py-3 border-b border-zinc-100 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-800">' +
+        '<span class="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-brand-700 dark:text-brand-300">' + BRIEF_DOC_ICON + (isNew ? 'New brief' : 'Edit brief') + '</span>' +
+        '<span class="min-w-0 truncate text-xs text-zinc-500 dark:text-zinc-400">' + projectNameHtml(briefOpen.name) + '</span>' +
+        '<button type="button" data-brief-act="close" aria-label="Close" class="ml-auto w-8 h-8 inline-flex items-center justify-center rounded-lg text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700">' + svgIcon('x', 'w-4 h-4') + '</button></div>' +
+      '<div class="overflow-y-auto bg-zinc-50 dark:bg-zinc-900/40"><div class="max-w-3xl mx-auto px-4 sm:px-6 py-5 flex flex-col gap-3">' +
+        (isNew ? '<div class="flex flex-wrap items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400"><span>Start from</span>' + Object.keys(BRIEF_TEMPLATES).map(function (k) {
+          var on = d.template === k;
+          return '<button type="button" data-brief-tpl="' + k + '" aria-pressed="' + on + '" class="text-xs font-semibold px-2.5 py-1 rounded-full border ' + (on ? 'border-brand-300 bg-brand-50 text-brand-700 dark:border-brand-500/40 dark:bg-brand-500/10 dark:text-brand-300' : 'border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:border-zinc-300') + '">' + BRIEF_TEMPLATES[k].label + '</button>';
+        }).join('') + '</div>' : '') +
+        '<div class="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 px-4 py-3 flex flex-col gap-1 focus-within:border-brand-300 dark:focus-within:border-brand-500/40">' +
+          '<label for="brief-job" class="text-sm font-bold text-zinc-800 dark:text-zinc-100">What\'s the job?</label>' +
+          '<textarea id="brief-job" rows="2" class="w-full text-base bg-transparent border-0 p-0 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 resize-none focus:outline-none" placeholder="One sentence a creative can act on">' + briefEsc(d.job) + '</textarea></div>' +
+        '<div class="flex flex-col gap-2.5">' + (d.sections.length ? d.sections.map(function (s, i) { return briefSectionEditHtml(s, i, d.sections.length); }).join('') : '<p class="text-sm text-center text-zinc-400 dark:text-zinc-500 py-2">Add the sections this brief needs below.</p>') + '</div>' +
+        '<div class="rounded-xl border border-dashed border-zinc-300 dark:border-zinc-600 px-3.5 py-3 flex flex-col gap-2">' +
+          (sugg.length ? label('Suggested for this template') + '<div class="flex flex-wrap gap-1.5">' + sugg.map(function (t) { return chip(t, true); }).join('') + '</div>' : '') +
+          label('Add a section') + '<div class="flex flex-wrap gap-1.5">' + common.map(function (t) { return chip(t, false); }).join('') +
+            '<button type="button" data-brief-add="custom" class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-dashed border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:text-brand-600">' + svgIcon('plus', 'w-3.5 h-3.5') + 'Custom section</button></div>' +
+          (events.length ? label('Events and video') + '<div class="flex flex-wrap gap-1.5">' + events.map(function (t) { return chip(t, false); }).join('') + '</div>' : '') +
+        '</div>' +
+      '</div></div>' +
+      '<div class="flex items-center gap-2 px-4 sm:px-5 py-3 border-t border-zinc-100 dark:border-zinc-700">' +
+        '<button type="button" data-brief-act="' + (isNew ? 'close' : 'cancel-edit') + '" class="ml-auto text-sm font-medium px-3.5 py-2 rounded-lg text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700">Cancel</button>' +
+        '<button type="button" data-brief-act="save" class="text-sm font-semibold px-3.5 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700">Save brief</button></div>';
+  }
+
+  // Read what's on screen back into the draft, so moving or adding sections never loses typing.
+  function briefCollect() {
+    var card = document.getElementById('brief-modal-card');
+    var d = briefOpen && briefOpen.draft;
+    if (!card || !d) return;
+    var job = card.querySelector('#brief-job'); if (job) d.job = job.value.trim();
+    card.querySelectorAll('[data-brief-sec]').forEach(function (el) {
+      var s = d.sections.find(function (x) { return x.id === el.getAttribute('data-brief-sec'); });
+      if (!s) return;
+      var title = el.querySelector('[data-k="title"]'); if (title) s.title = title.value.trim();
+      var text = el.querySelector('[data-k="text"]'); if (text) s.text = text.value.trim();
+      var f = el.querySelectorAll('[data-f]');
+      if (f.length) { s.f = {}; f.forEach(function (x) { if (x.value.trim()) s.f[x.getAttribute('data-f')] = x.value.trim(); }); }
+      var rows = el.querySelectorAll('[data-brief-row]');
+      if (rows.length || el.querySelector('[data-rows]')) {
+        s.rows = Array.prototype.map.call(rows, function (r) {
+          var o = {};
+          if (r.getAttribute('data-track')) o.track = true;
+          r.querySelectorAll('[data-k]').forEach(function (x) { var v = x.value.trim(); if (v) o[x.getAttribute('data-k')] = v; });
+          return o;
+        });
+      }
+    });
+    var addSteps = card.querySelector('#brief-add-steps'); if (addSteps) d.addSteps = addSteps.checked;
+    var stepsTask = card.querySelector('#brief-steps-task'); if (stepsTask) d.stepsTask = stepsTask.value;
+  }
+
+  function briefModalClick(e) {
+    var el = document.getElementById('brief-modal');
+    if (e.target === el && el.__downOnBackdrop) { closeBrief(); return; }
+    if (!briefOpen) return;
+    var d = briefOpen.draft;
+    var tpl = e.target.closest('[data-brief-tpl]');
+    if (tpl) { briefCollect(); briefStartDraft(tpl.getAttribute('data-brief-tpl'), true); renderBriefModal(); return; }
+    var add = e.target.closest('[data-brief-add]');
+    if (add) {
+      briefCollect();
+      var type = add.getAttribute('data-brief-add');
+      d.sections.push({ id: 'n' + (briefNextId++), type: type, rows: briefDefaultRows(type, d.template), f: {} });
+      renderBriefModal();
+      var last = document.querySelector('#brief-modal-card [data-brief-sec]:last-of-type input, #brief-modal-card [data-brief-sec]:last-of-type textarea');
+      var secs = document.querySelectorAll('#brief-modal-card [data-brief-sec]');
+      var lastSec = secs[secs.length - 1];
+      var f = lastSec && lastSec.querySelector('input, textarea');
+      if (f) f.focus();
+      return;
+    }
+    var actEl = e.target.closest('[data-brief-act]');
+    if (!actEl || actEl.disabled) return;
+    var act = actEl.getAttribute('data-brief-act');
+    var secEl = actEl.closest('[data-brief-sec]');
+    var idx = secEl ? d.sections.findIndex(function (x) { return x.id === secEl.getAttribute('data-brief-sec'); }) : -1;
+    if (act === 'close') { closeBrief(); return; }
+    if (act === 'edit') { briefEditExisting(); return; }
+    if (act === 'cancel-edit') { briefOpen.mode = 'view'; briefOpen.draft = null; renderBriefModal(); return; }
+    if (act === 'copy') { briefCopyForPartners(); return; }
+    if (act === 'add-update') { var form = document.getElementById('brief-update-form'); form.classList.remove('hidden'); form.classList.add('flex'); document.getElementById('brief-update-text').focus(); return; }
+    if (act === 'cancel-update') { var form2 = document.getElementById('brief-update-form'); form2.classList.add('hidden'); form2.classList.remove('flex'); return; }
+    if (act === 'save-update') { briefSaveUpdate(); return; }
+    if (act === 'save') { briefSave(); return; }
+    briefCollect();
+    if (act === 'up' && idx > 0) { var a = d.sections.splice(idx, 1)[0]; d.sections.splice(idx - 1, 0, a); }
+    else if (act === 'down' && idx > -1 && idx < d.sections.length - 1) { var b2 = d.sections.splice(idx, 1)[0]; d.sections.splice(idx + 1, 0, b2); }
+    else if (act === 'rm-sec' && idx > -1) d.sections.splice(idx, 1);
+    else if (act === 'rm-row') {
+      var rowEl = actEl.closest('[data-brief-row]');
+      var rowsEl = rowEl.parentElement;
+      var ri = Array.prototype.indexOf.call(rowsEl.children, rowEl);
+      d.sections[idx].rows.splice(ri, 1);
+    } else if (act === 'add-row' || act === 'add-track') {
+      var s = d.sections[idx];
+      s.rows = s.rows || [];
+      if (act === 'add-track') s.rows.push({ track: true });
+      else {
+        // A new date goes above Closing report, which stays last.
+        var ci = s.type === 'dates' ? s.rows.findIndex(function (r) { return r.a === 'Closing report' && !r.track; }) : -1;
+        if (ci > -1) s.rows.splice(ci, 0, {}); else s.rows.push({});
+      }
+      renderBriefModal();
+      var sec = document.querySelector('#brief-modal-card [data-brief-sec="' + s.id + '"]');
+      var rowsList = sec.querySelectorAll('[data-brief-row]');
+      var target = act === 'add-track' ? rowsList[rowsList.length - 1] : (s.type === 'dates' && s.rows.findIndex(function (r) { return r.a === 'Closing report'; }) > -1 ? rowsList[s.rows.findIndex(function (r) { return r.a === 'Closing report'; }) - 1] : rowsList[rowsList.length - 1]);
+      if (target) target.querySelector('input').focus();
+      return;
+    }
+    renderBriefModal();
+  }
+
+  function briefClean(o) { return JSON.parse(JSON.stringify(o)); } // drops undefined, which Firestore rejects
+
+  function briefSave() {
+    briefCollect();
+    var d = briefOpen.draft, name = briefOpen.name;
+    if (!d.job) { showToast('Add the job in one sentence first.', 'error'); var j = document.getElementById('brief-job'); if (j) j.focus(); return; }
+    var prev = projectBrief(name);
+    var me = myDisplayName();
+    var brief = briefClean({
+      template: d.template, job: d.job,
+      sections: d.sections.map(function (s) {
+        var o = { id: s.id, type: s.type };
+        if (s.title) o.title = s.title;
+        if (s.text) o.text = s.text;
+        if (s.f && Object.keys(s.f).length) o.f = s.f;
+        if (s.rows) o.rows = s.rows.filter(function (r) { return r.a || r.b || r.c; });
+        // Only Suits/admins can see the budget field, so nobody else can wipe it by saving.
+        if (s.type === 'budget' && !canSeeBriefBudget()) {
+          var old = prev && (prev.sections || []).find(function (x) { return x.type === 'budget'; });
+          if (old && old.text) o.text = old.text;
+        }
+        return o;
+      }),
+      updates: (prev && prev.updates) || [],
+      createdBy: (prev && prev.createdBy) || me,
+      updatedBy: me,
+      updatedAt: new Date().toISOString()
+    });
+    var dates = d.sections.find(function (s) { return s.type === 'dates'; });
+    var stepsTask = dates && d.addSteps && d.stepsTask;
+    ensureProjectDoc(name).then(function (id) {
+      return updateDoc(doc(projectsCol, id), { brief: brief });
+    }).then(function () {
+      logActivity('project_brief', (prev ? 'Updated' : 'Wrote') + ' the brief for ' + name);
+      var added = stepsTask ? briefAddSteps(stepsTask, dates.rows) : 0;
+      showToast(prev ? 'Brief saved' + (added ? ' · ' + added + ' checklist step' + (added === 1 ? '' : 's') + ' added' : '') : 'Brief created' + (added ? ' · ' + added + ' checklist step' + (added === 1 ? '' : 's') + ' added' : ''), 'success');
+      if (briefOpen && briefOpen.name === name) { briefOpen.lastSaved = brief; briefOpen.mode = 'view'; briefOpen.draft = null; renderBriefModal(); }
+    }).catch(function (err) { showToast('Could not save the brief: ' + err.message, 'error'); });
+  }
+
+  // Key dates -> checklist steps. Matched by step name (case-insensitive), so saving again
+  // updates the date and person instead of adding the same step twice. Never deletes steps.
+  function briefAddSteps(taskId, rows) {
+    var task = tasks.find(function (t) { return t.id === taskId; });
+    if (!task) return 0;
+    var steps = (rows || []).filter(function (r) { return !r.track && r.a; });
+    var modalOpenOnIt = typeof editingTaskId !== 'undefined' && editingTaskId === taskId && !document.getElementById('task-modal').classList.contains('hidden');
+    var list = modalOpenOnIt ? currentChecklist : (task.checklist || []).map(function (x) { return Object.assign({}, x); });
+    var oldList = (task.checklist || []).map(function (x) { return Object.assign({}, x); });
+    var changed = 0;
+    steps.forEach(function (r) {
+      var hit = list.find(function (it) { return (it.text || '').trim().toLowerCase() === r.a.toLowerCase(); });
+      if (hit) {
+        if (r.b && hit.due !== r.b) { hit.due = r.b; delete hit.dueTbd; changed++; }
+        if (r.c && hit.assignee !== r.c) { hit.assignee = r.c; changed++; }
+      } else {
+        var item = { id: uid(), text: r.a, done: false };
+        if (r.b) item.due = r.b;
+        if (r.c) item.assignee = r.c;
+        list.push(item); changed++;
+      }
+    });
+    if (!changed) return 0;
+    if (modalOpenOnIt) {
+      // The task window is open on this task: put the steps into its checklist, so its own Save
+      // keeps them instead of writing back the older list over ours.
+      renderChecklistEditor();
+      showToast('Steps added to the open task. Save the task to keep them.', 'info');
+      return changed;
+    }
+    updateDoc(doc(tasksCol, taskId), { checklist: briefClean(list), updatedAt: new Date().toISOString() }).then(function () {
+      notifyChecklistChanges(task, oldList, list);
+    }).catch(function (err) { showToast('Could not add the checklist steps: ' + writeErrorMessage(err, task), 'error'); });
+    return changed;
+  }
+
+  function briefSaveUpdate() {
+    var ta = document.getElementById('brief-update-text');
+    var text = ta ? ta.value.trim() : '';
+    if (!text) return;
+    var name = briefOpen.name, b = projectBrief(name);
+    var now = new Date().toISOString();
+    var updates = ((b && b.updates) || []).concat([{ id: uid(), text: text, author: myDisplayName(), at: now }]);
+    var pd = projectDeadlineDoc(name);
+    briefOpen.lastSaved = Object.assign({}, b, { updates: updates, updatedAt: now, updatedBy: myDisplayName() });
+    updateDoc(doc(projectsCol, pd.id), { 'brief.updates': briefClean(updates), 'brief.updatedAt': new Date().toISOString(), 'brief.updatedBy': myDisplayName() }).then(function () {
+      logActivity('project_brief', 'Added an update to the brief for ' + name);
+      showToast('Update added', 'success');
+      if (briefOpen && briefOpen.name === name && briefOpen.mode === 'view') renderBriefModal();
+    }).catch(function (err) { showToast('Could not add the update: ' + err.message, 'error'); });
+  }
+
+  // Plain text for outside partners. Never includes the budget.
+  function briefCopyForPartners() {
+    var b = projectBrief(briefOpen.name); if (!b) return;
+    var out = [briefOpen.name, '', 'THE JOB', b.job, ''];
+    (b.sections || []).forEach(function (s) {
+      var t = BRIEF_TYPES[s.type]; if (!t || s.type === 'budget') return;
+      var lines = [];
+      if (t.kind === 'text' || t.kind === 'list') { if (s.text) lines.push(s.text); }
+      else if (t.kind === 'fields') t.cols.forEach(function (c, i) { if ((s.f || {})[i]) lines.push(c + ': ' + s.f[i]); });
+      else (s.rows || []).forEach(function (r) {
+        if (r.track) lines.push('', r.a.toUpperCase());
+        else if (s.type === 'dates') lines.push('- ' + (r.b ? formatShortDate(r.b) : 'No date') + ': ' + r.a + (r.c ? ' (' + r.c + ')' : ''));
+        else lines.push('- ' + [r.a, r.b, s.type === 'speakers' ? '' : r.c].filter(Boolean).join(' · '));
+      });
+      if (!lines.length) return;
+      out.push((s.type === 'custom' ? (s.title || 'Notes') : t.title).toUpperCase());
+      out = out.concat(lines); out.push('');
+    });
+    var text = out.join('\n').trim();
+    try {
+      navigator.clipboard.writeText(text).then(function () { showToast('Brief copied, without the budget', 'success'); }, function () { showToast('Could not copy. Your browser blocked it.', 'error'); });
+    } catch (err) { showToast('Could not copy. Your browser blocked it.', 'error'); }
+  }
+
+  // Opening: any [data-open-brief] anywhere in the app. Escape closes, or steps back out of an edit.
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-open-brief]');
+    if (!b || !BRIEFS_ENABLED) return;
+    e.preventDefault(); e.stopPropagation();
+    var fromTask = b.closest('#task-modal') && typeof editingTaskId !== 'undefined' ? editingTaskId : null;
+    openBrief(b.getAttribute('data-open-brief'), fromTask);
+  }, true);
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape' || !briefOpen) return;
+    e.stopPropagation();
+    if (briefOpen.mode === 'edit' && projectBrief(briefOpen.name)) { briefOpen.mode = 'view'; briefOpen.draft = null; renderBriefModal(); }
+    else closeBrief();
+  }, true);
+  if (document.getElementById('task-project')) document.getElementById('task-project').addEventListener('input', syncTaskBriefLink);
+  /* ===== end CREATIVE BRIEFS ===== */
 
   document.getElementById('btn-add-task').addEventListener('click', function () { openTaskModal(null); });
   document.getElementById('task-deadline-tbd').addEventListener('change', function (e) {
@@ -10156,6 +10779,7 @@
               badges +
             '</div>' +
             deadlineRow +
+            briefCardRowHtml(p.name) +   // creative brief (see CREATIVE BRIEFS)
             (readyToArchive
               ? '<button type="button" class="project-archive-btn text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 flex items-center gap-1 mt-1.5" ' +
                 'data-project="' + escapeHtml(p.name) + '" title="Archive every task in this project and move it to Completed">' +
@@ -10308,7 +10932,7 @@
      RENDER: ACTIVITY FEED
   ========================================================= */
   var ACTIVITY_ICONS = {
-    task_created: 'plus', task_updated: 'pencil', task_deleted: 'trash',
+    task_created: 'plus', task_updated: 'pencil', task_deleted: 'trash', project_brief: 'checklist',
     task_moved: 'arrowRight', task_comment: 'message',
     board_imported: 'upload', board_seeded: 'download',
     board_archived: 'download', task_archived: 'download', task_unarchived: 'upload',
@@ -11955,6 +12579,7 @@
           '</button>' +
 
           catBtn +
+          briefButtonHtml(name, true) +   // creative brief (see CREATIVE BRIEFS)
           detailsBtn +
         '</div>' +
         catPicker +
@@ -12189,6 +12814,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-06q', date: '2026-10-06', items: [
+      { type: 'new', title: 'Creative briefs', text: 'Briefs can now be written right here instead of in a Google Doc. On the Projects tab, click "+ Brief" on a project, pick a template like Quick job or Event, and add only the sections the job needs. Everyone on the job sees a clear Brief card from the project and its tasks, and the key dates can become checklist steps in one tick.' }
+    ] },
     { id: '2026-10-06p', date: '2026-10-06', items: [
       { type: 'improved', title: 'Creative brief links removed', text: 'The Creative Brief button added earlier today has been taken out. Keep adding brief links to checklist items, which already show them as a Google Docs link.' }
     ] },
@@ -14145,7 +14773,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T17:35:48Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T18:15:17Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
