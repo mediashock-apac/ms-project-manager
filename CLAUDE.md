@@ -54,6 +54,7 @@ fix was to remove or relocate something, never to add**:
 | Per-project teamspace filing | Deleted; departments derived from assignees instead |
 | Task name inside every Timeline bar | Deleted — the frozen label column already carries it |
 | Folder name clipped in WIP Meeting rows | Split onto its own line, where it wraps in full |
+| Priority dot on Board rows | Deleted -- the priority badge on the same row already says it |
 
 Concrete checks, each learned from one of the above:
 
@@ -690,7 +691,10 @@ to bottom:
        second look to be inconsistent with.
      - **`boardTaskRowHtml(t)`** is a compact three-line row (task name; then assignee; then a
        priority/status badge, deadline with a calendar icon, logged time, and an OVERDUE/DUE
-       TODAY/DUE TOMORROW badge when relevant — plus a priority dot on the row's left edge),
+       TODAY/DUE TOMORROW badge when relevant). **The priority dot is gone from Board rows** (asked
+       directly): the coloured MEDIUM/HIGH/Completed badge says the same thing at a fixed left
+       position, so the meta lines lost their `pl-[18px]` indent too and everything aligns left.
+       Older notes below about the dot describe the earlier design.
        not a shrunken version of the old full task-card. Checklist/comment
        counts and the Drive-link shortcut stay dropped — reachable by opening the task
        (`data-open-task`, unchanged). Time logged (`taskTimeMinutes(t)`, clock icon +

@@ -8758,8 +8758,10 @@
         // beside the entire row, which squeezed the meta lines under them into ~100px less width
         // than the card actually has, for nothing: the buttons are 24px tall and everything below
         // them was empty space. That squeeze is what pushed logged time onto a line of its own.
+        // No priority dot here any more: the MEDIUM/HIGH/Completed badge on the line below says the
+        // same thing in words, already colour-coded and at a fixed left position, so the dot was
+        // the same fact twice on one row (asked directly; same call the Timeline made for its dot).
         '<div class="flex items-center gap-2.5">' +
-          '<span class="w-2 h-2 rounded-full shrink-0 ' + pm.dot + '" title="' + (isDone ? 'Completed' : t.priority) + '"></span>' +
           '<p data-tooltip="' + escapeHtml(t.name) + '" class="tooltip-top min-w-0 flex-1 text-sm font-medium text-zinc-800 dark:text-zinc-100 truncate group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</p>' +
           '<div class="flex items-center gap-0.5 shrink-0">' +
             '<span draggable="true" data-drag-handle title="Drag to move" aria-label="Drag to move" role="button" class="hidden sm:flex w-6 h-6 items-center justify-center rounded-md cursor-grab active:cursor-grabbing text-zinc-400 dark:text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700">' + svgIcon('grip', 'w-3.5 h-3.5') + '</span>' +
@@ -8772,9 +8774,9 @@
         // what (priority/deadline/time/urgency) together on the next. They used to share a single
         // flex-wrap line split by a divider, but at real board-column widths it wrapped
         // mid-cluster -- badge beside the name, date/time orphaned below -- so the break point is
-        // structural now instead of width-dependent. pl-[18px] indents them under the task name
-        // (the dot's w-2 plus the top line's gap-2.5), leaving the dot alone on the left edge.
-        '<div class="pl-[18px]">' +
+        // structural now instead of width-dependent. No indent since the priority dot went: name,
+        // assignee and badge all start at the same left edge.
+        '<div>' +
           '<div class="flex items-center gap-1.5 mt-1.5">' +
             avatarHtml(t.assignee, 'w-4 h-4 shrink-0', 'text-[9px]') +
             '<span class="text-xs text-zinc-500 dark:text-zinc-400 truncate">' + escapeHtml(t.assignee) + '</span>' +
@@ -13430,7 +13432,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T15:35:07Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T15:39:19Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
