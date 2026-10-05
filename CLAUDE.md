@@ -494,8 +494,25 @@ to bottom:
      opens the task. No extra rows (so the single scroll pane is untouched), skipped if outside
      the visible range, and a Done task never shows overdue items. A date after the task's own
      deadline is flagged amber in the editor and tooltip rather than blocked. Deliberately NOT fed
-     into `dueUrgency`, Focus, the digest or notifications (more overdue signals, more noise); the
-     expandable sub-rows alternative (TeamGantt/Monday style) was considered and not built.
+     into `dueUrgency`, Focus, the digest or notifications (more overdue signals, more noise).
+     - **Expandable checklist rows** (built later, asked for from a TeamGantt screenshot). A task
+       with a checklist gets an arrow in its label (`ganttExpandToggleHtml`, `data-gantt-expand`);
+       opening it adds one indented row per item (`GANTT_ITEM_ROW_HEIGHT` 34px) on both the
+       Timeline and the WIP timeline. Each row: tick when done, name, `· assignee · date` (or
+       TBD / No date) in the label, and a slightly larger diamond on its due date. Items are
+       sorted by due date, undated last (`ganttChecklistItems`), so diamonds step down left to
+       right. While open, the task's own bar drops its small diamonds — the rows carry them.
+       State is `ganttExpanded`, session-only, shared by both views, collapsed by default.
+       - **Diamonds, not bars**: items have only a due date. Bars would need a start date on every
+         item; offered and declined. **No dependency arrows** (task dependencies were removed —
+         see below), and **no project grouping** (reverted before — see `projects`). This expands
+         a *task*, not a project.
+       - On the Timeline every item row is three grid cells sharing one `data-gantt-row` key
+         (`"<r>-<k>"`), so the existing row-hover delegation lights up the whole row and links the
+         name to its diamond. The grid's row tracks are built per row (`rowTracks`) since item rows
+         are shorter; the resize handle and today line span `rowTracks.length`, not `list.length`.
+       - The WIP version is a plain flex row with a hover tint, since its rows already span label
+         and chart in one element.
      - **"Add to Google Calendar"** (`openChecklistInGoogleCalendar`, ): only offered on the add-item row, as a "Calendar" checkbox next to the date (a per-item link on the
        `Due …` line and a per-row icon both shipped and were removed as clutter -- an existing item is not
        re-exportable). The add-item row carries link, date, TBD and Calendar fields on the

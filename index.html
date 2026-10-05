@@ -4674,6 +4674,70 @@
   // would fire and immediately cancel itself with.
   var ganttCenterOnToday = true;
 
+  // Expand a task on the Timeline / WIP timeline to show its checklist items as their own rows
+  // (asked for directly, from a TeamGantt screenshot). One indented row per item: name, assignee
+  // and due date in the label, a diamond on its date. Items have only a due date, no start, so
+  // they are diamonds, not bars -- bars would mean a start date on every item. Collapsed by
+  // default; which tasks are open is session-only and shared by both views. While a task is open
+  // its bar drops its own small diamonds, since the rows below now carry exactly those.
+  var ganttExpanded = {};
+  var GANTT_ITEM_ROW_HEIGHT = 34;
+
+  // Due-date order, undated last, original order as the tie-break -- the diamonds step down the
+  // rows left to right, which is what makes them easy to follow.
+  function ganttChecklistItems(t) {
+    return (t.checklist || []).map(function (item, i) { return { item: item, i: i }; })
+      .sort(function (a, b) {
+        var ad = a.item.due && parseDate(a.item.due) ? a.item.due : null;
+        var bd = b.item.due && parseDate(b.item.due) ? b.item.due : null;
+        if (ad && bd && ad !== bd) return ad < bd ? -1 : 1;
+        if (ad && !bd) return -1;
+        if (!ad && bd) return 1;
+        return a.i - b.i;
+      }).map(function (x) { return x.item; });
+  }
+
+  function ganttItemLate(t, item) {
+    return !!(item.due && parseDate(item.due) && !item.done && t.status !== 'Done' && parseDate(item.due) < todayMidnight());
+  }
+
+  function ganttItemDiamondColor(t, item) {
+    return item.done ? 'bg-emerald-500' : (ganttItemLate(t, item) ? 'bg-rose-600' : 'bg-zinc-500 dark:bg-zinc-300');
+  }
+
+  // Arrow button for a task row's label; a same-width spacer when the task has no checklist, so
+  // project names still line up down the column.
+  function ganttExpandToggleHtml(t) {
+    if (!(t.checklist || []).length) return '<span class="w-4 shrink-0"></span>';
+    var open = !!ganttExpanded[t.id];
+    return '<button type="button" data-gantt-expand="' + t.id + '" aria-expanded="' + open + '" title="' + (open ? 'Hide' : 'Show') + ' checklist items" ' +
+      'class="w-4 h-4 shrink-0 flex items-center justify-center rounded text-zinc-400 hover:text-brand-600 dark:hover:text-brand-400">' +
+      svgIcon('chevronDown', 'w-3.5 h-3.5 transition-transform' + (open ? '' : ' -rotate-90')) + '</button>';
+  }
+
+  // The item row's label text: tick when done, name, then "· assignee · date". The date is in the
+  // label so it can be read without finding the diamond at all.
+  function ganttItemLabelHtml(t, item) {
+    var late = ganttItemLate(t, item);
+    var dateText = item.due && parseDate(item.due) ? formatShortDate(item.due) : (item.dueTbd ? 'Due TBD' : 'No date');
+    return (item.done ? svgIcon('checkTick', 'w-3 h-3 shrink-0 text-emerald-500') : '<span class="w-3 shrink-0"></span>') +
+      '<span data-tooltip="' + escapeHtml(item.text || '') + '" class="tooltip-top truncate min-w-0 ' + (item.done ? 'text-zinc-400 dark:text-zinc-500' : 'text-zinc-700 dark:text-zinc-200') + '">' + escapeHtml(item.text || '') + '</span>' +
+      '<span class="shrink-0 text-zinc-400 dark:text-zinc-500">' +
+        (item.assignee ? ' · ' + escapeHtml(item.assignee) : '') +
+        ' · <span class="' + (late ? 'text-rose-600 dark:text-rose-400 font-semibold' : '') + '">' + escapeHtml(dateText) + '</span>' +
+      '</span>';
+  }
+
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest('[data-gantt-expand]');
+    if (!btn) return;
+    e.preventDefault();
+    var id = btn.getAttribute('data-gantt-expand');
+    if (ganttExpanded[id]) delete ganttExpanded[id]; else ganttExpanded[id] = true;
+    if (currentView === 'gantt') renderGantt();
+    else if (currentView === 'wip') renderWipView();
+  });
+
   // Gantt label column resize -- dragging #gantt-resize-handle (see renderGantt). Deliberately
   // does NOT call renderGantt() on every mousemove: that would rebuild every row's HTML and
   // recompute dayWidth against the shrinking/growing available width dozens of times a second.
@@ -8402,7 +8466,13 @@
 
     var headerRowsHeight = 64;
     var rowHeight = 52;
-    var totalGridHeight = headerRowsHeight + list.length * rowHeight;
+    // Row tracks: one per task, plus one per checklist item for each expanded task.
+    var rowTracks = [];
+    list.forEach(function (t) {
+      rowTracks.push(rowHeight + 'px');
+      if (ganttExpanded[t.id]) (t.checklist || []).forEach(function () { rowTracks.push(GANTT_ITEM_ROW_HEIGHT + 'px'); });
+    });
+    var totalGridHeight = headerRowsHeight + rowTracks.reduce(function (s, h) { return s + parseInt(h, 10); }, 0);
     var todayIndex = daysBetween(rangeStart, today);
 
     // Stretch day columns to fill the card's full width when there's room (rather than
@@ -8435,7 +8505,7 @@
     // isolated fixture: scrolled 1400px right, the label sat 869px LEFT of the pane's edge; with
     // max-content it sits exactly ON it. min-width:100% stays for the opposite case, a short
     // date range whose columns do not fill the pane.
-    html += '<div class="relative" id="gantt-grid" data-day-width="' + dayWidth + '" data-total-days="' + totalDays + '" style="display:grid;grid-template-columns:' + GANTT_LABEL_WIDTH + 'px ' + GANTT_PCT_WIDTH + 'px repeat(' + totalDays + ',' + dayWidth + 'px);grid-template-rows:32px 32px repeat(' + list.length + ',' + rowHeight + 'px);min-width:100%;width:max-content;">';
+    html += '<div class="relative" id="gantt-grid" data-day-width="' + dayWidth + '" data-total-days="' + totalDays + '" style="display:grid;grid-template-columns:' + GANTT_LABEL_WIDTH + 'px ' + GANTT_PCT_WIDTH + 'px repeat(' + totalDays + ',' + dayWidth + 'px);grid-template-rows:32px 32px ' + rowTracks.join(' ') + ';min-width:100%;width:max-content;">';
 
     // corner cells
     //
@@ -8474,7 +8544,7 @@
     // grabbed anywhere down the chart, not just in the header. Invisible at rest (the existing
     // border-r on the label cells already marks the boundary); only tints on hover, same
     // affordance-on-hover idea as a spreadsheet's column-resize edge.
-    html += '<div class="sticky group cursor-col-resize" id="gantt-resize-handle" title="Drag to resize the Task column" style="left:' + (GANTT_LABEL_WIDTH - 3) + 'px;top:0;grid-column:1;grid-row:1 / span ' + (2 + list.length) + ';width:6px;z-index:27;">' +
+    html += '<div class="sticky group cursor-col-resize" id="gantt-resize-handle" title="Drag to resize the Task column" style="left:' + (GANTT_LABEL_WIDTH - 3) + 'px;top:0;grid-column:1;grid-row:1 / span ' + (2 + rowTracks.length) + ';width:6px;z-index:27;">' +
       '<div class="w-px h-full mx-auto bg-transparent group-hover:bg-brand-400 dark:group-hover:bg-brand-500"></div>' +
     '</div>';
 
@@ -8519,9 +8589,11 @@
     });
 
     // task rows
+    var rowCursor = 3;   // grid row of the next task; item rows advance it too
     list.forEach(function (t, r) {
       var pm = t.status === 'Done' ? DONE_META : (isReadyForReview(t) ? READY_FOR_REVIEW_META : (PRIORITY_META[t.priority] || PRIORITY_META.Medium));
-      var rowIdx = r + 3;
+      var rowIdx = rowCursor++;
+      var expanded = !!ganttExpanded[t.id];
       var overdue = dueUrgency(t).overdue;
       var rowStacked = deadlineStacks[t.id] || [];
 
@@ -8546,6 +8618,7 @@
       // to the right, so the dot was a second, smaller copy of a signal already on screen. The
       // other views have no bar, which is exactly why they keep theirs.
       html += '<div class="sticky left-0 z-20 bg-white dark:bg-zinc-800 border-b border-r border-zinc-200 dark:border-zinc-700 flex items-center gap-2 px-3 py-1.5 overflow-hidden" data-gantt-row="' + r + '" style="grid-column:1;grid-row:' + rowIdx + ';">' +
+        ganttExpandToggleHtml(t) +
         '<div class="min-w-0">' +
           // text-sm, not text-xs -- reported directly ("make the project title slightly bigger
           // so it is easier to identify and discern") against a screenshot of this exact badge.
@@ -8636,7 +8709,8 @@
       // Dated checklist items as small diamonds on the bar (emitted after the bar so they paint
       // over it). Green = done, rose = overdue and still open, grey = upcoming. Skipped when the
       // date falls outside the visible range. A Done task never shows overdue items.
-      (t.checklist || []).forEach(function (item) {
+      // Skipped while the task is expanded -- its item rows below carry these same diamonds.
+      (expanded ? [] : (t.checklist || [])).forEach(function (item) {
         if (!item.due || !parseDate(item.due)) return;
         var dueDate = parseDate(item.due);
         if (dueDate < rangeStart || dueDate > rangeEnd) return;
@@ -8647,6 +8721,23 @@
         html += '<span data-open-task="' + t.id + '" title="' + escapeHtml(item.text + ' · due ' + formatShortDate(item.due) + (item.done ? ' · done' : (late ? ' · overdue' : '')) + (afterDeadline ? ' · after the task deadline' : '')) + '" class="absolute w-2 h-2 rotate-45 cursor-pointer ring-1 ring-white/80 dark:ring-zinc-800 ' + mColor + '" style="left:' + mLeft + 'px;top:' + (rowHeight / 2 - 4) + 'px;"></span>';
       });
       html += '</div>';
+
+      // Expanded: one row per checklist item. Each row shares a data-gantt-row key across its three
+      // cells, so the existing row-hover delegation lights up label, Progress and chart together --
+      // the visual link from an item's name to its diamond.
+      if (expanded) ganttChecklistItems(t).forEach(function (item, k) {
+        var itemRow = rowCursor++;
+        var key = r + '-' + k;
+        html += '<div class="sticky left-0 z-20 bg-white dark:bg-zinc-800 border-b border-r border-zinc-100 dark:border-zinc-700 flex items-center gap-1.5 pl-9 pr-3 overflow-hidden text-xs whitespace-nowrap" data-gantt-row="' + key + '" style="grid-column:1;grid-row:' + itemRow + ';">' + ganttItemLabelHtml(t, item) + '</div>';
+        html += '<div class="gantt-pct sticky z-20 bg-white dark:bg-zinc-800 border-b border-r border-zinc-100 dark:border-zinc-700" data-gantt-row="' + key + '" style="left:' + GANTT_LABEL_WIDTH + 'px;grid-column:2;grid-row:' + itemRow + ';"></div>';
+        html += '<div class="relative border-b border-zinc-100 dark:border-zinc-700/60" data-gantt-row="' + key + '" style="grid-column:3 / -1;grid-row:' + itemRow + ';">';
+        var due = item.due && parseDate(item.due);
+        if (due && due >= rangeStart && due <= rangeEnd) {
+          var dLeft = daysBetween(rangeStart, due) * dayWidth + dayWidth / 2 - 5;
+          html += '<span data-open-task="' + t.id + '" title="' + escapeHtml(item.text + ' · due ' + formatShortDate(item.due) + (item.done ? ' · done' : (ganttItemLate(t, item) ? ' · overdue' : '')) + (item.due > t.deadline ? ' · after the task deadline' : '')) + '" class="absolute w-2.5 h-2.5 rotate-45 cursor-pointer ring-2 ring-white dark:ring-zinc-800 ' + ganttItemDiamondColor(t, item) + '" style="left:' + dLeft + 'px;top:' + (GANTT_ITEM_ROW_HEIGHT / 2 - 5) + 'px;"></span>';
+        }
+        html += '</div>';
+      });
     });
 
     // today vertical line
@@ -10596,9 +10687,12 @@
       return '<div class="flex border-b border-zinc-50 dark:border-zinc-700/50 last:border-b-0">' +
         // Same label as the Timeline tab's frozen Task column: text-sm project with a hover tooltip,
         // and the owner/task line at the same contrast.
-        '<div class="shrink-0 px-3 py-1.5 min-w-0 border-r border-zinc-100 dark:border-zinc-700" style="width:' + LABEL_W + ';">' +
+        '<div class="shrink-0 px-3 py-1.5 min-w-0 border-r border-zinc-100 dark:border-zinc-700 flex items-center gap-2" style="width:' + LABEL_W + ';">' +
+          ganttExpandToggleHtml(t) +
+          '<div class="min-w-0">' +
           '<p class="min-w-0 mb-0.5"><span data-tooltip="' + escapeHtml(t.project) + '" class="tooltip-top inline-block max-w-full truncate align-bottom text-sm font-bold text-zinc-800 dark:text-zinc-100">' + escapeHtml(t.project) + '</span></p>' +
           '<p class="text-xs text-zinc-500 dark:text-zinc-400 truncate">' + escapeHtml(t.assignee) + ' · ' + escapeHtml(t.name) + '</p>' +
+          '</div>' +
         '</div>' +
         '<div class="relative flex-1 min-w-0" style="min-height:40px;">' + bands +
           '<button type="button" data-open-task="' + t.id + '" title="' + escapeHtml(t.name + ' · ' + t.assignee + ' · ' + t.priority + ' priority · ' + formatShortDate(t.startDate) + ' – ' + formatShortDate(t.deadline)) + '" ' +
@@ -10607,9 +10701,22 @@
             '<div class="' + pm.bar + ' h-full w-full"></div>' +
             (overdue ? '<span class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-zinc-800"></span>' : '') +
           '</button>' +
-          wipChecklistMarkers(t, today, horizon, rangeStart, n) +
+          (ganttExpanded[t.id] ? '' : wipChecklistMarkers(t, today, horizon, rangeStart, n)) +
         '</div>' +
-      '</div>';
+      '</div>' +
+      // Expanded: one row per checklist item, same as the Timeline tab. A single flex row spans
+      // label and chart here, so a plain hover tint links the name to its diamond.
+      (ganttExpanded[t.id] ? ganttChecklistItems(t).map(function (item) {
+        var diamond = '';
+        if (item.due && parseDate(item.due) && item.due >= today && item.due <= horizon) {
+          var pos = (daysBetween(rangeStart, parseDate(item.due)) + 0.5) / n * 100;
+          diamond = '<span data-open-task="' + t.id + '" title="' + escapeHtml(item.text + ' · due ' + formatShortDate(item.due) + (item.done ? ' · done' : '')) + '" class="absolute w-2.5 h-2.5 rotate-45 cursor-pointer ring-2 ring-white dark:ring-zinc-800 ' + ganttItemDiamondColor(t, item) + '" style="left:calc(' + pos + '% - 5px);top:calc(50% - 5px);"></span>';
+        }
+        return '<div class="flex border-b border-zinc-50 dark:border-zinc-700/50 hover:bg-zinc-100 dark:hover:bg-zinc-700/60">' +
+          '<div class="shrink-0 pl-9 pr-3 min-w-0 border-r border-zinc-100 dark:border-zinc-700 flex items-center gap-1.5 text-xs whitespace-nowrap overflow-hidden" style="width:' + LABEL_W + ';height:' + GANTT_ITEM_ROW_HEIGHT + 'px;">' + ganttItemLabelHtml(t, item) + '</div>' +
+          '<div class="relative flex-1 min-w-0">' + diamond + '</div>' +
+        '</div>';
+      }).join('') : '');
     }).join('');
 
     // Legend lists only what is actually drawn -- same swatches as the Timeline tab's, minus the
@@ -11805,7 +11912,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T04:47:02Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T04:55:01Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
