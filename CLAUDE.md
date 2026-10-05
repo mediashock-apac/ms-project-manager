@@ -3043,7 +3043,7 @@ A month row sits above the day numbers (one cell per month in the window, full n
 numbers stop being unambiguous. Deliberately omitted: the frozen Progress
 column, stacked-deadline badge and today line (today is the left edge by definition).
 
-**People show as avatars, not written names, on both timelines** (`ganttAvatarHtml`: Google photo or coloured initials, full name in the hover tooltip) — the task line is avatar + task name, and checklist rows show the item assignee's avatar before the date. Asked for directly: the names "just add more text to read".
+**People show as avatars on the Timeline tab, but as written names on WIP Meeting** — a deliberate exception to the Timeline-to-WIP rule: WIP is read together on a shared screen where nobody can hover, and initials-only avatars can be ambiguous. `ganttItemLabelHtml(t, item, asNames)`; WIP passes `true`. Originally shipped as avatars on both (`ganttAvatarHtml`: Google photo or coloured initials, full name in the hover tooltip) — the task line is avatar + task name, and checklist rows show the item assignee's avatar before the date. Asked for directly: the names "just add more text to read".
 
 **The label column matches the Timeline tab's** (asked for directly: "can the timeline
 functionality match between WIP and Timeline page? ... adjustable column width, project name and
