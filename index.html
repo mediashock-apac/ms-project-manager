@@ -5239,7 +5239,8 @@
     // as a completion badge rather than a delivery/read mark.
     checkTick: '<polyline points="20 6 9 17 4 12"></polyline>',
     checkTickDouble: '<path d="M18 6 7 17l-5-5"></path><path d="m22 10-7.5 7.5L13 16"></path>',
-    chevronDown: '<polyline points="6 9 12 15 18 9"></polyline>'
+    chevronDown: '<polyline points="6 9 12 15 18 9"></polyline>',
+    moreHorizontal: '<circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle>'
   };
 
   function svgIcon(name, cls) {
@@ -11542,24 +11543,28 @@
       var detailsBtn = name && canDetails && !folded
         ? '<button type="button" data-wip-act="toggle-details" data-project="' + escapeHtml(name) + '" aria-expanded="' + detailsOpen + '" class="shrink-0 px-4 ' + WIP_ACT_BTN + (detailsOpen ? ' !text-brand-600 dark:!text-brand-400' : '') + '">Contact &amp; links' + (detailsCount ? ' (' + detailsCount + ')' : '') + '</button>'
         : '';
-      // Category: "Set category" (brand) until one is picked. After that the button is hidden and
-      // only appears while hovering the project's title bar (reported: a "Category" on every row is
-      // noise, and the group heading already says it). Stays shown while its picker is open. Opens a pill row under
-      // the header (state in wipCategoryPicking, so a live re-render doesn't close it).
+      // Project actions: "Set category" (brand, visible) until a category is picked, then a small
+      // always-visible "⋯". Either opens one row under the header: category pills plus "+ Notes"
+      // (state in wipCategoryPicking, so a live re-render doesn't close it). History: a visible
+      // "Category" on every row was reported as noise, then hover-only "Change category" / "+ Notes"
+      // was reported as hidden -- and they still reserved their width, leaving an empty gap on every
+      // header. One quiet icon is visible, discoverable and takes ~28px.
       var cat = name ? projectWipCategory(name) : '';
       var picking = name && wipCategoryPicking === name;
-      var catBtn = name
-        ? '<button type="button" data-wip-act="pick-category" data-project="' + escapeHtml(name) + '" aria-expanded="' + !!picking + '" class="shrink-0 px-3 ' +
-            (cat ? WIP_ACT_BTN + (picking ? '' : ' opacity-0 group-hover/hdr:opacity-100 focus:opacity-100') : 'text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline') + (picking ? ' !text-brand-600 dark:!text-brand-400' : '') + '">' +
-            (cat ? 'Change category' : 'Set category') + '</button>'
-        : '';
+      var catBtn = !name ? ''
+        : cat
+          ? '<button type="button" data-wip-act="pick-category" data-project="' + escapeHtml(name) + '" aria-expanded="' + !!picking + '" title="Category and notes" aria-label="Category and notes" class="shrink-0 px-2.5 ' +
+              (picking ? 'text-brand-600 dark:text-brand-400' : 'text-zinc-400 hover:text-brand-600 dark:hover:text-brand-400') + '">' + svgIcon('moreHorizontal', 'w-4 h-4') + '</button>'
+          : '<button type="button" data-wip-act="pick-category" data-project="' + escapeHtml(name) + '" aria-expanded="' + !!picking + '" class="shrink-0 px-3 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">Set category</button>';
       var catPicker = picking
         ? '<div class="px-4 py-2 flex items-center gap-1.5 flex-wrap bg-zinc-50/60 dark:bg-zinc-700/20 border-b border-zinc-100 dark:border-zinc-700/60">' +
+            '<span class="text-xs font-semibold text-zinc-500 dark:text-zinc-400 mr-1">Category</span>' +
             WIP_CATEGORIES.concat([{ key: '', label: 'Not sorted' }]).map(function (c) {
               var on = c.key === cat;
               return '<button type="button" data-wip-act="set-category" data-project="' + escapeHtml(name) + '" data-id="' + c.key + '" class="text-xs font-semibold px-2.5 py-1 rounded-full border ' +
                 (on ? 'border-brand-500 bg-brand-500 text-white' : 'border-zinc-200 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:border-brand-400 hover:text-brand-600 dark:hover:text-brand-400') + '">' + escapeHtml(c.label) + '</button>';
             }).join('') +
+            (!pdoc.wipNote ? '<span class="w-px h-4 mx-2 bg-zinc-200 dark:bg-zinc-600"></span><button type="button" data-wip-act="edit-note" data-project="' + escapeHtml(name) + '" class="' + WIP_ACT_BTN + '">+ Notes</button>' : '') +
           '</div>'
         : '';
       // Text deliverables (WIP entries without tasks), after any task rows.
@@ -11567,10 +11572,6 @@
       var delivRows = folded ? '' : delivs.map(function (d) { return wipDeliverableRowHtml(name, d); }).join('');
       var countText = list.length ? list.length + ' open'
         : delivs.length ? delivs.length + ' deliverable' + (delivs.length === 1 ? '' : 's') : '';
-      // A busy project with no notes line of its own gets "+ Notes" on its title bar, on hover only.
-      var notesBtn = name && !folded && !pdoc.wipNote && !wipShowsInfoLine(name, list.length) && !wipIsEditing(name, 'note')
-        ? '<button type="button" data-wip-act="edit-note" data-project="' + escapeHtml(name) + '" class="shrink-0 px-3 ' + WIP_ACT_BTN + ' opacity-0 group-hover/hdr:opacity-100 focus:opacity-100">+ Notes</button>'
-        : '';
 
       cardHtml[name] = '<div class="border-b border-zinc-100 dark:border-zinc-700 last:border-b-0">' +
         '<div class="group/hdr flex items-stretch bg-zinc-50 dark:bg-zinc-700/40">' +
@@ -11580,7 +11581,7 @@
             '<span class="shrink-0 text-xs text-zinc-500 dark:text-zinc-400">' + countText +
               (due ? (countText ? ' · ' : '') + (own ? 'Project due ' : 'Due ') + escapeHtml(formatShortDate(due)) : '') + '</span>' +
           '</button>' +
-          notesBtn +
+
           catBtn +
           detailsBtn +
         '</div>' +
@@ -11620,7 +11621,7 @@
       if (kind === 'remove-link') { removeProjectKeyLink(proj, aid); return; }
       if (kind === 'entry-cat') { wipDraft.cat = aid; renderWipView(); return; }
       if (kind === 'add-entry') { wipDraft = {}; wipEdit = { project: '', kind: 'entry' }; renderWipView(); return; }
-      if (kind === 'edit-note') { wipDraft = {}; wipEdit = { project: proj, kind: 'note' }; renderWipView(); return; }
+      if (kind === 'edit-note') { wipDraft = {}; wipCategoryPicking = null; wipEdit = { project: proj, kind: 'note' }; renderWipView(); return; }
       if (kind === 'pick-category') { wipCategoryPicking = wipCategoryPicking === proj ? null : proj; renderWipView(); return; }
       if (kind === 'set-category') {
         wipCategoryPicking = null;
@@ -11817,7 +11818,7 @@
     ] },
     { id: '2026-10-05u', date: '2026-10-05', items: [
       { type: 'new', title: 'Deliverables, status and next steps for leads', text: 'Entries in WIP Meeting that have no tasks yet, like a hot or cold lead, can now list their deliverables without an owner or deadline. Each deliverable has its own status and next step, like a row of the WIP sheet. Use "+ Deliverable" under the entry.' },
-      { type: 'new', title: 'Owner and notes on WIP entries', text: 'Pitches, hot leads, cold leads and closing reports now show an owner ("+ Owner"). Every project in WIP Meeting can hold notes, like the Notes column of the sheet. On a project with tasks, hover its title bar to add notes.' }
+      { type: 'new', title: 'Owner and notes on WIP entries', text: 'Pitches, hot leads, cold leads and closing reports now show an owner ("+ Owner"). Every project in WIP Meeting can hold notes, like the Notes column of the sheet. On a project with tasks, click the ⋯ on its title bar to add notes.' }
     ] },
     { id: '2026-10-05t', date: '2026-10-05', items: [
       { type: 'new', title: 'Add leads and pitches straight to WIP', text: 'Use "+ Add entry" at the top of WIP Meeting\'s By project list to add something with no tasks or project folder yet, like a cold lead: type a name, a short note such as "Corporate video", and pick a category. It only appears in WIP Meeting, not on the Board or Timeline.' },
@@ -11828,7 +11829,7 @@
     ] },
     { id: '2026-10-05r', date: '2026-10-05', items: [
       { type: 'improved', title: 'New Updates grouped by day', text: 'Everything released on the same day now sits under one date on this page.' },
-      { type: 'improved', title: 'Quieter WIP project titles', text: 'Once a project has a category, the category button only shows when you hover over its title bar.' }
+      { type: 'improved', title: 'Quieter WIP project titles', text: 'Once a project has a category, its title bar shows a small ⋯ instead of a category button. Click it to change the category or add notes.' }
     ] },
     { id: '2026-10-05q', date: '2026-10-05', items: [
       { type: 'new', title: 'Client names in colour', text: 'The client name in square brackets in a project name, like [Google] or [Bosch], is now highlighted in WIP Meeting and on the Timeline. The same client always has the same colour, so you can spot all of one client\'s work at a glance.' }
@@ -13130,7 +13131,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T10:44:41Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T10:48:48Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

@@ -3065,9 +3065,12 @@ Client contact / Key links columns).
   anything uncategorised, so nothing vanishes. Empty groups are skipped; within a group, soonest
   open deadline first. Stored as `projects/{id}.wipCategory` (absent or an unknown key = Not
   sorted, so a category can be renamed/retired without migrating). Set from the project header in
-  WIP: "Set category" (brand) until set; after that the button is hidden and shows as "Change
-  category" only while hovering the project's title bar (`group/hdr`) — a "Category" on every
-  row was reported as noise, and the group heading already names it. It opens a pill row under the header
+  WIP: "Set category" (brand) until set; after that a small always-visible ⋯ icon
+  (`ICONS.moreHorizontal`). Both open one row under the header: category pills plus "+ Notes".
+  Third design: a visible "Category" on every row was reported as noise; the hover-only "Change
+  category"/"+ Notes" that replaced it was reported as hidden ("some items are hidden until
+  hovered") — and `opacity-0` still reserved their width, leaving an empty gap on every header.
+  **Don't put anything hover-only on these headers again.** It opens a pill row under the header
   (`wipCategoryPicking`, kept in state so a live re-render doesn't close it — a native `<select>`
   would snap shut on every roster heartbeat). Anyone can change it (same as status); logged to
   Activity as `project_category`. No rules change.
@@ -3100,8 +3103,8 @@ Client contact / Key links columns).
     window" option and declined for leads, since leads often have no owner or date yet.
   - **Notes** — `wipNote`, one per project like the sheet's merged Notes column, multi-line
     (textarea, Shift+Enter for a new line), click to edit. Shown when set; "+ Notes" sits on the
-    info line for entries with no tasks or in an owner category, and on the title bar **on hover
-    only** for a busy active project (a "+ Notes" line under every project would be clutter).
+    info line for entries with no tasks or in an owner category, and in the ⋯ row for a busy
+    active project (a "+ Notes" line under every project would be clutter).
   - **Owner** — `wipOwner`, a roster name, the sheet's "Internal PIC", only for Pitches, Hot
     leads, Cold leads and Closing reports (`WIP_OWNER_CATEGORIES`, asked for by name); Active
     jobs/Content marketing have owners on every task. Picked from roster pills (not a `<select>`,
