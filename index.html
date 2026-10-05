@@ -379,6 +379,19 @@
     .task-card:hover .board-row-actions, .task-card:focus-within .board-row-actions { display: flex; }
   }
 
+  /* Guided tours (see TOURS in the module script). The spotlight is one box whose huge spread
+     shadow dims everything outside it, so the highlighted element stays fully visible without
+     cloning it. The overlay under it swallows clicks: a tour step is something to read, not a
+     live screen to click through. */
+  #tour-overlay { position: fixed; inset: 0; z-index: 60; }
+  #tour-spot { position: fixed; border-radius: 12px; box-shadow: 0 0 0 9999px rgba(9, 9, 11, 0.55); transition: top .25s ease, left .25s ease, width .25s ease, height .25s ease; pointer-events: none; }
+  #tour-spot.tour-spot-none { box-shadow: none; }
+  #tour-overlay.tour-no-target { background: rgba(9, 9, 11, 0.55); }
+  #tour-card { position: fixed; z-index: 61; transition: top .25s ease, left .25s ease; }
+  @media (prefers-reduced-motion: reduce) {
+    #tour-spot, #tour-card { transition: none; }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .update-banner, .update-banner-icon svg,
     .remote-change-flash, .saved-tick, .expand-in, .expand-fade,
@@ -557,7 +570,7 @@
       <div id="teamspace-menu" role="listbox" class="hidden absolute left-2 right-2 mt-1 z-[28] bg-white dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 rounded-lg panel-raised py-1 panel-pop-in"></div>
     </div>
 
-    <nav class="flex-1 overflow-y-auto py-2 px-2 flex flex-col gap-0.5">
+    <nav id="sidebar-nav" class="flex-1 overflow-y-auto py-2 px-2 flex flex-col gap-0.5">
       <button data-view-btn="board" data-tooltip="Board" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
         <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line></svg>
         <span class="sidebar-label truncate">Board</span>
@@ -690,6 +703,10 @@
         <button type="button" id="btn-desktop-notif-toggle" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-600">
           <span id="desktop-notif-toggle-icon" class="w-4 h-4 shrink-0 flex items-center justify-center"></span>
           <span id="desktop-notif-toggle-label">Desktop notifications: Off</span>
+        </button>
+        <button type="button" id="btn-take-tour" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-600">
+          <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
+          <span>Take the tour</span>
         </button>
         <div class="border-t border-zinc-100 dark:border-zinc-600 my-1"></div>
         <button type="button" id="btn-sign-out" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-rose-50 dark:hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400">
@@ -1207,7 +1224,7 @@
       <!-- By project: projects on the left, the Away card in a narrow column on the right (stacks
            below on narrow screens). Asked for directly, from a wide screen where the project rows
            left most of their width empty. The column sticks while the project list scrolls. -->
-      <div id="wip-projects-wrap" class="grid grid-cols-1 min-[1400px]:grid-cols-[minmax(0,1fr)_19rem] gap-4 items-start">
+      <div id="wip-projects-wrap" class="grid grid-cols-1 min-[1400px]:grid-cols-[minmax(0,1fr)_24rem] gap-4 items-start">
         <div id="wip-projects" class="min-w-0"></div>
         <div id="wip-away-side" class="min-w-0 min-[1400px]:sticky min-[1400px]:top-0"></div>
       </div>
@@ -11246,7 +11263,7 @@
         avatarHtml(r.name, 'w-7 h-7 shrink-0', 'text-[10px]') +
         '<div class="min-w-0 flex-1">' +
           '<p class="text-sm font-semibold text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(r.name) + '</p>' +
-          '<p class="text-xs text-zinc-500 dark:text-zinc-400 truncate mt-0.5">' + escapeHtml(formatShortDate(r.start) + ' – ' + formatShortDate(r.end) + ' · ' + span + ' day' + (span === 1 ? '' : 's') + (r.note ? ' · ' + r.note : '')) + '</p>' +
+          '<p class="text-xs text-zinc-500 dark:text-zinc-400 break-words mt-0.5">' + escapeHtml(formatShortDate(r.start) + ' – ' + formatShortDate(r.end) + ' · ' + span + ' day' + (span === 1 ? '' : 's') + (r.note ? ' · ' + r.note : '')) + '</p>' +
         '</div>' +
         (awayNow ? '<span class="shrink-0 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + WIP_TONES.amber + '">Away now</span>' : '') +
       '</div>';
@@ -12106,6 +12123,10 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-06b', date: '2026-10-06', items: [
+      { type: 'new', title: 'Guided tours', text: 'New teammates now get a short tour of Project Manager the first time they sign in, and new features will come with a quick tour of their own. Every tour can be skipped. To see the basics again, choose "Take the tour" in your profile menu.', tour: 'welcome' },
+      { type: 'improved', title: 'Wider Away list in WIP Meeting', text: 'The Away list beside the projects is wider, and long leave notes now wrap onto a second line instead of being cut off.' }
+    ] },
     { id: '2026-10-06a', date: '2026-10-06', items: [
       { type: 'fixed', title: 'One colour for Medium priority', text: 'MEDIUM is yellow again on the Board, matching the yellow Medium dots, card edges and Timeline bars everywhere else.' }
     ] },
@@ -12305,7 +12326,7 @@
       var day = days.length && days[days.length - 1].date === r.date ? days[days.length - 1] : null;
       if (!day) { day = { date: r.date, items: [] }; days.push(day); }
       var isNew = updatesUnseenAtOpen.indexOf(r.id) !== -1;
-      r.items.forEach(function (it) { day.items.push({ it: it, isNew: isNew }); });
+      r.items.forEach(function (it) { day.items.push({ it: it, isNew: isNew, rid: r.id }); });
     });
     list.innerHTML = days.map(function (day) {
       var anyNew = day.items.some(function (x) { return x.isNew; });
@@ -12324,6 +12345,12 @@
               '<div class="min-w-0">' +
                 '<p class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">' + escapeHtml(x.it.title) + '</p>' +
                 '<p class="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">' + escapeHtml(x.it.text) + '</p>' +
+                (function () {
+                  var tid = x.it.tourTarget ? 'cl-' + x.rid : x.it.tour;
+                  return tid && tourById(tid)
+                    ? '<button type="button" data-start-tour="' + escapeHtml(tid) + '" class="mt-1.5 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300">Show me</button>'
+                    : '';
+                })() +
               '</div>' +
             '</div>';
           }).join('') +
@@ -12331,6 +12358,313 @@
       '</div>';
     }).join('');
   }
+
+  /* =========================================================
+     GUIDED TOURS
+     Asked for directly: a walkthrough for new users, short tours for new major features, easy to
+     follow, quick, and skippable -- and, asked right after, "the tutorial should auto update on
+     new features".
+
+     So feature tours are DERIVED FROM CHANGELOG, not written twice. Give a CHANGELOG item a
+     `tourTarget` (a CSS selector for the thing to point at) and that release automatically:
+     - becomes a feature tour (id 'cl-<release id>', one step per targeted item, using the item's
+       own title and text) shown once to existing teammates;
+     - is folded into the welcome tour for new joiners, just before its last step -- only the
+       WELCOME_FEATURE_MAX most recent targeted items from the last WELCOME_FEATURE_DAYS days, so
+       the welcome tour stays short however many features ship;
+     - gets a "Show me" link on its New Updates entry.
+     Only give `tourTarget` to a MAJOR feature someone could miss; small fixes stay plain notes.
+     The target must be visible on most screens (sidebar, header, toolbar), since the tour does
+     not switch views. Hand-written tours in TOURS still work for anything that needs more steps.
+
+     Who sees what is decided by when the person's account was created (Firebase Auth's
+     metadata.creationTime, i.e. their first sign-in), so nobody is asked anything:
+     - 'welcome' runs once for accounts created on or after TOURS_LAUNCH. Teammates who were
+       already using the app when tours shipped are not pushed through a beginner tour.
+     - a feature tour runs once for accounts created BEFORE its date. Anyone newer met the app
+       after the feature existed, so the welcome tour (kept current) covers it -- starting the
+       welcome tour marks every feature tour seen, so a new joiner never gets several tours back
+       to back.
+     Seen ids live on people/{uid}.toursSeen (follows you across devices; your own doc, so no
+     rules change) plus a localStorage mirror; the union counts. Marked seen when a tour STARTS,
+     so a reload mid-tour doesn't replay it. Replay: profile menu "Take the tour", or "Show me" on
+     a New Updates item that names a tour.
+
+     Steps: { target: CSS selector or null (null = centred card), title, text }. A target that is
+     missing or off-screen (the sidebar drawer on a phone) also falls back to a centred card, so
+     a tour never points at nothing. Keep tours short -- a few steps, one or two sentences each.
+  ========================================================= */
+  var TOURS_LAUNCH = '2026-10-06';
+  var TOURS_SEEN_KEY = 'flowboard_tours_seen';
+  var WELCOME_FEATURE_DAYS = 90;
+  var WELCOME_FEATURE_MAX = 3;
+  // Feature tours older than this don't pop up on their own (someone back from a long break
+  // shouldn't get a queue of them); "Show me" still plays them.
+  var FEATURE_TOUR_AUTO_DAYS = 60;
+  var TOURS = [
+    { id: 'welcome', kind: 'welcome', steps: [
+      { target: null, title: 'Welcome to Project Manager', text: 'This is where the team plans and tracks work. A quick tour of the basics takes under a minute, and you can skip it at any time.' },
+      { target: '#btn-add-task', title: 'Add a task', text: 'Start here. Give it a project, an owner and a deadline, and break it into checklist steps if it needs them.' },
+      { target: '#focus-section', title: 'Focus of the Day', text: 'The most urgent and highest-priority work, picked for you, so you know what to do first.' },
+      { target: '#sidebar-nav', title: 'Different views of the same work', text: 'Board, Timeline, Calendar and People all show the same tasks in different ways. Chat holds each project\'s group conversation.' },
+      { target: '#teamspace-trigger', title: 'Your teamspace', text: 'Pick your department to see only your team\'s work, or choose All to see everything.' },
+      { target: '#btn-notifications', title: 'Stay in the loop', text: 'The bell shows mentions, comments and tasks given to you. The icon beside it lists what you have due this week.' },
+      { target: '#user-menu-trigger', title: 'You\'re all set', text: 'Your profile menu has dark mode, desktop notifications and your departments. You can replay this tour from there any time.' }
+    ] },
+    { id: 'tours-intro', kind: 'feature', date: '2026-10-06', steps: [
+      { target: '#user-menu-trigger', title: 'New: guided tours', text: 'New features will now come with a short tour like this one. Want a refresher on the basics? Choose "Take the tour" in your profile menu.' }
+    ] }
+  ];
+
+  function tourDaysAgo(dateStr) {
+    var d = Date.parse(dateStr + 'T00:00:00');
+    return isNaN(d) ? Infinity : (Date.now() - d) / 86400000;
+  }
+
+  // One feature tour per CHANGELOG release that has items with a tourTarget.
+  function changelogTours() {
+    return CHANGELOG.map(function (r) {
+      var steps = r.items.filter(function (it) { return it.tourTarget; }).map(function (it) {
+        return { target: it.tourTarget, title: it.title, text: it.text };
+      });
+      return steps.length ? { id: 'cl-' + r.id, kind: 'feature', date: r.date, steps: steps } : null;
+    }).filter(Boolean);
+  }
+
+  // Every tour, with the welcome tour rebuilt to include the latest featured items.
+  function allTours() {
+    var derived = changelogTours();
+    var recent = [];
+    derived.forEach(function (t) {            // CHANGELOG is newest first
+      if (tourDaysAgo(t.date) > WELCOME_FEATURE_DAYS) return;
+      t.steps.forEach(function (st) { if (recent.length < WELCOME_FEATURE_MAX) recent.push(st); });
+    });
+    return TOURS.map(function (t) {
+      if (t.kind !== 'welcome' || !recent.length) return t;
+      var steps = t.steps.slice();
+      // Oldest first, so they read in the order they shipped; before the "you're all set" step.
+      steps.splice.apply(steps, [steps.length - 1, 0].concat(recent.slice().reverse()));
+      return { id: t.id, kind: t.kind, steps: steps };
+    }).concat(derived);
+  }
+
+  function tourById(id) { return allTours().find(function (t) { return t.id === id; }) || null; }
+
+  function toursSeenList() {
+    var local = [];
+    try { local = JSON.parse(localStorage.getItem(TOURS_SEEN_KEY) || '[]'); } catch (e) { local = []; }
+    if (!Array.isArray(local)) local = [];
+    var me = myPersonDoc();
+    var remote = (me && Array.isArray(me.toursSeen)) ? me.toursSeen : [];
+    return local.concat(remote.filter(function (id) { return local.indexOf(id) === -1; }));
+  }
+
+  function markToursSeen(ids) {
+    var seen = toursSeenList();
+    var next = seen.concat(ids.filter(function (id) { return seen.indexOf(id) === -1; }));
+    try { localStorage.setItem(TOURS_SEEN_KEY, JSON.stringify(next)); } catch (e) { /* ignore */ }
+    var uid = auth.currentUser && auth.currentUser.uid;
+    var me = myPersonDoc();
+    var remote = (me && Array.isArray(me.toursSeen)) ? me.toursSeen : [];
+    if (uid && next.some(function (id) { return remote.indexOf(id) === -1; })) {
+      setDoc(doc(peopleCol, uid), { toursSeen: next }, { merge: true }).catch(function () { /* local copy still holds */ });
+    }
+  }
+
+  // Which tour (if any) this person should be shown automatically right now.
+  function dueTour() {
+    var u = auth.currentUser;
+    var created = u && u.metadata && Date.parse(u.metadata.creationTime);
+    if (!created) return null;
+    var seen = toursSeenList();
+    var dayStart = function (d) { return Date.parse(d + 'T00:00:00'); };
+    if (seen.indexOf('welcome') === -1 && created >= dayStart(TOURS_LAUNCH)) return tourById('welcome');
+    // Oldest unseen feature tour first; one per visit is plenty.
+    var features = allTours().filter(function (t) {
+      return t.kind === 'feature' && seen.indexOf(t.id) === -1 && created < dayStart(t.date) &&
+        tourDaysAgo(t.date) <= FEATURE_TOUR_AUTO_DAYS;
+    });
+    // Oldest first, one per visit: several new features never arrive as one long tour.
+    features.sort(function (a, b) { return a.date < b.date ? -1 : (a.date > b.date ? 1 : 0); });
+    return features.length ? features[0] : null;
+  }
+
+  var tourState = null;          // { tour, i } while a tour is on screen
+  var tourCheckTimer = null;
+
+  // Called from the people snapshot (after the department prompt, which must go first) and
+  // retried on a short timer while something is in the way. Waits for our own roster row, so a
+  // tour already seen on another device isn't replayed before toursSeen has arrived.
+  function maybeStartTour() {
+    if (tourState || tourCheckTimer) return;
+    if (!auth.currentUser || !myPersonDoc()) return;
+    var tour = dueTour();
+    if (!tour) return;
+    if (anyModalOpen() || isUserEditing()) {
+      tourCheckTimer = setTimeout(function () { tourCheckTimer = null; maybeStartTour(); }, 3000);
+      return;
+    }
+    // A beat after the board has painted, so the first step doesn't land on an empty screen.
+    tourCheckTimer = setTimeout(function () {
+      tourCheckTimer = null;
+      var still = dueTour();
+      if (tourState || anyModalOpen() || isUserEditing() || !still || still.id !== tour.id) { maybeStartTour(); return; }
+      startTour(tour.id);
+    }, 900);
+  }
+
+  function startTour(id) {
+    var tour = tourById(id);
+    if (!tour || !tour.steps.length) return;
+    if (tourState) endTour();
+    // Seeing the welcome tour covers every feature that exists today.
+    markToursSeen(tour.kind === 'welcome'
+      ? allTours().map(function (t) { return t.id; })
+      : [tour.id]);
+    if (typeof closeOtherHeaderPanels === 'function') closeOtherHeaderPanels(null);
+    tourState = { tour: tour, i: 0 };
+    var overlay = document.createElement('div');
+    overlay.id = 'tour-overlay';
+    overlay.innerHTML = '<div id="tour-spot"></div>';
+    var card = document.createElement('div');
+    card.id = 'tour-card';
+    card.setAttribute('role', 'dialog');
+    card.setAttribute('aria-modal', 'true');
+    card.setAttribute('aria-labelledby', 'tour-title');
+    card.className = 'w-[min(20rem,calc(100vw-2rem))] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-pop p-4 modal-pop-in';
+    document.body.appendChild(overlay);
+    document.body.appendChild(card);
+    renderTourStep();
+  }
+
+  function endTour() {
+    tourState = null;
+    ['tour-overlay', 'tour-card'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.remove();
+    });
+  }
+
+  function tourTargetRect(sel) {
+    if (!sel) return null;
+    var el = document.querySelector(sel);
+    if (!el) return null;
+    var r = el.getBoundingClientRect();
+    // Hidden, or off-screen (the sidebar drawer on a phone sits at translateX(-100%)).
+    if (r.width === 0 || r.height === 0 || r.right <= 0 || r.left >= window.innerWidth) return null;
+    return r;
+  }
+
+  function renderTourStep() {
+    if (!tourState) return;
+    var tour = tourState.tour, i = tourState.i, step = tour.steps[i];
+    var total = tour.steps.length;
+    var card = document.getElementById('tour-card');
+    var last = i === total - 1;
+    card.innerHTML =
+      '<div class="flex items-center justify-between gap-2 mb-1.5">' +
+        (total > 1 ? '<span class="text-[11px] font-semibold text-zinc-400 dark:text-zinc-500">' + (i + 1) + ' of ' + total + '</span>' : '<span></span>') +
+        '<button type="button" data-tour-skip class="text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-100">' + (last ? 'Close' : 'Skip tour') + '</button>' +
+      '</div>' +
+      '<h3 id="tour-title" class="text-base font-bold text-zinc-900 dark:text-white">' + escapeHtml(step.title) + '</h3>' +
+      '<p class="text-sm text-zinc-600 dark:text-zinc-300 mt-1">' + escapeHtml(step.text) + '</p>' +
+      '<div class="flex items-center justify-between gap-2 mt-4">' +
+        // Progress dots: shows at a glance how short the tour is.
+        '<div class="flex items-center gap-1" aria-hidden="true">' +
+          (total > 1 ? tour.steps.map(function (_, k) {
+            return '<span class="w-1.5 h-1.5 rounded-full ' + (k === i ? 'bg-brand-500' : 'bg-zinc-300 dark:bg-zinc-600') + '"></span>';
+          }).join('') : '') +
+        '</div>' +
+        '<div class="flex items-center gap-2">' +
+          (i > 0 ? '<button type="button" data-tour-back class="text-sm font-medium px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">Back</button>' : '') +
+          '<button type="button" data-tour-next class="text-sm font-semibold px-3.5 py-1.5 rounded-lg bg-brand-600 text-white hover:bg-brand-700">' + (last ? (total > 1 ? 'Done' : 'Got it') : 'Next') + '</button>' +
+        '</div>' +
+      '</div>';
+    var el = step.target && document.querySelector(step.target);
+    if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' });
+    positionTourStep();
+    var next = card.querySelector('[data-tour-next]');
+    if (next) next.focus();
+  }
+
+  function positionTourStep() {
+    if (!tourState) return;
+    var step = tourState.tour.steps[tourState.i];
+    var overlay = document.getElementById('tour-overlay');
+    var spot = document.getElementById('tour-spot');
+    var card = document.getElementById('tour-card');
+    if (!overlay || !spot || !card) return;
+    var vw = window.innerWidth, vh = window.innerHeight;
+    var cw = card.offsetWidth, ch = card.offsetHeight;
+    var r = tourTargetRect(step.target);
+    var gap = 12, pad = 6, margin = 16;
+    if (!r) {
+      overlay.classList.add('tour-no-target');
+      spot.classList.add('tour-spot-none');
+      card.style.left = Math.max(margin, (vw - cw) / 2) + 'px';
+      card.style.top = Math.max(margin, (vh - ch) / 2) + 'px';
+      return;
+    }
+    overlay.classList.remove('tour-no-target');
+    spot.classList.remove('tour-spot-none');
+    // A tall target (the whole nav) is clipped to the viewport so the spotlight stays on screen.
+    var top = Math.max(4, r.top - pad), bottom = Math.min(vh - 4, r.bottom + pad);
+    spot.style.left = (r.left - pad) + 'px';
+    spot.style.top = top + 'px';
+    spot.style.width = (r.width + pad * 2) + 'px';
+    spot.style.height = (bottom - top) + 'px';
+    var left, y;
+    if (r.right + gap + cw + margin <= vw && r.width < vw / 3) {
+      // Room to the right of a narrow target (anything in the sidebar): sit beside it.
+      left = r.right + pad + gap;
+      y = Math.min(Math.max(margin, r.top), vh - ch - margin);
+    } else {
+      left = Math.min(Math.max(margin, r.left + r.width / 2 - cw / 2), vw - cw - margin);
+      if (r.bottom + pad + gap + ch + margin <= vh) y = r.bottom + pad + gap;
+      else if (r.top - pad - gap - ch >= margin) y = r.top - pad - gap - ch;
+      else y = vh - ch - margin;
+    }
+    card.style.left = left + 'px';
+    card.style.top = y + 'px';
+  }
+
+  function tourGo(delta) {
+    if (!tourState) return;
+    var n = tourState.i + delta;
+    if (n < 0) return;
+    if (n >= tourState.tour.steps.length) { endTour(); return; }
+    tourState.i = n;
+    renderTourStep();
+  }
+
+  document.addEventListener('click', function (e) {
+    var start = e.target.closest('[data-start-tour]');
+    if (start) { startTour(start.getAttribute('data-start-tour')); return; }
+    if (!tourState) return;
+    if (e.target.closest('[data-tour-next]')) tourGo(1);
+    else if (e.target.closest('[data-tour-back]')) tourGo(-1);
+    else if (e.target.closest('[data-tour-skip]')) endTour();
+  });
+  // Capture phase, so Escape/arrows drive the tour and never also reach a handler underneath.
+  document.addEventListener('keydown', function (e) {
+    if (!tourState) return;
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); endTour(); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); e.stopPropagation(); tourGo(1); }
+    else if (e.key === 'ArrowLeft') { e.preventDefault(); e.stopPropagation(); tourGo(-1); }
+    else if (e.key === 'Tab') {
+      // Keep focus inside the card while the page behind it is dimmed.
+      var btns = Array.prototype.slice.call(document.querySelectorAll('#tour-card button'));
+      if (!btns.length) return;
+      var idx = btns.indexOf(document.activeElement);
+      e.preventDefault();
+      btns[(idx + (e.shiftKey ? btns.length - 1 : 1) + btns.length) % btns.length].focus();
+    }
+  }, true);
+  window.addEventListener('resize', positionTourStep);
+  document.getElementById('btn-take-tour').addEventListener('click', function () {
+    document.getElementById('user-menu-panel').classList.add('hidden');
+    startTour('welcome');
+  });
 
   var VIEW_LABELS = { board: 'Board', gantt: 'Timeline', calendar: 'Calendar', people: 'People', projects: 'Projects', chat: 'Chat', wip: 'WIP Meeting', activity: 'Activity', suggestions: 'Suggestions', archived: 'Archived', updates: 'New Updates' };
 
@@ -13221,6 +13555,9 @@
       // see applyDefaultTeamspaceOnce; it calls setTeamspace, which renders on its own.
       applyDefaultTeamspaceOnce();
       maybePromptDepartment();
+      // After the department prompt, never alongside it: maybeStartTour waits while any modal
+      // (that one included) is open.
+      maybeStartTour();
       // Full re-render (renderAll -> renderCurrentSecondaryView already covers the Chat tab's
       // online strip too, so a heartbeat write shows up there immediately, not just on the 30s
       // aging-out tick): this collection now carries personal leave as well as the roster, and
@@ -13463,7 +13800,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T16:05:02Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T16:13:34Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

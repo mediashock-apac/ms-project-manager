@@ -145,6 +145,47 @@ Both paths run the same script, so there's one place to fix if the markup ever c
 **Add a `CHANGELOG` entry for anything the team would notice** (see "New Updates" below). A
 release nobody wrote up never lights the sidebar item, so the team never hears about it.
 
+## Guided tours (onboarding + new features)
+
+Asked for directly: a tutorial that walks new users through the platform, short tours that
+introduce new major features, easy to follow, not long, and skippable. Then, right after: **"the
+tutorial should auto update on new features"** — so feature tours are generated, not hand-written.
+
+- **One engine, in-house** (`TOURS`, `startTour`, `renderTourStep`, `positionTourStep` in
+  index.html, next to `CHANGELOG`). A spotlight box whose huge spread `box-shadow` dims everything
+  else, plus a card with "N of M", progress dots, Back / Next (Done, or "Got it" on a one-step
+  tour) and Skip tour. Escape skips, arrow keys step, Tab stays in the card. No library — same
+  single-file rule as everything else here.
+- **Welcome tour: 7 steps, under a minute** — Add Task, Focus of the Day, the views, teamspace,
+  the bell/This Week, the profile menu (where it can be replayed). Keep it that short.
+- **Who sees what is decided by the account's creation time** (`auth.currentUser.metadata.
+  creationTime`, i.e. first sign-in), so nobody is asked anything:
+  - welcome: accounts created on/after `TOURS_LAUNCH` (2026-10-06). Teammates already using the
+    app when tours shipped don't get a beginner tour; they got the one-step `tours-intro` instead.
+  - a feature tour: accounts created *before* its date, and only within `FEATURE_TOUR_AUTO_DAYS`
+    (60) of it, oldest first, **one per visit** — several features never arrive as one long tour.
+  - starting the welcome tour marks every tour seen, so a new joiner never gets a queue.
+- **Auto-updating: give a `CHANGELOG` item a `tourTarget`** (a CSS selector) and that release
+  becomes feature tour `cl-<release id>` (one step per targeted item, the item's own title and
+  text), gets a "Show me" on New Updates, and — while it is under `WELCOME_FEATURE_DAYS` (90) old
+  — is folded into the welcome tour just before its last step, capped at `WELCOME_FEATURE_MAX` (3)
+  so the welcome tour stays short as features pile up. **Use `tourTarget` only for a major feature
+  someone could miss**, and only on something visible from any view (sidebar, header, toolbar):
+  the tour does not switch views. Small fixes stay plain notes.
+- **Read tracking**: `people/{uid}.toursSeen` (array; your own doc, so no rules change) plus
+  `localStorage` `flowboard_tours_seen`; the union counts. Marked seen when a tour *starts*, so a
+  reload mid-tour doesn't replay it.
+- **Timing**: `maybeStartTour()` runs from the `people` snapshot right after
+  `maybePromptDepartment()`, waits for your own roster row (so a tour seen on another device isn't
+  replayed before `toursSeen` arrives), and retries every 3s while any modal is open or you are
+  typing — the department prompt always goes first.
+- **A missing or off-screen target falls back to a centred card** (e.g. sidebar steps on a phone,
+  where the sidebar is an off-canvas drawer), so a step never points at nothing.
+- **Replay**: profile menu → "Take the tour", or "Show me" on a New Updates item.
+- Verified in Chromium against the real markup with Firebase stubbed (24 checks: who gets which
+  tour, every step's card on screen at 1440×900, auto-derived tour and welcome folding, mobile
+  fallback, Escape/Skip, waits for a modal). Not yet clicked through signed in on the live app.
+
 ## New Updates (the changelog tab)
 
 Asked for directly: a sidebar tab with "a simple to understand changelog of features that are
@@ -3093,7 +3134,10 @@ the project rows were leaving most of their width empty. **Two columns only from
 (`min-[1400px]:`, Tailwind CDN 3.4 arbitrary variant): below that the task rows' fixed columns
 (owner/status/due/+Status ≈ 28rem) would squeeze task names, so the card stacks under the
 projects. It reads the 1/2/4-week window, otherwise unused in By project. Both views share
-`wipAwayRows`.
+`wipAwayRows`. **24rem, not 19rem, and the dates/note line wraps instead of truncating**: at
+19rem the "Away now" badge squeezed the first row's note to "Hos…" (reported from a screenshot,
+"there is enough space"). The wider column fixes the common case; wrapping guarantees a long
+note is never cut off.
 
 **Status per task, client contact and key links** (from the Suits "WIP Tracker" sheet's Status /
 Client contact / Key links columns).
