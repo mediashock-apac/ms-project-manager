@@ -328,7 +328,41 @@
     #btn-import:hover > svg { animation: nav-hop 0.45s ease; }
   }
 
+  /* A teammate's edit landing live: a brief brand tint plus a left edge on the row that changed,
+     so on a shared board you can see WHAT moved. Box-shadow only, so it never fights the row's
+     own background (Done green, hover). See noteRemoteTaskChanges / remoteFlashAttrs. */
+  @keyframes remote-change-flash {
+    0%, 15% { box-shadow: inset 3px 0 0 #ff4e20, inset 0 0 0 999px rgba(255,78,32,0.14); }
+    100% { box-shadow: inset 3px 0 0 rgba(255,78,32,0), inset 0 0 0 999px rgba(255,78,32,0); }
+  }
+  .remote-change-flash { animation: remote-change-flash 2.6s ease-out both; }
+
+  /* "Saved" confirmation for edits that save on their own (WIP Meeting's inline fields), which
+     otherwise gave no sign the write worked. One body-level pill, see showSavedTick. */
+  .saved-tick {
+    position: fixed; z-index: 60; pointer-events: none; display: flex; align-items: center; gap: 4px;
+    padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600;
+    background: #ecfdf5; color: #047857; box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+    animation: saved-tick 1.6s ease both;
+  }
+  .dark .saved-tick { background: #064e3b; color: #6ee7b7; }
+  @keyframes saved-tick {
+    0% { opacity: 0; transform: translateY(3px) scale(0.9); }
+    15% { opacity: 1; transform: none; }
+    75% { opacity: 1; transform: none; }
+    100% { opacity: 0; transform: translateY(-3px); }
+  }
+
+  /* Sections that unfold (WIP projects, Needs a decision, Contact & links, Projects cards,
+     Timeline checklist rows) fade in on OPEN only -- closing stays instant, the same open-only
+     rule the modals and menus follow. expand-fade (no transform) is for sticky Timeline cells. */
+  @keyframes expand-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+  @keyframes expand-fade { from { opacity: 0; } to { opacity: 1; } }
+  .expand-in { animation: expand-in 0.22s ease-out; }
+  .expand-fade { animation: expand-fade 0.22s ease-out; }
+
   @media (prefers-reduced-motion: reduce) {
+    .remote-change-flash, .saved-tick, .expand-in, .expand-fade,
     .updates-pulse, .updates-unread:not(.active), .updates-unread:not(.active)::after, .updates-unread:not(.active) > svg,
     .task-just-completed, .done-today-bounce, .modal-backdrop, .modal-pop-in, .panel-pop-in,
     .checklist-just-checked, .bell-nudge, .chat-message-enter, .chat-receipt-flip,
@@ -5093,7 +5127,7 @@
     if (!btn) return;
     e.preventDefault();
     var id = btn.getAttribute('data-gantt-expand');
-    if (ganttExpanded[id]) delete ganttExpanded[id]; else ganttExpanded[id] = true;
+    if (ganttExpanded[id]) delete ganttExpanded[id]; else { ganttExpanded[id] = true; markJustOpened('gantt:' + id); }
     if (currentView === 'gantt') renderGantt();
     else if (currentView === 'wip') renderWipView();
   });
@@ -5314,6 +5348,54 @@
   // actually paints the card; lastDoneTodayCount lets the header badge bounce only when the count
   // just went UP, not on every unrelated board re-render.
   var justCompletedIds = {};
+
+  // A teammate's edit landing live: task id -> when it arrived. A row rendered inside the window
+  // carries .remote-change-flash with a NEGATIVE animation-delay of its age, so a re-render
+  // mid-flash (presence heartbeat, someone else's snapshot) continues the fade instead of
+  // restarting it. Only changes from OTHER clients count: our own writes arrive first with
+  // hasPendingWrites, and the server's ack raises no new snapshot for this default listener.
+  var remoteChangedAt = {};
+  var REMOTE_FLASH_MS = 2600;
+  var tasksSnapshotSeen = false;
+  function noteRemoteTaskChanges(snap) {
+    if (!tasksSnapshotSeen) { tasksSnapshotSeen = true; return; }   // the initial load is not "a change"
+    var changed = snap.docChanges().filter(function (c) { return c.type !== 'removed' && !c.doc.metadata.hasPendingWrites; });
+    // A bulk write (import, Archive completed) would light up the whole board -- noise, not news.
+    if (!changed.length || changed.length > 8) return;
+    var now = Date.now();
+    changed.forEach(function (c) { remoteChangedAt[c.doc.id] = now; });
+  }
+  function remoteFlashAttrs(id) {
+    var at = remoteChangedAt[id];
+    if (!at) return { cls: '', style: '' };
+    var age = Date.now() - at;
+    if (age >= REMOTE_FLASH_MS) { delete remoteChangedAt[id]; return { cls: '', style: '' }; }
+    return { cls: ' remote-change-flash', style: ' style="animation-delay:-' + age + 'ms"' };
+  }
+
+  // Sections that unfold get .expand-in for a moment after being opened (see the CSS). Keyed,
+  // and time-boxed rather than consumed, so whichever render actually paints it gets the class.
+  var justOpenedAt = {};
+  function markJustOpened(key) { justOpenedAt[key] = Date.now(); }
+  function openAnimClass(key, fadeOnly) {
+    var at = justOpenedAt[key];
+    if (!at) return '';
+    if (Date.now() - at > 400) { delete justOpenedAt[key]; return ''; }
+    return fadeOnly ? ' expand-fade' : ' expand-in';
+  }
+
+  // Small "Saved" pill beside an edit that saves on its own. Positioned from the edited field's
+  // rect captured BEFORE the save re-renders it away; body-level and fixed, like the tooltips.
+  function showSavedTick(rect) {
+    if (!rect || rect.bottom < 0 || rect.top > window.innerHeight) return;
+    var el = document.createElement('div');
+    el.className = 'saved-tick';
+    el.innerHTML = svgIcon('checkTick', 'w-3 h-3') + 'Saved';
+    el.style.top = Math.max(4, rect.top + rect.height / 2 - 10) + 'px';
+    el.style.left = Math.max(4, Math.min(rect.right + 8, window.innerWidth - 76)) + 'px';
+    document.body.appendChild(el);
+    setTimeout(function () { el.remove(); }, 1700);
+  }
   var lastDoneTodayCount = null;
 
   // Same pattern as justCompletedIds above, scoped to checklist item ids instead of task ids --
@@ -7314,6 +7396,7 @@
     if (expandBtn) {
       var expName = expandBtn.getAttribute('data-project');
       projectExpanded[expName] = !projectExpanded[expName];
+      if (projectExpanded[expName]) markJustOpened('proj:' + expName);
       renderProjects();
       return;
     }
@@ -8569,13 +8652,15 @@
     var days = urgency.days, overdue = urgency.overdue, dueSoon = urgency.dueSoon;
     var dateClass = overdue ? 'text-rose-600 dark:text-rose-400 font-semibold' : (dueSoon ? 'text-violet-600 dark:text-violet-400 font-semibold' : 'text-zinc-500 dark:text-zinc-400');
     var justCompleted = !!justCompletedIds[t.id];
+    // The completion pulse wins over the teammate flash: both are animations on the same row.
+    var flash = justCompleted ? { cls: '', style: '' } : remoteFlashAttrs(t.id);
     var timeMinutes = taskTimeMinutes(t);
     // Same green-wash-on-Done signal the old card had, just on a row instead of a card -- kept
     // deliberately, since it was its own explicit request separate from this grouping change.
     var rowBg = isDone ? 'bg-emerald-50 dark:bg-emerald-500/10' : 'bg-white dark:bg-zinc-800';
 
     return (
-      '<div data-task-id="' + t.id + '" data-open-task="' + t.id + '" class="task-card ' + rowBg + ' flex flex-col px-3.5 py-3 cursor-pointer group hover:bg-zinc-50 dark:hover:bg-zinc-700/40 transition' + (justCompleted ? ' task-just-completed' : '') + '">' +
+      '<div data-task-id="' + t.id + '" data-open-task="' + t.id + '" class="task-card ' + rowBg + ' flex flex-col px-3.5 py-3 cursor-pointer group hover:bg-zinc-50 dark:hover:bg-zinc-700/40 transition' + (justCompleted ? ' task-just-completed' : '') + flash.cls + '"' + flash.style + '>' +
         // The action buttons share a line with the task name only. They used to sit in a column
         // beside the entire row, which squeezed the meta lines under them into ~100px less width
         // than the card actually has, for nothing: the buttons are 24px tall and everything below
@@ -9093,9 +9178,10 @@
       if (expanded) ganttChecklistItems(t).forEach(function (item, k) {
         var itemRow = rowCursor++;
         var key = r + '-' + k;
-        html += '<div class="sticky left-0 z-20 bg-white dark:bg-zinc-800 border-b border-r border-zinc-100 dark:border-zinc-700 flex items-center gap-1.5 pl-9 pr-3 overflow-hidden text-xs whitespace-nowrap" data-gantt-row="' + key + '" style="grid-column:1;grid-row:' + itemRow + ';">' + ganttItemLabelHtml(t, item) + '</div>';
+        var itemAnim = openAnimClass('gantt:' + t.id, true);
+        html += '<div class="sticky left-0 z-20 bg-white dark:bg-zinc-800 border-b border-r border-zinc-100 dark:border-zinc-700 flex items-center gap-1.5 pl-9 pr-3 overflow-hidden text-xs whitespace-nowrap' + itemAnim + '" data-gantt-row="' + key + '" style="grid-column:1;grid-row:' + itemRow + ';">' + ganttItemLabelHtml(t, item) + '</div>';
         html += '<div class="gantt-pct sticky z-20 bg-white dark:bg-zinc-800 border-b border-r border-zinc-100 dark:border-zinc-700" data-gantt-row="' + key + '" style="left:' + GANTT_LABEL_WIDTH + 'px;grid-column:2;grid-row:' + itemRow + ';"></div>';
-        html += '<div class="relative border-b border-zinc-100 dark:border-zinc-700/60" data-gantt-row="' + key + '" style="grid-column:3 / -1;grid-row:' + itemRow + ';">';
+        html += '<div class="relative border-b border-zinc-100 dark:border-zinc-700/60' + itemAnim + '" data-gantt-row="' + key + '" style="grid-column:3 / -1;grid-row:' + itemRow + ';">';
         var due = item.due && parseDate(item.due);
         if (due && due >= rangeStart && due <= rangeEnd) {
           var dLeft = daysBetween(rangeStart, due) * dayWidth + dayWidth / 2 - 5;
@@ -9904,7 +9990,7 @@
             '</button>' +
           '</div>' +
         '</div>' +
-        (expanded ? '<div class="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-700 flex-1">' + rowsHtml + '</div>' : '') +
+        (expanded ? '<div class="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-700 flex-1' + openAnimClass('proj:' + p.name) + '">' + rowsHtml + '</div>' : '') +
       '</div>'
     );
   }
@@ -11182,7 +11268,7 @@
           var pos = (daysBetween(rangeStart, parseDate(item.due)) + 0.5) / n * 100;
           diamond = '<span data-open-task="' + t.id + '" title="' + escapeHtml(item.text + ' · due ' + formatShortDate(item.due) + (item.done ? ' · done' : '')) + '" class="absolute w-2.5 h-2.5 rotate-45 cursor-pointer ring-2 ring-white dark:ring-zinc-800 ' + ganttItemDiamondColor(t, item) + '" style="left:calc(' + pos + '% - 5px);top:calc(50% - 5px);"></span>';
         }
-        return '<div class="flex border-b border-zinc-50 dark:border-zinc-700/50" data-gantt-row="w' + wr + '-' + k + '">' +
+        return '<div class="flex border-b border-zinc-50 dark:border-zinc-700/50' + openAnimClass('gantt:' + t.id) + '" data-gantt-row="w' + wr + '-' + k + '">' +
           '<div class="shrink-0 pl-9 pr-3 min-w-0 border-r border-zinc-100 dark:border-zinc-700 flex items-center gap-1.5 text-xs whitespace-nowrap overflow-hidden" style="width:' + LABEL_W + ';height:' + GANTT_ITEM_ROW_HEIGHT + 'px;">' + ganttItemLabelHtml(t, item, true) + '</div>' +
           '<div class="relative flex-1 min-w-0">' + diamond + '</div>' +
         '</div>';
@@ -11430,7 +11516,7 @@
       ? '<span class="flex items-center gap-1.5 flex-wrap"><input data-wip-field="label" data-wip-autofocus placeholder="Label" class="' + wipInputCls('w-32') + '" value="' + escapeHtml(wipDraft.label || '') + '">' +
           '<input data-wip-field="url" placeholder="https://…" class="' + wipInputCls('w-56') + '" value="' + escapeHtml(wipDraft.url || '') + '">' + wipEditorButtons(name) + '</span>'
       : '<button type="button" data-wip-act="add-link" data-project="' + en + '" class="' + WIP_ACT_BTN + '">+ Link</button>';
-    return '<div class="px-4 py-2 flex items-center gap-x-3 gap-y-1 flex-wrap bg-zinc-50/60 dark:bg-zinc-700/20 border-b border-zinc-100 dark:border-zinc-700/60">' +
+    return '<div class="px-4 py-2 flex items-center gap-x-3 gap-y-1 flex-wrap bg-zinc-50/60 dark:bg-zinc-700/20 border-b border-zinc-100 dark:border-zinc-700/60' + openAnimClass('wipdet:' + name) + '">' +
       contactHtml + linksHtml + linkEditor + '</div>';
   }
 
@@ -11457,6 +11543,8 @@
   function wipSaveEdit(name) {
     if (!wipEdit) return;
     var e = wipEdit, d = wipDraft, p;
+    var field = document.querySelector('#view-wip [data-wip-autofocus]');
+    var fieldRect = field ? (field.parentElement || field).getBoundingClientRect() : null;
     var done = function () { wipEdit = null; wipDraft = {}; renderWipView(); };
     if (e.kind === 'contact') {
       p = setProjectClientContact(name, (d.contact != null ? d.contact : ((projectDeadlineDoc(name) || {}).clientContact || '')).trim());
@@ -11503,7 +11591,7 @@
       if (!text) { showToast('Write the status first', 'info'); return; }
       p = e.id === '__new' ? addTaskStatus(task, date, text) : editTaskStatus(task, e.id, date, text);
     }
-    if (p) p.then(done, function () { /* toast already shown; keep the draft */ });
+    if (p) p.then(function () { done(); showSavedTick(fieldRect); }, function () { /* toast already shown; keep the draft */ });
   }
 
   function wipProjectsHtml(open, today) {
@@ -11578,7 +11666,8 @@
           (!statusHtml ? wipAddStatusIconHtml(t.id) : '') +
         '</span>';
 
-        return '<div class="px-4 py-2.5 flex flex-col gap-1.5">' +
+        var wipFlash = remoteFlashAttrs(t.id);
+        return '<div class="px-4 py-2.5 flex flex-col gap-1.5' + wipFlash.cls + '"' + wipFlash.style + '>' +
           '<div class="flex items-center gap-3">' +
             '<button type="button" data-open-task="' + t.id + '" class="group min-w-0 flex-1 flex items-center gap-3 text-left">' +
               '<span class="min-w-0 flex-1 truncate text-sm font-medium text-zinc-800 dark:text-zinc-100 group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</span>' +
@@ -11650,8 +11739,8 @@
           detailsBtn +
         '</div>' +
         catPicker +
-        (folded ? '' : (name ? wipProjectInfoHtml(name, list.length) + wipProjectDetailsHtml(name) : '') +
-          '<div class="divide-y divide-zinc-100 dark:divide-zinc-700/50">' + rows + delivRows + (name ? wipNewDeliverableHtml(name) : '') + '</div>') +
+        (folded ? '' : '<div class="' + openAnimClass('wipproj:' + name).trim() + '">' + (name ? wipProjectInfoHtml(name, list.length) + wipProjectDetailsHtml(name) : '') +
+          '<div class="divide-y divide-zinc-100 dark:divide-zinc-700/50">' + rows + delivRows + (name ? wipNewDeliverableHtml(name) : '') + '</div></div>') +
       '</div>';
     });
 
@@ -11718,7 +11807,7 @@
       if (kind === 'edit-dnext') { wipDraft = {}; wipEdit = { project: proj, kind: 'dnext' }; renderWipView(); return; }
       if (kind === 'toggle-updates') { if (wipUpdatesExpanded[proj]) delete wipUpdatesExpanded[proj]; else wipUpdatesExpanded[proj] = true; renderWipView(); return; }
       if (kind === 'toggle-details') {
-        if (wipDetailsOpen[proj]) delete wipDetailsOpen[proj]; else wipDetailsOpen[proj] = true;
+        if (wipDetailsOpen[proj]) delete wipDetailsOpen[proj]; else { wipDetailsOpen[proj] = true; markJustOpened('wipdet:' + proj); }
         if (wipEdit && wipEdit.project === proj && (wipEdit.kind === 'contact' || wipEdit.kind === 'link')) { wipEdit = null; wipDraft = {}; }
         renderWipView();
         return;
@@ -11735,13 +11824,14 @@
       var allFolded = wipProjectNamesShown.every(function (n) { return !!wipProjectFolded[n]; });
       wipProjectFolded = {};
       if (!allFolded) wipProjectNamesShown.forEach(function (n) { wipProjectFolded[n] = true; });
+      else wipProjectNamesShown.forEach(function (n) { markJustOpened('wipproj:' + n); });
       renderWipView();
       return;
     }
     var fold = e.target.closest('[data-wip-fold]');
     if (fold) {
       var n = fold.getAttribute('data-wip-fold');
-      if (wipProjectFolded[n]) delete wipProjectFolded[n]; else wipProjectFolded[n] = true;
+      if (wipProjectFolded[n]) { delete wipProjectFolded[n]; markJustOpened('wipproj:' + n); } else wipProjectFolded[n] = true;
       renderWipView();
       return;
     }
@@ -11767,6 +11857,7 @@
   document.getElementById('wip-alerts').addEventListener('click', function (e) {
     if (!e.target.closest('[data-wip-alerts-toggle]')) return;
     wipAlertsOpen = !wipAlertsOpen;
+    if (wipAlertsOpen) markJustOpened('wipalerts');
     renderWipView();
   });
   document.querySelectorAll('[data-wip-mode]').forEach(function (btn) {
@@ -11820,7 +11911,7 @@
               '<span class="text-xs text-amber-700/80 dark:text-amber-300/80">' + Object.keys(kinds).map(function (k) { return k + ' ' + kinds[k]; }).join(' · ') + '</span>' +
             '</button>' +
             (wipAlertsOpen
-              ? '<div class="bg-white dark:bg-zinc-800 border-t border-amber-200 dark:border-amber-500/30 divide-y divide-zinc-100 dark:divide-zinc-700">' + alerts.map(wipAlertRowHtml).join('') + '</div>'
+              ? '<div class="bg-white dark:bg-zinc-800 border-t border-amber-200 dark:border-amber-500/30 divide-y divide-zinc-100 dark:divide-zinc-700' + openAnimClass('wipalerts') + '">' + alerts.map(wipAlertRowHtml).join('') + '</div>'
               : '') +
           '</div>'
         : '<p class="px-4 py-2 text-sm text-zinc-400 dark:text-zinc-500">Nothing needs a decision right now.</p>';
@@ -11877,6 +11968,11 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-05z', date: '2026-10-05', items: [
+      { type: 'improved', title: 'See what a teammate just changed', text: 'When someone else edits or moves a task while you have the board open, that task briefly glows orange on the Board and in WIP Meeting, so you can spot what changed.' },
+      { type: 'improved', title: 'A "Saved" tick in WIP Meeting', text: 'Statuses, notes, next steps, deliverables, contacts and links in WIP Meeting save on their own. A small green "Saved" now appears beside them so you know it worked.' },
+      { type: 'improved', title: 'Smoother opening sections', text: 'Projects, Needs a decision, Contact & links, project cards and Timeline checklist rows now fade in when you open them, instead of snapping open.' }
+    ] },
     { id: '2026-10-05y', date: '2026-10-05', items: [
       { type: 'improved', title: 'Livelier sidebar', text: 'The sidebar icons now move a little when you hover over them. When there is something new in New Updates, that item glows, shimmers and the megaphone rings until you open it.' }
     ] },
@@ -12763,6 +12859,8 @@
     if (chatTypingTickTimer) { clearInterval(chatTypingTickTimer); chatTypingTickTimer = null; }
     currentChatProjectName = null;
     if (unsubTasks) { unsubTasks(); unsubTasks = null; }
+    tasksSnapshotSeen = false;
+    remoteChangedAt = {};
     if (unsubActivity) { unsubActivity(); unsubActivity = null; }
     if (unsubNotifications) { unsubNotifications(); unsubNotifications = null; }
     if (unsubSuggestions) { unsubSuggestions(); unsubSuggestions = null; }
@@ -12903,6 +13001,7 @@
       });
     }
     unsubTasks = onSnapshot(tasksCol, function (snap) {
+      noteRemoteTaskChanges(snap);
       var modalOpenId = (!taskModal.classList.contains('hidden') && editingTaskId) ? editingTaskId : null;
       tasks = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
       migrateLegacyArchivedTasks(tasks);
@@ -13204,7 +13303,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T14:45:07Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T14:57:52Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

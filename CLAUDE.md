@@ -2273,6 +2273,25 @@ to bottom:
        cleared field's class list from accumulating a stale animation class it'll never need
        again until the next real failure re-adds it.
      - All seven join the existing `@media (prefers-reduced-motion: reduce)` block.
+   - **Fourth polish pass — animations that say what changed** (picked from a shortlist as the
+     ones that help UX, not just looks; all in the reduced-motion block):
+     - **A teammate's edit flashes the row** (`noteRemoteTaskChanges` in the `tasks` listener,
+       `remoteFlashAttrs`, `.remote-change-flash`) on Board rows and WIP By-project task rows.
+       Only other clients' changes count: own writes arrive with `hasPendingWrites` and the
+       server ack raises no new snapshot on this default listener. The first snapshot and any
+       snapshot touching more than 8 tasks (import, Archive completed) flash nothing. The flash
+       carries a negative `animation-delay` of its age, so a re-render mid-flash (presence
+       heartbeat) continues it instead of restarting it. The completion pulse wins if both apply.
+     - **"Saved" pill after WIP inline edits** (`showSavedTick`, `.saved-tick`), body-level and
+       `position: fixed` like the tooltips, placed from the edited field's rect captured before
+       the save re-renders it away. Only on a real write (`wipSaveEdit`'s promise), never on the
+       "nothing changed" early exits. Project deadlines already toast, so they don't get it.
+     - **Unfolding sections fade in on open only** (`markJustOpened` / `openAnimClass`,
+       `.expand-in`, `.expand-fade` for the sticky Timeline cells where a transform is unsafe):
+       WIP project fold and Expand all, Needs a decision, Contact & links, Projects cards, and
+       checklist rows on both timelines. Time-boxed (400ms) rather than consumed, so whichever
+       render actually paints the section gets the class. Closing stays instant, same open-only
+       rule as the modals.
 8. **Live listeners** — `startListeners`/`stopListeners` wire up four `onSnapshot` subscriptions
    (`tasks`, `activity`, a per-user `notifications` query, and `suggestions`), gated by
    `onAuthStateChanged`.
