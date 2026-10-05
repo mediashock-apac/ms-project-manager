@@ -371,6 +371,14 @@
   .update-banner { box-shadow: 0 12px 32px -10px rgba(0,0,0,0.45); animation: update-banner-in 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.25) both, update-banner-glow 2.2s ease-in-out 0.6s infinite; }
   .update-banner-icon svg { animation: nav-spin 0.8s ease 0.35s 1; }
 
+  /* Board rows: Drag / Archive / Delete appear on row hover, on devices that HAVE hover. Touch
+     screens keep them always visible. display (not opacity) so a long task name gets the full
+     width at rest. */
+  @media (hover: hover) and (pointer: fine) {
+    .task-card .board-row-actions { display: none; }
+    .task-card:hover .board-row-actions, .task-card:focus-within .board-row-actions { display: flex; }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .update-banner, .update-banner-icon svg,
     .remote-change-flash, .saved-tick, .expand-in, .expand-fade,
@@ -8741,6 +8749,9 @@
   function boardTaskRowHtml(t) {
     var isDone = t.status === 'Done';
     var pm = isDone ? DONE_META : (PRIORITY_META[t.priority] || PRIORITY_META.Medium);
+    // Medium is most of the board, so on the Board it's a quiet grey outline: a column of yellow
+    // MEDIUM badges hid the few HIGHs. High/Low/Completed keep their colour; other views unchanged.
+    var badgeCls = (!isDone && (t.priority || 'Medium') === 'Medium') ? 'bg-transparent text-zinc-500 ring-1 ring-inset ring-zinc-300 dark:text-zinc-400 dark:ring-zinc-600' : pm.badge;
     var urgency = dueUrgency(t);
     var days = urgency.days, overdue = urgency.overdue, dueSoon = urgency.dueSoon;
     var dateClass = overdue ? 'text-rose-600 dark:text-rose-400 font-semibold' : (dueSoon ? 'text-violet-600 dark:text-violet-400 font-semibold' : 'text-zinc-500 dark:text-zinc-400');
@@ -8763,9 +8774,10 @@
         // the same fact twice on one row (asked directly; same call the Timeline made for its dot).
         '<div class="flex items-center gap-2.5">' +
           '<p data-tooltip="' + escapeHtml(t.name) + '" class="tooltip-top min-w-0 flex-1 text-sm font-medium text-zinc-800 dark:text-zinc-100 truncate group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</p>' +
-          '<div class="flex items-center gap-0.5 shrink-0">' +
+          '<div class="board-row-actions flex items-center gap-0.5 shrink-0">' +
             '<span draggable="true" data-drag-handle title="Drag to move" aria-label="Drag to move" role="button" class="hidden sm:flex w-6 h-6 items-center justify-center rounded-md cursor-grab active:cursor-grabbing text-zinc-400 dark:text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700">' + svgIcon('grip', 'w-3.5 h-3.5') + '</span>' +
-            '<button data-edit-task="' + t.id + '" title="Edit" aria-label="Edit task" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300">' + svgIcon('pencil', 'w-3.5 h-3.5') + '</button>' +
+            // No pencil: clicking anywhere on the row opens the same task window, so it was a second
+            // control for one action. Drag/Archive/Delete show on row hover (see .board-row-actions).
             (isDone ? '<button data-archive-task="' + t.id + '" title="Archive this task" aria-label="Archive this task" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400">' + svgIcon('archive', 'w-3.5 h-3.5') + '</button>' : '') +
             '<button data-delete-task="' + t.id + '" title="Delete" aria-label="Delete task" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-rose-50 dark:hover:bg-rose-500/10 text-zinc-400 dark:text-zinc-500 hover:text-rose-500 dark:hover:text-rose-400">' + svgIcon('trash', 'w-3.5 h-3.5') + '</button>' +
           '</div>' +
@@ -8790,7 +8802,7 @@
               : '') +
           '</div>' +
           '<div class="flex items-center gap-2 mt-1.5 flex-wrap">' +
-            '<span class="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + pm.badge + '">' + (isDone ? 'Completed' : t.priority) + '</span>' +
+            '<span class="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + badgeCls + '">' + (isDone ? 'Completed' : t.priority) + '</span>' +
             '<span class="flex items-center gap-1 text-xs ' + dateClass + '">' + svgIcon('calendar', 'w-3 h-3') + (t.deadline ? formatShortDate(t.deadline) : 'TBD') + '</span>' +
             (timeMinutes ? '<span class="flex items-center gap-1 text-xs text-zinc-500 dark:text-zinc-400" title="' + formatDuration(timeMinutes) + ' logged">' + svgIcon('clock', 'w-3 h-3') + formatDuration(timeMinutes) + '</span>' : '') +
             (overdue ? '<span class="text-[10px] font-bold text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/15 px-1.5 py-0.5 rounded">OVERDUE</span>' : '') +
@@ -12084,6 +12096,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-05zf', date: '2026-10-05', items: [
+      { type: 'improved', title: 'A calmer Board', text: 'Board tasks show Drag, Archive and Delete only when you point at the task (always shown on touch screens), so long task names have room. The edit pencil is gone: click anywhere on a task to open it. MEDIUM is now a quiet grey label, so HIGH tasks stand out.' }
+    ] },
     { id: '2026-10-05zd', date: '2026-10-05', items: [
       { type: 'improved', title: 'Newest comments first', text: 'In a task, the latest comment is now at the top, with the box for writing a comment above the list. Replies still sit under the comment they answer, and a new reply brings its thread back to the top.' },
       { type: 'improved', title: 'WIP Meeting starts collapsed', text: 'In WIP Meeting\'s By project view, every project now starts folded to its title line. A folded project still shows how many of its tasks are overdue (red) or behind (amber). Click a project to open it, or use "Expand all".' }
@@ -13432,7 +13447,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T15:39:19Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T15:43:43Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

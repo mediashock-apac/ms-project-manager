@@ -695,6 +695,15 @@ to bottom:
        directly): the coloured MEDIUM/HIGH/Completed badge says the same thing at a fixed left
        position, so the meta lines lost their `pl-[18px]` indent too and everything aligns left.
        Older notes below about the dot describe the earlier design.
+       **Row actions now show on hover, and the pencil is gone** (asked: "simplify visually or
+       increase ease of use"). Clicking the row already opens the task window, so the pencil was a
+       second control for one action. Drag/Archive/Delete sit in `.board-row-actions`, hidden at rest
+       on hover-capable devices (`@media (hover: hover) and (pointer: fine)`) and shown on row hover
+       or focus-within; always visible on touch. `display`, not opacity, so long names get the full
+       width at rest. This is deliberately hover-REVEAL, not removal: an earlier removal of these
+       icons was reported as "compromising on usability". **Medium is a quiet grey outline on the
+       Board only** (`badgeCls` in `boardTaskRowHtml`) so the few HIGHs stand out from a column of
+       yellow; `PRIORITY_META` and every other view are unchanged.
        not a shrunken version of the old full task-card. Checklist/comment
        counts and the Drive-link shortcut stay dropped — reachable by opening the task
        (`data-open-task`, unchanged). Time logged (`taskTimeMinutes(t)`, clock icon +
