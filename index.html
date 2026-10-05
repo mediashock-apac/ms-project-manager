@@ -1882,9 +1882,55 @@
   }
 
   /* =========================================================
-     PROJECT UPDATES -- the Suits WIP sheet's Status / Client contact / Key links columns, kept on
-     the project's own `projects/{id}` doc: `updates` [{id, date, text, author, at, editedBy?}],
-     `clientContact` (string) and `links` -- the SAME array as the project chat's Pinned links, so
+     TASK STATUS -- the Suits WIP sheet's per-deliverable Status column, on the task itself:
+     `statusUpdates` [{id, date, text, author, at, editedBy?}], newest by date first. Edited from
+     WIP Meeting's By project view. Task update is open to the whole team (see "Who can edit what"),
+     so no rules change; the task modal saves with merge:true, so it never wipes this field.
+     Logged to Activity as a task update, since task edits are meant to be recorded there.
+  ========================================================= */
+  function taskStatusList(t) {
+    return (Array.isArray(t && t.statusUpdates) ? t.statusUpdates : []).slice().sort(function (a, b) {
+      if (a.date !== b.date) return (a.date || '') < (b.date || '') ? 1 : -1;
+      return (a.at || '') < (b.at || '') ? 1 : -1;
+    });
+  }
+  function addTaskStatus(task, date, text) {
+    var entry = { id: uid(), date: date, text: text, author: myDisplayName(), at: new Date().toISOString() };
+    return updateDoc(doc(tasksCol, task.id), { statusUpdates: arrayUnion(entry) }).then(function () {
+      logActivity('task_updated', 'Status on "' + task.name + '": ' + text, { taskId: task.id });
+    }).catch(function (err) { showToast('Could not add the status: ' + err.message, 'error'); throw err; });
+  }
+  function editTaskStatus(task, statusId, date, text) {
+    var list = (task.statusUpdates || []).map(function (u) {
+      return u.id === statusId ? Object.assign({}, u, { date: date, text: text, editedBy: myDisplayName() }) : u;
+    });
+    return updateDoc(doc(tasksCol, task.id), { statusUpdates: list }).then(function () {
+      logActivity('task_updated', 'Edited status on "' + task.name + '": ' + text, { taskId: task.id });
+    }).catch(function (err) { showToast('Could not save the status: ' + err.message, 'error'); throw err; });
+  }
+  function removeTaskStatus(task, statusId) {
+    updateDoc(doc(tasksCol, task.id), { statusUpdates: (task.statusUpdates || []).filter(function (u) { return u.id !== statusId; }) })
+      .catch(function (err) { showToast('Could not remove the status: ' + err.message, 'error'); });
+  }
+  function sanitizeImportedStatusUpdates(list) {
+    if (!Array.isArray(list)) return [];
+    return list.filter(function (u) { return u && typeof u.text === 'string' && u.text; }).slice(0, 200).map(function (u) {
+      var out = {
+        id: (typeof u.id === 'string' && u.id) ? u.id : uid(),
+        date: parseDate(u.date) ? u.date : '',
+        text: u.text.slice(0, 1000),
+        author: typeof u.author === 'string' ? u.author.slice(0, 100) : '',
+        at: typeof u.at === 'string' ? u.at : new Date().toISOString()
+      };
+      if (typeof u.editedBy === 'string' && u.editedBy) out.editedBy = u.editedBy.slice(0, 100);
+      return out;
+    });
+  }
+
+  /* =========================================================
+     PROJECT DETAILS -- the Suits WIP sheet's Client contact / Key links columns, kept on the
+     project's own `projects/{id}` doc: `clientContact` (string) and `links` -- the SAME array as
+     the project chat's Pinned links, so
      a link added in either place shows in both. Anyone on the team can add, edit or remove
      (asked for: "1B"); no rules change -- `projects` update only guards `chat`. Money columns
      (cost, PO, quotation, invoice) deliberately stay in the sheet. Not logged to Activity, same
@@ -1898,27 +1944,6 @@
   function myDisplayName() {
     var u = auth.currentUser;
     return u ? (u.displayName || u.email) : 'unknown';
-  }
-  function addProjectUpdate(name, date, text) {
-    var entry = { id: uid(), date: date, text: text, author: myDisplayName(), at: new Date().toISOString() };
-    return ensureProjectDoc(name).then(function (id) {
-      return updateDoc(doc(projectsCol, id), { updates: arrayUnion(entry) });
-    }).catch(function (err) { showToast('Could not add the update: ' + err.message, 'error'); throw err; });
-  }
-  function editProjectUpdate(name, updateId, date, text) {
-    var pdoc = projectDeadlineDoc(name);
-    if (!pdoc) return Promise.resolve();
-    var list = (pdoc.updates || []).map(function (u) {
-      return u.id === updateId ? Object.assign({}, u, { date: date, text: text, editedBy: myDisplayName() }) : u;
-    });
-    return updateDoc(doc(projectsCol, pdoc.id), { updates: list })
-      .catch(function (err) { showToast('Could not save the update: ' + err.message, 'error'); throw err; });
-  }
-  function removeProjectUpdate(name, updateId) {
-    var pdoc = projectDeadlineDoc(name);
-    if (!pdoc) return;
-    updateDoc(doc(projectsCol, pdoc.id), { updates: (pdoc.updates || []).filter(function (u) { return u.id !== updateId; }) })
-      .catch(function (err) { showToast('Could not remove the update: ' + err.message, 'error'); });
   }
   function setProjectClientContact(name, value) {
     return ensureProjectDoc(name).then(function (id) {
@@ -10977,21 +11002,23 @@
   var wipStepsExpanded = {};
   var WIP_STEPS_SHOWN = 3;
 
-  // Status strip under each project's header on By project (data: PROJECT UPDATES). It is the
-  // one editable thing in a project's walkthrough, so it gets its own tinted band with a brand
-  // edge -- it shipped as a plain row the same colour as the task rows and was reported as having
-  // no contrast. Shows the latest WIP_UPDATES_SHOWN status line (older behind "Show N earlier");
-  // clicking a line's text edits it, so editing works on a shared screen without hover.
-  // Client contact and key links are NOT on this line: they sit behind "Contact & links", shown
-  // only to Suits members and admins (wipCanSeeDetails). That is display only, not a boundary --
-  // the fields live on the project doc everyone can read, and links double as the chat's Pinned
-  // links. One inline editor at a time (wipEdit); drafts live in wipDraft so a live re-render
-  // from someone else's save doesn't wipe what's being typed.
+  // Status lives on each TASK (the deliverable), like the Status column of the Suits sheet -- one
+  // status per row. It briefly lived on the project as one strip under the header and was
+  // reported back ("Status should be in each task. Not like this"). Data: TASK STATUS.
+  // A task with a status shows its latest line in a tinted band (brand tint + brand left edge, the
+  // contrast that was asked for); older lines behind "Show N earlier". Clicking the text edits it,
+  // so it works on a shared screen with no hover. A task with none shows a quiet "+ Status" at the
+  // end of its row, in a fixed-width slot so the due dates still line up down the list.
+  // Client contact and key links sit behind "Contact & links" on the project header, shown only to
+  // Suits members and admins (wipCanSeeDetails). Display only, not a boundary -- the fields live on
+  // the project doc everyone can read, and links double as the chat's Pinned links.
+  // One inline editor at a time (wipEdit); drafts live in wipDraft so a live re-render from someone
+  // else's save doesn't wipe what's being typed.
   var WIP_UPDATES_SHOWN = 1;
-  var wipEdit = null;            // {project, kind: 'update'|'contact'|'link', id?}
+  var wipEdit = null;            // {project, kind: 'tstatus'|'contact'|'link', id?}  (tstatus: project = task id)
   var wipDraft = {};
-  var wipUpdatesExpanded = {};
-  var wipDetailsOpen = {};       // session-only: which projects have Contact & links opened
+  var wipUpdatesExpanded = {};   // task id -> showing every status line
+  var wipDetailsOpen = {};       // project name -> Contact & links open (session-only)
   var wipProjectNamesShown = []; // for Collapse all / Expand all
 
   function wipCanSeeDetails() {
@@ -11011,81 +11038,73 @@
       '<button type="button" data-wip-act="cancel" class="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200">Cancel</button>';
   }
 
-  function wipProjectInfoHtml(name) {
-    var pdoc = projectDeadlineDoc(name) || {};
-    var en = escapeHtml(name);
-    var updates = (pdoc.updates || []).slice().sort(function (a, b) {
-      if (a.date !== b.date) return (a.date || '') < (b.date || '') ? 1 : -1;
-      return (a.at || '') < (b.at || '') ? 1 : -1;
-    });
-    var links = pdoc.links || [];
-    var contact = pdoc.clientContact || '';
-    var actBtn = 'text-xs font-semibold text-zinc-500 dark:text-zinc-400 hover:text-brand-600 dark:hover:text-brand-400';
+  var WIP_ACT_BTN = 'text-xs font-semibold text-zinc-500 dark:text-zinc-400 hover:text-brand-600 dark:hover:text-brand-400';
 
-    // Contact & links: Suits/admins only, and only once opened.
-    var canDetails = wipCanSeeDetails();
-    var detailsOpen = canDetails && (!!wipDetailsOpen[name] || wipIsEditing(name, 'contact') || wipIsEditing(name, 'link'));
-    var detailsCount = (contact ? 1 : 0) + links.length;
-    var detailsBtn = canDetails
-      ? '<button type="button" data-wip-act="toggle-details" data-project="' + en + '" aria-expanded="' + detailsOpen + '" class="' + actBtn + (detailsOpen ? ' !text-brand-600 dark:!text-brand-400' : '') + '">Contact &amp; links' +
-          (detailsCount ? ' (' + detailsCount + ')' : '') + '</button>'
-      : '';
-    var detailsHtml = '';
-    if (detailsOpen) {
-      var contactHtml = wipIsEditing(name, 'contact')
-        ? '<span class="flex items-center gap-1.5"><input data-wip-field="contact" data-wip-autofocus placeholder="Client contact" class="' + wipInputCls('w-44') + '" value="' + escapeHtml(wipDraft.contact != null ? wipDraft.contact : contact) + '">' + wipEditorButtons(name) + '</span>'
-        : contact
-          ? '<span class="text-xs text-zinc-500 dark:text-zinc-400">Client: <button type="button" data-wip-act="edit-contact" data-project="' + en + '" title="Edit client contact" class="font-medium text-zinc-700 dark:text-zinc-200 hover:text-brand-600 dark:hover:text-brand-400">' + escapeHtml(contact) + '</button></span>'
-          : '<button type="button" data-wip-act="edit-contact" data-project="' + en + '" class="' + actBtn + '">+ Client contact</button>';
-      var linksHtml = links.map(function (l) {
-        return '<span class="group/link inline-flex items-center gap-1 text-xs">' +
-          '<a href="' + escapeHtml(l.url) + '" target="_blank" rel="noopener noreferrer" class="text-emerald-600 dark:text-emerald-400 hover:underline">' + escapeHtml(l.label || l.url) + '</a>' +
-          '<button type="button" data-wip-act="remove-link" data-project="' + en + '" data-id="' + escapeHtml(l.id) + '" title="Remove link" class="opacity-0 group-hover/link:opacity-100 text-zinc-400 hover:text-rose-500">&times;</button>' +
-        '</span>';
-      }).join('');
-      var linkEditor = wipIsEditing(name, 'link')
-        ? '<span class="flex items-center gap-1.5 flex-wrap"><input data-wip-field="label" data-wip-autofocus placeholder="Label" class="' + wipInputCls('w-32') + '" value="' + escapeHtml(wipDraft.label || '') + '">' +
-            '<input data-wip-field="url" placeholder="https://…" class="' + wipInputCls('w-56') + '" value="' + escapeHtml(wipDraft.url || '') + '">' + wipEditorButtons(name) + '</span>'
-        : '<button type="button" data-wip-act="add-link" data-project="' + en + '" class="' + actBtn + '">+ Link</button>';
-      detailsHtml = '<div class="flex items-center gap-x-3 gap-y-1 flex-wrap pt-1.5 border-t border-brand-200/70 dark:border-brand-500/20">' +
-        contactHtml + linksHtml + linkEditor + '</div>';
-    }
+  function wipStatusEditorHtml(taskId, date, text) {
+    return '<div class="flex items-center gap-1.5 flex-wrap">' +
+      '<input type="date" data-wip-field="date" class="' + wipInputCls('[color-scheme:light] dark:[color-scheme:dark]') + '" value="' + escapeHtml(date) + '">' +
+      '<input data-wip-field="text" data-wip-autofocus placeholder="Where this is at, or what\'s next" class="' + wipInputCls('flex-1 min-w-[12rem]') + '" value="' + escapeHtml(text) + '">' +
+      wipEditorButtons(taskId) + '</div>';
+  }
 
-    // Status lines, newest first. Clicking the text edits it.
-    var showAll = !!wipUpdatesExpanded[name];
-    var shown = showAll ? updates : updates.slice(0, WIP_UPDATES_SHOWN);
-    var updatesHtml = shown.map(function (u) {
-      if (wipIsEditing(name, 'update', u.id)) {
-        return '<div class="flex items-center gap-1.5 flex-wrap">' +
-          '<input type="date" data-wip-field="date" class="' + wipInputCls('[color-scheme:light] dark:[color-scheme:dark]') + '" value="' + escapeHtml(wipDraft.date || u.date || '') + '">' +
-          '<input data-wip-field="text" data-wip-autofocus class="' + wipInputCls('flex-1 min-w-[12rem]') + '" value="' + escapeHtml(wipDraft.text != null ? wipDraft.text : u.text) + '">' + wipEditorButtons(name) + '</div>';
+  // The tinted status band under a task's line. '' when the task has no status and none is being added.
+  function wipTaskStatusHtml(t) {
+    var list = taskStatusList(t);
+    var adding = wipIsEditing(t.id, 'tstatus', '__new');
+    if (!list.length && !adding) return '';
+    var showAll = !!wipUpdatesExpanded[t.id];
+    var shown = showAll ? list : list.slice(0, WIP_UPDATES_SHOWN);
+    var lines = shown.map(function (u, i) {
+      if (wipIsEditing(t.id, 'tstatus', u.id)) {
+        return wipStatusEditorHtml(t.id, wipDraft.date || u.date || '', wipDraft.text != null ? wipDraft.text : u.text);
       }
+      var controls = i === 0 && !adding
+        ? '<span class="shrink-0 flex items-center gap-3">' +
+            (list.length > WIP_UPDATES_SHOWN
+              ? '<button type="button" data-wip-act="toggle-updates" data-project="' + t.id + '" class="' + WIP_ACT_BTN + '">' + (showAll ? 'Show fewer' : 'Show ' + (list.length - WIP_UPDATES_SHOWN) + ' earlier') + '</button>'
+              : '') +
+            '<button type="button" data-wip-act="add-status" data-project="' + t.id + '" class="' + WIP_ACT_BTN + '">+ Update</button>' +
+          '</span>'
+        : '';
       return '<div class="group/upd flex items-start gap-2 text-sm">' +
         '<span class="shrink-0 w-14 pt-0.5 text-xs font-semibold text-zinc-500 dark:text-zinc-400">' + escapeHtml(u.date ? formatShortDate(u.date) : '') + '</span>' +
-        '<button type="button" data-wip-act="edit-update" data-project="' + en + '" data-id="' + escapeHtml(u.id) + '" title="Click to edit" class="min-w-0 flex-1 text-left text-zinc-800 dark:text-zinc-100 break-words hover:text-brand-700 dark:hover:text-brand-300">' + escapeHtml(u.text) +
+        '<button type="button" data-wip-act="edit-status" data-project="' + t.id + '" data-id="' + escapeHtml(u.id) + '" title="Click to edit" class="min-w-0 flex-1 text-left text-zinc-800 dark:text-zinc-100 break-words hover:text-brand-700 dark:hover:text-brand-300">' + escapeHtml(u.text) +
           ' <span class="text-xs text-zinc-400 dark:text-zinc-500">— ' + escapeHtml(u.author || '') + (u.editedBy && u.editedBy !== u.author ? ', edited by ' + escapeHtml(u.editedBy) : '') + '</span></button>' +
-        '<button type="button" data-wip-act="remove-update" data-project="' + en + '" data-id="' + escapeHtml(u.id) + '" class="shrink-0 opacity-0 group-hover/upd:opacity-100 text-zinc-400 hover:text-rose-500" title="Remove">&times;</button>' +
+        '<button type="button" data-wip-act="remove-status" data-project="' + t.id + '" data-id="' + escapeHtml(u.id) + '" class="shrink-0 opacity-0 group-hover/upd:opacity-100 text-zinc-400 hover:text-rose-500" title="Remove">&times;</button>' +
+        controls +
       '</div>';
     }).join('');
-    var newEditor = wipIsEditing(name, 'update', '__new')
-      ? '<div class="flex items-center gap-1.5 flex-wrap">' +
-          '<input type="date" data-wip-field="date" class="' + wipInputCls('[color-scheme:light] dark:[color-scheme:dark]') + '" value="' + escapeHtml(wipDraft.date || toDateInputValue(todayMidnight())) + '">' +
-          '<input data-wip-field="text" data-wip-autofocus placeholder="What happened, or what\'s next" class="' + wipInputCls('flex-1 min-w-[12rem]') + '" value="' + escapeHtml(wipDraft.text || '') + '">' + wipEditorButtons(name) + '</div>'
-      : '';
+    var editor = adding ? wipStatusEditorHtml(t.id, wipDraft.date || toDateInputValue(todayMidnight()), wipDraft.text || '') : '';
+    return '<div class="flex flex-col gap-1 rounded-md px-2.5 py-1.5 bg-brand-50/70 dark:bg-brand-500/10 border-l-[3px] border-l-brand-400 dark:border-l-brand-500">' +
+      editor + lines + '</div>';
+  }
 
-    var head = '<div class="flex items-center gap-3 flex-wrap">' +
-      '<span class="text-[10px] font-bold uppercase tracking-wide text-brand-700 dark:text-brand-300">Status</span>' +
-      (!updates.length && !newEditor ? '<span class="text-xs text-zinc-500 dark:text-zinc-400">No update yet</span>' : '') +
-      '<span class="flex-1"></span>' +
-      (updates.length > WIP_UPDATES_SHOWN
-        ? '<button type="button" data-wip-act="toggle-updates" data-project="' + en + '" class="' + actBtn + '">' + (showAll ? 'Show fewer' : 'Show ' + (updates.length - WIP_UPDATES_SHOWN) + ' earlier') + '</button>'
-        : '') +
-      (newEditor ? '' : '<button type="button" data-wip-act="add-update" data-project="' + en + '" class="' + actBtn + '">+ Add update</button>') +
-      detailsBtn +
-    '</div>';
-
-    return '<div class="px-4 py-2 flex flex-col gap-1.5 bg-brand-50/70 dark:bg-brand-500/10 border-l-[3px] border-l-brand-400 dark:border-l-brand-500 border-b border-b-zinc-100 dark:border-b-zinc-700/60">' +
-      head + newEditor + updatesHtml + detailsHtml + '</div>';
+  // Contact & links panel for one project (Suits/admins, once opened). '' otherwise.
+  function wipProjectDetailsHtml(name) {
+    if (!wipCanSeeDetails()) return '';
+    var editingHere = wipIsEditing(name, 'contact') || wipIsEditing(name, 'link');
+    if (!wipDetailsOpen[name] && !editingHere) return '';
+    var pdoc = projectDeadlineDoc(name) || {};
+    var en = escapeHtml(name);
+    var links = pdoc.links || [];
+    var contact = pdoc.clientContact || '';
+    var contactHtml = wipIsEditing(name, 'contact')
+      ? '<span class="flex items-center gap-1.5"><input data-wip-field="contact" data-wip-autofocus placeholder="Client contact" class="' + wipInputCls('w-44') + '" value="' + escapeHtml(wipDraft.contact != null ? wipDraft.contact : contact) + '">' + wipEditorButtons(name) + '</span>'
+      : contact
+        ? '<span class="text-xs text-zinc-500 dark:text-zinc-400">Client: <button type="button" data-wip-act="edit-contact" data-project="' + en + '" title="Edit client contact" class="font-medium text-zinc-700 dark:text-zinc-200 hover:text-brand-600 dark:hover:text-brand-400">' + escapeHtml(contact) + '</button></span>'
+        : '<button type="button" data-wip-act="edit-contact" data-project="' + en + '" class="' + WIP_ACT_BTN + '">+ Client contact</button>';
+    var linksHtml = links.map(function (l) {
+      return '<span class="group/link inline-flex items-center gap-1 text-xs">' +
+        '<a href="' + escapeHtml(l.url) + '" target="_blank" rel="noopener noreferrer" class="text-emerald-600 dark:text-emerald-400 hover:underline">' + escapeHtml(l.label || l.url) + '</a>' +
+        '<button type="button" data-wip-act="remove-link" data-project="' + en + '" data-id="' + escapeHtml(l.id) + '" title="Remove link" class="opacity-0 group-hover/link:opacity-100 text-zinc-400 hover:text-rose-500">&times;</button>' +
+      '</span>';
+    }).join('');
+    var linkEditor = wipIsEditing(name, 'link')
+      ? '<span class="flex items-center gap-1.5 flex-wrap"><input data-wip-field="label" data-wip-autofocus placeholder="Label" class="' + wipInputCls('w-32') + '" value="' + escapeHtml(wipDraft.label || '') + '">' +
+          '<input data-wip-field="url" placeholder="https://…" class="' + wipInputCls('w-56') + '" value="' + escapeHtml(wipDraft.url || '') + '">' + wipEditorButtons(name) + '</span>'
+      : '<button type="button" data-wip-act="add-link" data-project="' + en + '" class="' + WIP_ACT_BTN + '">+ Link</button>';
+    return '<div class="px-4 py-2 flex items-center gap-x-3 gap-y-1 flex-wrap bg-zinc-50/60 dark:bg-zinc-700/20 border-b border-zinc-100 dark:border-zinc-700/60">' +
+      contactHtml + linksHtml + linkEditor + '</div>';
   }
 
   function wipSaveEdit(name) {
@@ -11099,12 +11118,14 @@
       if (!url) { showToast('Add a link address', 'info'); return; }
       if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
       p = addProjectKeyLink(name, (d.label || '').trim() || url.replace(/^https?:\/\//i, ''), url);
-    } else if (e.kind === 'update') {
-      var existing = e.id !== '__new' ? ((projectDeadlineDoc(name) || {}).updates || []).find(function (u) { return u.id === e.id; }) : null;
+    } else if (e.kind === 'tstatus') {
+      var task = tasks.find(function (x) { return x.id === e.project; });
+      if (!task) { done(); return; }
+      var existing = e.id !== '__new' ? taskStatusList(task).find(function (u) { return u.id === e.id; }) : null;
       var text = (d.text != null ? d.text : (existing ? existing.text : '')).trim();
       var date = d.date || (existing && existing.date) || toDateInputValue(todayMidnight());
-      if (!text) { showToast('Write the update first', 'info'); return; }
-      p = e.id === '__new' ? addProjectUpdate(name, date, text) : editProjectUpdate(name, e.id, date, text);
+      if (!text) { showToast('Write the status first', 'info'); return; }
+      p = e.id === '__new' ? addTaskStatus(task, date, text) : editTaskStatus(task, e.id, date, text);
     }
     if (p) p.then(done, function () { /* toast already shown; keep the draft */ });
   }
@@ -11113,6 +11134,7 @@
     var byProject = {};
     open.forEach(function (t) { (byProject[t.project || ''] = byProject[t.project || ''] || []).push(t); });
     var names = Object.keys(byProject);
+    wipProjectNamesShown = names;
     if (!names.length) return wipSectionHtml('By project', 0, wipEmptyHtml('No open work in this teamspace.'));
 
     function firstDeadline(list) {
@@ -11133,6 +11155,7 @@
       return da !== db ? (da < db ? -1 : 1) : a.localeCompare(b);
     });
 
+    var canDetails = wipCanSeeDetails();
     var cards = names.map(function (name) {
       var list = byProject[name].slice().sort(function (a, b) {
         var da = a.deadline || '9999-99-99', db = b.deadline || '9999-99-99';
@@ -11169,30 +11192,50 @@
               (showAll ? 'Show fewer' : '+' + (steps.length - WIP_STEPS_SHOWN) + ' more') + '</button>'
           : '');
 
-        return '<div class="px-4 py-2.5 flex flex-col gap-1">' +
-          '<button type="button" data-open-task="' + t.id + '" class="group flex items-center gap-3 w-full text-left">' +
-            '<span class="min-w-0 flex-1 truncate text-sm font-medium text-zinc-800 dark:text-zinc-100 group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</span>' +
-            '<span class="hidden sm:inline shrink-0 w-32 truncate text-xs text-zinc-500 dark:text-zinc-400">' + escapeHtml(t.assignee || 'Unassigned') + '</span>' +
-            '<span class="shrink-0 w-24 text-center text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + statusCls + '">' + escapeHtml(STATUS_LABELS[t.status] || t.status) + '</span>' +
-            '<span class="shrink-0 w-40 text-right text-xs ' + (late ? 'text-rose-600 dark:text-rose-400 font-semibold' : 'text-zinc-500 dark:text-zinc-400') + '">' + escapeHtml(dueText) + '</span>' +
-          '</button>' +
+        var statusHtml = wipTaskStatusHtml(t);
+        // "+ Status" only when there is no status line yet; the slot is kept either way so the
+        // due-date column stays aligned across rows.
+        var addSlot = '<span class="shrink-0 w-16 text-right">' +
+          (!statusHtml ? '<button type="button" data-wip-act="add-status" data-project="' + t.id + '" class="' + WIP_ACT_BTN + '">+ Status</button>' : '') +
+        '</span>';
+
+        return '<div class="px-4 py-2.5 flex flex-col gap-1.5">' +
+          '<div class="flex items-center gap-3">' +
+            '<button type="button" data-open-task="' + t.id + '" class="group min-w-0 flex-1 flex items-center gap-3 text-left">' +
+              '<span class="min-w-0 flex-1 truncate text-sm font-medium text-zinc-800 dark:text-zinc-100 group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</span>' +
+              '<span class="hidden sm:inline shrink-0 w-32 truncate text-xs text-zinc-500 dark:text-zinc-400">' + escapeHtml(t.assignee || 'Unassigned') + '</span>' +
+              '<span class="shrink-0 w-24 text-center text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + statusCls + '">' + escapeHtml(STATUS_LABELS[t.status] || t.status) + '</span>' +
+              '<span class="shrink-0 w-40 text-right text-xs ' + (late ? 'text-rose-600 dark:text-rose-400 font-semibold' : 'text-zinc-500 dark:text-zinc-400') + '">' + escapeHtml(dueText) + '</span>' +
+            '</button>' +
+            addSlot +
+          '</div>' +
+          statusHtml +
           stepsHtml +
         '</div>';
       }).join('');
 
+      var pdoc = name ? (projectDeadlineDoc(name) || {}) : {};
+      var detailsCount = (pdoc.clientContact ? 1 : 0) + (pdoc.links || []).length;
+      var detailsOpen = !!wipDetailsOpen[name];
+      var detailsBtn = name && canDetails && !folded
+        ? '<button type="button" data-wip-act="toggle-details" data-project="' + escapeHtml(name) + '" aria-expanded="' + detailsOpen + '" class="shrink-0 px-4 ' + WIP_ACT_BTN + (detailsOpen ? ' !text-brand-600 dark:!text-brand-400' : '') + '">Contact &amp; links' + (detailsCount ? ' (' + detailsCount + ')' : '') + '</button>'
+        : '';
+
       return '<div class="border-b border-zinc-100 dark:border-zinc-700 last:border-b-0">' +
-        '<button type="button" data-wip-fold="' + escapeHtml(name) + '" aria-expanded="' + !folded + '" class="w-full flex items-center gap-2 px-4 py-2.5 bg-zinc-50 dark:bg-zinc-700/40 text-left hover:bg-zinc-100 dark:hover:bg-zinc-700/70">' +
-          svgIcon('chevronDown', 'w-3.5 h-3.5 shrink-0 text-zinc-400 transition-transform' + (folded ? ' -rotate-90' : '')) +
-          '<span class="min-w-0 flex-1 text-sm font-bold text-zinc-800 dark:text-zinc-100 break-words">' + escapeHtml(name || 'No project') + '</span>' +
-          '<span class="shrink-0 text-xs text-zinc-500 dark:text-zinc-400">' + list.length + ' open' +
-            (due ? ' · ' + (own ? 'Project due ' : 'Due ') + escapeHtml(formatShortDate(due)) : '') + '</span>' +
-        '</button>' +
-        (folded ? '' : (name ? wipProjectInfoHtml(name) : '') + '<div class="divide-y divide-zinc-50 dark:divide-zinc-700/50">' + rows + '</div>') +
+        '<div class="flex items-stretch bg-zinc-50 dark:bg-zinc-700/40">' +
+          '<button type="button" data-wip-fold="' + escapeHtml(name) + '" aria-expanded="' + !folded + '" class="min-w-0 flex-1 flex items-center gap-2 px-4 py-2.5 text-left hover:bg-zinc-100 dark:hover:bg-zinc-700/70">' +
+            svgIcon('chevronDown', 'w-3.5 h-3.5 shrink-0 text-zinc-400 transition-transform' + (folded ? ' -rotate-90' : '')) +
+            '<span class="min-w-0 flex-1 text-sm font-bold text-zinc-800 dark:text-zinc-100 break-words">' + escapeHtml(name || 'No project') + '</span>' +
+            '<span class="shrink-0 text-xs text-zinc-500 dark:text-zinc-400">' + list.length + ' open' +
+              (due ? ' · ' + (own ? 'Project due ' : 'Due ') + escapeHtml(formatShortDate(due)) : '') + '</span>' +
+          '</button>' +
+          detailsBtn +
+        '</div>' +
+        (folded ? '' : (name ? wipProjectDetailsHtml(name) : '') + '<div class="divide-y divide-zinc-100 dark:divide-zinc-700/50">' + rows + '</div>') +
       '</div>';
     }).join('');
 
     // Collapse all / Expand all: flips to Expand all once every project is folded.
-    wipProjectNamesShown = names;
     var allFolded = names.every(function (n) { return !!wipProjectFolded[n]; });
     var foldAllBtn = '<button type="button" data-wip-fold-all class="ml-auto inline-flex items-center gap-1 text-xs font-semibold text-zinc-500 dark:text-zinc-400 hover:text-brand-600 dark:hover:text-brand-400">' +
       svgIcon('chevronDown', 'w-3.5 h-3.5' + (allFolded ? ' -rotate-90' : '')) + (allFolded ? 'Expand all' : 'Collapse all') + '</button>';
@@ -11208,8 +11251,11 @@
       if (kind === 'save') { wipSaveEdit(proj); return; }
       if (kind === 'cancel') { wipEdit = null; wipDraft = {}; renderWipView(); return; }
       if (kind === 'remove-link') { removeProjectKeyLink(proj, aid); return; }
-      if (kind === 'remove-update') {
-        openConfirm('Remove this update?', 'It will be removed for everyone.', function () { removeProjectUpdate(proj, aid); }, { confirmText: 'Remove', cancelText: 'Cancel' });
+      if (kind === 'remove-status') {
+        openConfirm('Remove this status?', 'It will be removed for everyone.', function () {
+          var task = tasks.find(function (x) { return x.id === proj; });
+          if (task) removeTaskStatus(task, aid);
+        }, { confirmText: 'Remove', cancelText: 'Cancel' });
         return;
       }
       if (kind === 'toggle-updates') { if (wipUpdatesExpanded[proj]) delete wipUpdatesExpanded[proj]; else wipUpdatesExpanded[proj] = true; renderWipView(); return; }
@@ -11222,8 +11268,8 @@
       wipDraft = {};
       if (kind === 'edit-contact') wipEdit = { project: proj, kind: 'contact' };
       else if (kind === 'add-link') wipEdit = { project: proj, kind: 'link' };
-      else if (kind === 'add-update') wipEdit = { project: proj, kind: 'update', id: '__new' };
-      else if (kind === 'edit-update') wipEdit = { project: proj, kind: 'update', id: aid };
+      else if (kind === 'add-status') wipEdit = { project: proj, kind: 'tstatus', id: '__new' };
+      else if (kind === 'edit-status') wipEdit = { project: proj, kind: 'tstatus', id: aid };
       renderWipView();
       return;
     }
@@ -11301,25 +11347,32 @@
     // project and come up again in the walkthrough, so in full it duplicated them and pushed the
     // projects down -- but moving it to the bottom risked it being skipped. Agenda mode keeps the
     // full list, since there it IS the first item on the agenda. Open state is session-only.
-    if (wipMode === 'projects' && !wipAlertsOpen) {
+    // The summary row itself is the toggle in BOTH states (it used to turn into a section header
+    // with a small "Hide" at the far right once opened -- reported: clicking the same row should
+    // close it). Open, the list hangs under the same amber row in one card, chevron pointing down.
+    if (wipMode === 'projects') {
       var kinds = {};
       alerts.forEach(function (a) { kinds[a.kind] = (kinds[a.kind] || 0) + 1; });
       document.getElementById('wip-alerts').innerHTML = alerts.length
-        ? '<button type="button" data-wip-alerts-toggle class="w-full flex items-center gap-2 flex-wrap px-4 py-2.5 rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 text-left hover:border-amber-300 dark:hover:border-amber-500/50">' +
-            svgIcon('chevronDown', 'w-3.5 h-3.5 shrink-0 -rotate-90 text-amber-600 dark:text-amber-400') +
-            '<span class="text-sm font-semibold text-amber-800 dark:text-amber-200">' + alerts.length + ' item' + (alerts.length === 1 ? '' : 's') + ' need' + (alerts.length === 1 ? 's' : '') + ' a decision</span>' +
-            '<span class="text-xs text-amber-700/80 dark:text-amber-300/80">' + Object.keys(kinds).map(function (k) { return k + ' ' + kinds[k]; }).join(' · ') + '</span>' +
-          '</button>'
+        ? '<div class="rounded-xl border border-amber-200 dark:border-amber-500/30 overflow-hidden">' +
+            '<button type="button" data-wip-alerts-toggle aria-expanded="' + wipAlertsOpen + '" class="w-full flex items-center gap-2 flex-wrap px-4 py-2.5 bg-amber-50 dark:bg-amber-500/10 text-left hover:bg-amber-100 dark:hover:bg-amber-500/15">' +
+              svgIcon('chevronDown', 'w-3.5 h-3.5 shrink-0 transition-transform text-amber-600 dark:text-amber-400' + (wipAlertsOpen ? '' : ' -rotate-90')) +
+              '<span class="text-sm font-semibold text-amber-800 dark:text-amber-200">' + alerts.length + ' item' + (alerts.length === 1 ? '' : 's') + ' need' + (alerts.length === 1 ? 's' : '') + ' a decision</span>' +
+              '<span class="text-xs text-amber-700/80 dark:text-amber-300/80">' + Object.keys(kinds).map(function (k) { return k + ' ' + kinds[k]; }).join(' · ') + '</span>' +
+            '</button>' +
+            (wipAlertsOpen
+              ? '<div class="bg-white dark:bg-zinc-800 border-t border-amber-200 dark:border-amber-500/30 divide-y divide-zinc-100 dark:divide-zinc-700">' + alerts.map(wipAlertRowHtml).join('') + '</div>'
+              : '') +
+          '</div>'
         : '<p class="px-4 py-2 text-sm text-zinc-400 dark:text-zinc-500">Nothing needs a decision right now.</p>';
     } else {
-    var hideBtn = wipMode === 'projects' ? '<button type="button" data-wip-alerts-toggle class="ml-auto text-xs font-semibold text-zinc-400 hover:text-brand-600 dark:hover:text-brand-400">Hide</button>' : '';
     document.getElementById('wip-alerts').innerHTML = alerts.length
       ? wipSectionHtml('Needs a decision', alerts.length,
-          '<div class="divide-y divide-zinc-100 dark:divide-zinc-700">' + alerts.map(wipAlertRowHtml).join('') + '</div>', hideBtn)
+          '<div class="divide-y divide-zinc-100 dark:divide-zinc-700">' + alerts.map(wipAlertRowHtml).join('') + '</div>')
       // Rendered rather than hidden when empty: "nothing is at risk" is itself a result the
       // meeting wants stated, and a section that silently vanishes reads as a loading bug.
       : wipSectionHtml('Needs a decision', 0,
-          wipEmptyHtml('Nothing overdue, clashing with leave, or stuck in review.'), hideBtn);
+          wipEmptyHtml('Nothing overdue, clashing with leave, or stuck in review.'));
     }
 
     // Needs a decision stays on top in both modes -- it's short, and it's the list that is meant to
@@ -11364,6 +11417,10 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-05o', date: '2026-10-05', items: [
+      { type: 'improved', title: 'Status on each deliverable in WIP Meeting', text: 'In WIP Meeting\'s By project view, status now sits on each task instead of on the whole project, like the Status column in the WIP sheet. Click "+ Status" on a task to add one, click the status to edit it, or "+ Update" to add a newer one. Status changes show in Activity.' },
+      { type: 'improved', title: 'Easier to close Needs a decision', text: 'Click the "items need a decision" row again to close the list.' }
+    ] },
     { id: '2026-10-05n', date: '2026-10-05', items: [
       { type: 'improved', title: 'LinkedIn marketing last in WIP Meeting', text: 'The Mediashock LinkedIn marketing project now always sits at the bottom of the By project list, after the client projects.' }
     ] },
@@ -11951,6 +12008,7 @@
               // No longer editable (Dependencies was removed from the modal), but still carried
               // through import/export so a board exported while the feature existed round-trips
               // without losing the field.
+              statusUpdates: sanitizeImportedStatusUpdates(t.statusUpdates),
               dependsOn: Array.isArray(t.dependsOn) ? t.dependsOn.filter(function (id) { return typeof id === 'string'; }) : [],
               archivedAt: (t.archivedAt && !isNaN(new Date(t.archivedAt).getTime())) ? t.archivedAt : null,
               createdAt: t.createdAt || new Date().toISOString(),
@@ -12642,7 +12700,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T09:44:09Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T09:52:07Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

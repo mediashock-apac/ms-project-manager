@@ -2990,36 +2990,48 @@ last) lists its open tasks by deadline with owner, status and due/overdue, and u
 open checklist steps (the sheet's "Next steps") with owner and date, capped at `WIP_STEPS_SHOWN` (3)
 with "+N more". Projects can be folded (`wipProjectFolded`, session-only, start open). Done tasks are
 hidden. **Needs a decision stays on top in both modes, but in By project it is shrunk to one line**
-("4 items need a decision · Overdue 2 · Behind 1 …", amber, click to open, "Hide" to close;
+("4 items need a decision · Overdue 2 · Behind 1 …", amber; the same row opens and closes it, the list hanging under it in one card -- it used to become a section header with a small "Hide" at the far right, reported as the wrong place to close it;
 `wipAlertsOpen`, session-only). Chosen over leaving it in full (it duplicated items the project
 walkthrough covers anyway and pushed the projects down) and over moving it to the bottom (easy to
 skip; crunch and leave-clash items appear nowhere else). Agenda mode keeps the full list, since
 there it is the first agenda item. The day list, Away and the timeline are the **Agenda** mode.
 
-**Project updates, client contact and key links** (from the Suits "WIP Tracker" sheet's Status /
-Client contact / Key links columns) sit under each project's header on By project
-(`wipProjectInfoHtml`; data functions under PROJECT UPDATES). Stored on the project's own
-`projects/{id}` doc: `updates` [{id, date, text, author, at, editedBy?}], `clientContact`, and
-`links` — **the same array as the project chat's Pinned links**, so a link added in either place
-shows in both. Because of that, `createProjectChat` no longer resets `links` when it already exists,
-and `deleteProjectChat` removes messages only, not links. Decisions made with the user: **anyone on
-the team can add, edit or remove** (so no rules change — `projects` update only guards `chat`);
-**money columns (cost SGD/USD, PO, quotation, invoice) stay in the sheet** — add the sheet as a key
-link; **Lost Jobs stay in the sheet**. One inline
-editor at a time (`wipEdit`), drafts in `wipDraft` and focus restored after each live re-render so
-someone else's save doesn't wipe what you're typing. Enter saves, Escape cancels. Not logged to
-Activity (routine traffic, same reasoning as chat messages).
-- **Shape after the first round of feedback**: a **Status strip** — its own band (brand tint +
-  3px brand left edge), because the first version sat in the same colour as the task rows and was
-  reported as having "no contrast". It shows the latest update only (`WIP_UPDATES_SHOWN` = 1,
-  older behind "Show N earlier"), and **clicking the update text edits it** (no hover-only pencil:
-  WIP runs on a shared screen). "No update yet" when empty.
-- **Client contact and links are behind "Contact & links (N)"**, on request ("no need to be shown
-  at this level, just accessible to Suits"). The button only renders for Suits members and admins
+**Status per task, client contact and key links** (from the Suits "WIP Tracker" sheet's Status /
+Client contact / Key links columns).
+- **Status is on each TASK** (`tasks/{id}.statusUpdates` [{id, date, text, author, at,
+  editedBy?}], data functions under TASK STATUS), because the sheet has one status per
+  deliverable row. **It first shipped on the project** (`projects/{id}.updates`, one strip under
+  the header) and was reported back the same day: "Status should be in each task. Not like this".
+  The project-level UI and its add/edit/remove functions are gone; any `updates` already written
+  to a project doc are left in Firestore and no longer shown.
+  - A task with a status shows its latest line in a tinted band (brand tint + 3px brand left edge
+    — the contrast asked for after the first version blended into the rows), older lines behind
+    "Show N earlier" (`WIP_UPDATES_SHOWN` = 1), "+ Update" for a newer line. **Clicking the text
+    edits it** (no hover-only pencil: WIP runs on a shared screen).
+  - A task with none shows a quiet "+ Status" at the end of its line, in a fixed `w-16` slot kept
+    even when empty so the due-date column stays aligned down the list. The task line became a
+    `div` holding the open-task button plus that slot, since buttons can't nest.
+  - **Logged to Activity** as `task_updated` with the task as target — task edits are meant to be
+    recorded there ("anyone can edit the whole task but it still gets recorded in activity").
+    Doesn't touch `updatedAt`, so a status note doesn't reset the stale-review clock.
+  - Safe against the task modal: `commitTaskSave` writes with `setDoc(..., {merge: true})`, so it
+    never wipes `statusUpdates`. Import carries it (`sanitizeImportedStatusUpdates`).
+  - No rules change: task `update` is open to the whole team.
+- **Client contact and links** stay on the project's own `projects/{id}` doc: `clientContact` and
+  `links` — **the same array as the project chat's Pinned links**, so a link added in either place
+  shows in both. Because of that, `createProjectChat` no longer resets `links` when it already
+  exists, and `deleteProjectChat` removes messages only, not links. **They are behind a "Contact &
+  links (N)" button on the project header**, on request ("no need to be shown at this level, just
+  accessible to Suits"), opening a panel under the header (`wipProjectDetailsHtml`,
+  `wipDetailsOpen`, session-only). The button only renders for Suits members and admins
   (`wipCanSeeDetails`: `myDepartments()` includes `suits`, or `isAdminUser()`). **Display only,
   not a boundary** — the fields are on the team-readable project doc, and the links are also the
-  chat's Pinned links, visible to anyone who opens that chat. Open state `wipDetailsOpen`,
-  session-only.
+  chat's Pinned links, visible to anyone who opens that chat. Not logged to Activity.
+- Decisions made with the user: **anyone on the team can add, edit or remove**; **money columns
+  (cost SGD/USD, PO, quotation, invoice) stay in the sheet** — add the sheet as a key link; **Lost
+  Jobs stay in the sheet**. One inline editor at a time (`wipEdit`; for a task status its
+  `project` holds the task id), drafts in `wipDraft` and focus restored after each live re-render
+  so someone else's save doesn't wipe what you're typing. Enter saves, Escape cancels.
 - **The Mediashock LinkedIn marketing project always sorts last** on By project (`sinksToEnd` in
   `wipProjectsHtml`: name contains both "mediashock" and "linkedin", any case), on request —
   in-house ongoing work is discussed after client projects. Name-matched, so a rename that drops
