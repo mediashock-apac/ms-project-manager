@@ -2964,8 +2964,11 @@ task contrast"). Same label markup (text-sm project with hover tooltip, owner/ta
 `text-zinc-500 dark:text-zinc-400` — WIP's original shade, which was then preferred over the
 Timeline's `dark:text-white` and applied to both), and the **same width variable**: `GANTT_LABEL_WIDTH`, persisted under
 `flowboard_gantt_label_width`, so dragging `#wip-resize-handle` resizes the Timeline tab's Task
-column too, and vice versa. Applied through a `--wip-label-w` CSS variable on `#wip-timeline` so
-a drag moves every row without re-rendering. Capped at 45% of the card (`wipLabelWidthCss`),
+column too, and vice versa. Applied through a `--wip-label-w` CSS variable on `#wip-timeline-grid` so
+a drag moves every row without re-rendering. **Not `#wip-timeline`** — that id is already the
+section's outer container in the markup; the first version reused it, `getElementById` found the
+outer one, and the variable set there was shadowed by the inner element's own inline value, so
+the drag silently did nothing (reported as "WIP adjustable width is not working"). Capped at 45% of the card (`wipLabelWidthCss`),
 because this chart never scrolls sideways and a wide label column would squeeze the day columns.
 The stale "Fill: checklist done…" legend entry was removed at the same time — bars have no fill.
 

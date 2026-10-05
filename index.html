@@ -4740,7 +4740,9 @@
     });
     document.addEventListener('mousemove', function (e) {
       if (!dragging) return;
-      var box = document.getElementById('wip-timeline');
+      // #wip-timeline-grid, NOT #wip-timeline -- that id is the section's outer container, and setting
+      // the variable there was shadowed by the inner element's own inline value, so the drag did nothing.
+      var box = document.getElementById('wip-timeline-grid');
       if (!box) return;
       var r = box.getBoundingClientRect();
       var max = Math.min(GANTT_LABEL_WIDTH_MAX, r.width * 0.45);
@@ -10635,7 +10637,7 @@
 
     var handle = '<div class="absolute top-0 bottom-0 group cursor-col-resize" id="wip-resize-handle" title="Drag to resize the Task column" style="left:calc(var(--wip-label-w) - 3px);width:6px;z-index:5;">' +
       '<div class="w-px h-full mx-auto bg-transparent group-hover:bg-brand-400 dark:group-hover:bg-brand-500"></div></div>';
-    return wipSectionHtml('Timeline', list.length, '<div class="overflow-x-auto"><div id="wip-timeline" class="relative" style="--wip-label-w:' + wipLabelWidthCss(wipLabelWidth()) + ';">' + head + rows + handle + '</div></div>' + note, aside);
+    return wipSectionHtml('Timeline', list.length, '<div class="overflow-x-auto"><div id="wip-timeline-grid" class="relative" style="--wip-label-w:' + wipLabelWidthCss(wipLabelWidth()) + ';">' + head + rows + handle + '</div></div>' + note, aside);
   }
 
   function renderWipView() {
@@ -11803,7 +11805,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T04:46:10Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T04:47:02Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
