@@ -2812,6 +2812,12 @@ something above it. Reported directly, from a screenshot of the profile menu.
 The header is **two lines**: name + identity chips (departments, "Admin rights") on the first,
 workload on the second ("N active", Away, overdue, high).
 
+**The header sits on its own tinted band** (`bg-zinc-100` / `dark:bg-zinc-700/60`, name in
+`zinc-900`/white), the same treatment as the Board's project cards, so the person reads as a
+step above their task rows. On that band the grey "N high" chip is white / `zinc-800` (a
+`zinc-100` chip would vanish into it), and the big count and "N active" text moved one shade
+darker to stay legible.
+
 They used to share one row — `2 active | Production | Admin | 1 high` — and it was reported as
 messy. It was, for a reason worth keeping written down:
 
