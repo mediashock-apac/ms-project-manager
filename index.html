@@ -8628,7 +8628,7 @@
       return (
         '<button data-open-task="' + t.id + '" class="flex flex-col text-left group shrink-0 w-64 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 border-l-4 ' + pm.border + ' rounded-xl shadow-card px-3.5 py-3 hover:shadow-pop hover:-translate-y-0.5 transition">' +
           '<div class="flex items-center justify-between mb-1.5">' +
-            '<span class="text-xs font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + pm.badge + '">' + t.priority + '</span>' +
+            '<span class="text-xs font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + priorityBadgeCls(t, pm) + '">' + t.priority + '</span>' +
             '<span class="text-xs font-semibold px-1.5 py-0.5 rounded ' + urgencyClass + '">' + urgencyLabel + '</span>' +
           '</div>' +
           '<p data-tooltip="' + escapeHtml(t.name) + '" class="tooltip-top text-sm font-semibold text-zinc-800 dark:text-zinc-100 line-clamp-2 mb-1 group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</p>' +
@@ -8750,12 +8750,19 @@
   // opening the task (data-open-task) -- but Edit/Archive/Delete came back as icon buttons after
   // their removal was reported as a real usability loss, not just fewer badges: those are core
   // actions people expect to reach without opening the full modal first.
+  // Medium is most of the board, so its badge is a quiet grey outline: a column of yellow MEDIUM
+  // badges hid the few HIGHs. High/Low/Completed keep their colour. Shared by the Board rows and
+  // the Focus of the Day cards -- Focus kept the yellow one and was reported as inconsistent.
+  function priorityBadgeCls(t, pm) {
+    return (t.status !== 'Done' && (t.priority || 'Medium') === 'Medium')
+      ? 'bg-transparent text-zinc-500 ring-1 ring-inset ring-zinc-300 dark:text-zinc-400 dark:ring-zinc-600'
+      : pm.badge;
+  }
+
   function boardTaskRowHtml(t) {
     var isDone = t.status === 'Done';
     var pm = isDone ? DONE_META : (PRIORITY_META[t.priority] || PRIORITY_META.Medium);
-    // Medium is most of the board, so on the Board it's a quiet grey outline: a column of yellow
-    // MEDIUM badges hid the few HIGHs. High/Low/Completed keep their colour; other views unchanged.
-    var badgeCls = (!isDone && (t.priority || 'Medium') === 'Medium') ? 'bg-transparent text-zinc-500 ring-1 ring-inset ring-zinc-300 dark:text-zinc-400 dark:ring-zinc-600' : pm.badge;
+    var badgeCls = priorityBadgeCls(t, pm);
     var urgency = dueUrgency(t);
     var days = urgency.days, overdue = urgency.overdue, dueSoon = urgency.dueSoon;
     var dateClass = overdue ? 'text-rose-600 dark:text-rose-400 font-semibold' : (dueSoon ? 'text-violet-600 dark:text-violet-400 font-semibold' : 'text-zinc-500 dark:text-zinc-400');
@@ -12105,6 +12112,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-06a', date: '2026-10-06', items: [
+      { type: 'fixed', title: 'Matching priority labels in Focus of the Day', text: 'MEDIUM in Focus of the Day now uses the same quiet grey label as the Board, so HIGH tasks stand out in both places.' }
+    ] },
     { id: '2026-10-05zg', date: '2026-10-05', items: [
       { type: 'improved', title: 'Easier-to-read cards on Board and People', text: 'On the Board, each project name now sits on its own shaded strip above its tasks. People cards do the same: each name and its workload sit on a shaded strip, so it is easier to tell the person apart from the tasks below.' }
     ] },
@@ -13459,7 +13469,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T15:56:20Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T16:00:30Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

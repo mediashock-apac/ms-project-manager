@@ -704,8 +704,10 @@ to bottom:
        or focus-within; always visible on touch. `display`, not opacity, so long names get the full
        width at rest. This is deliberately hover-REVEAL, not removal: an earlier removal of these
        icons was reported as "compromising on usability". **Medium is a quiet grey outline on the
-       Board only** (`badgeCls` in `boardTaskRowHtml`) so the few HIGHs stand out from a column of
-       yellow; `PRIORITY_META` and every other view are unchanged.
+       Board and Focus of the Day** (`priorityBadgeCls`, shared by `boardTaskRowHtml` and
+       `renderFocus`) so the few HIGHs stand out from a column of yellow. Focus kept the yellow
+       badge at first and was reported as inconsistent. `PRIORITY_META` and every other view
+       are unchanged.
        not a shrunken version of the old full task-card. Checklist/comment
        counts and the Drive-link shortcut stay dropped — reachable by opening the task
        (`data-open-task`, unchanged). Time logged (`taskTimeMinutes(t)`, clock icon +
