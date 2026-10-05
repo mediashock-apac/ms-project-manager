@@ -2017,7 +2017,10 @@
     for (var i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
     return CLIENT_PALETTE[h % CLIENT_PALETTE.length];
   }
-  // Escaped project name with each "[Client]" wrapped in its colour. Use in place of escapeHtml(name).
+  // Escaped text with each "[Client]" wrapped in its colour. Use in place of escapeHtml() for a
+  // project name, or any WIP line with one inside it (Needs a decision titles/details). Every
+  // WIP spot that prints a project name must go through this -- the Agenda step line and the
+  // decision rows were missed on the first pass and reported ("why do some not get highlighted").
   function projectNameHtml(name) {
     var s = String(name || ''), out = '', last = 0, m;
     CLIENT_BRACKET_RE.lastIndex = 0;
@@ -10745,8 +10748,8 @@
       '<div class="flex items-start gap-2.5 px-4 py-2.5">' +
         '<span class="shrink-0 mt-0.5 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + WIP_TONES[a.tone] + '">' + escapeHtml(a.kind) + '</span>' +
         '<div class="min-w-0 flex-1">' +
-          '<p class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">' + escapeHtml(a.title) + '</p>' +
-          '<p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">' + escapeHtml(a.detail) + '</p>' +
+          '<p class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">' + projectNameHtml(a.title) + '</p>' +
+          '<p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">' + projectNameHtml(a.detail) + '</p>' +
         '</div>' +
       '</div>';
     return a.taskId
@@ -10845,7 +10848,7 @@
               '<span class="min-w-0 truncate text-sm text-zinc-600 dark:text-zinc-300 group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(s.item.text || '') + '</span>' +
               '<span class="shrink-0 ml-auto text-xs text-zinc-500 dark:text-zinc-400 truncate max-w-[9rem]">' + escapeHtml(s.item.assignee || s.t.assignee || 'Unassigned') + '</span>' +
             '</span>' +
-            '<span class="hidden sm:block text-xs text-zinc-400 dark:text-zinc-500 break-words">Step in ' + escapeHtml(s.t.name) + ' · ' + escapeHtml(s.t.project) + '</span>' +
+            '<span class="hidden sm:block text-xs text-zinc-400 dark:text-zinc-500 break-words">Step in ' + escapeHtml(s.t.name) + ' · ' + projectNameHtml(s.t.project) + '</span>' +
           '</span>' +
         '</button>';
       }).join('');
@@ -11536,6 +11539,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-05s', date: '2026-10-05', items: [
+      { type: 'fixed', title: 'Client colours on every WIP line', text: 'Client names in checklist steps on the Agenda and in Needs a decision are now coloured too.' }
+    ] },
     { id: '2026-10-05r', date: '2026-10-05', items: [
       { type: 'improved', title: 'New Updates grouped by day', text: 'Everything released on the same day now sits under one date on this page.' },
       { type: 'improved', title: 'Quieter WIP project titles', text: 'Once a project has a category, the category button only shows when you hover over its title bar.' }
@@ -12840,7 +12846,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T10:06:52Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T10:11:07Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
