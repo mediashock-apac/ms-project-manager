@@ -191,8 +191,15 @@ tutorial should auto update on new features"** — so feature tours are generate
   shapes with gradients in Mediashock's colours, as MS Creatives defines them: Poppy `#ff4e20`
   leads, with the content-bucket accents indigo `#6366f1`, blue `#2563eb` and cyan `#0891b2`.
   Amber and slate are left out on purpose, because amber already means Medium priority here.
-  Welcome = a glowing Poppy circle linked to a floating board of gradient cards; all set = a Poppy
-  tick badge in indigo/cyan orbit rings with floating shapes and sparkles.
+  Welcome = **the life of a piece of work as one journey**: a gradient road with four labelled
+  stops, each a small card (Plan = mini board, Track = mini timeline, Talk = chat bubble with three
+  team avatars, Done = Poppy tick badge). The welcome text says the same thing in words ("plans
+  the work, tracks it, talks it through and gets it done"). All set = a Poppy tick badge in
+  indigo/cyan orbit rings with floating shapes and sparkles.
+  - **Every shape in the welcome graphic must stand for something.** Its previous version led
+    with a big glowing abstract circle, and the first question about it was "what does the orange
+    circle mean?" It meant nothing. Asked for instead: "creative yet it explains what this PM
+    tool is for".
   - **Third design.** The first was hand-drawn stick figures (a wobble filter on line art); it was
     changed on request to "vector lines and abstract shapes ... gradients and Mediashock's accent
     colours" and "graphics instead" of sketches. Don't bring back people or the wobble.

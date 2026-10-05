@@ -12440,7 +12440,7 @@
   // TOUR_ART (only the first and last welcome steps -- see there); `cta` overrides the button.
   var TOURS = [
     { id: 'welcome', kind: 'welcome', steps: [
-      { target: null, art: 'welcome', cta: "Show me around", title: "Hi, welcome aboard!", text: "This is where the team plans, tracks and chats about the work. Let's take a quick look around. It takes less than a minute, and you can skip whenever you like." },
+      { target: null, art: 'welcome', cta: "Show me around", title: "Hi, welcome aboard!", text: "This is where your team plans the work, tracks it, talks it through and gets it done. Let's take a quick look around. It takes less than a minute, and you can skip whenever you like." },
       { target: '#btn-add-task', title: "Got something to do? Start here", text: "Add a task with a project, an owner and a deadline. Big job? Break it into checklist steps." },
       { target: '#focus-section', title: "Not sure where to begin?", text: "Focus of the Day picks your most urgent, highest-priority work. Start at the top and work along." },
       { target: '#sidebar-nav', title: "Same work, different angles", text: "Board, Timeline, Calendar and People all show the same tasks, just laid out differently. Every project can have its own group chat too." },
@@ -12466,39 +12466,44 @@
      collide. The gradients carry their own colour, so only the backdrop and the board panel
      switch for dark mode. */
   var TOUR_ART = {
-    // A glowing Poppy circle linked to a floating board of gradient task cards.
+    // The life of a piece of work as one journey: Plan (board) -> Track (timeline) -> Talk
+    // (chat, with the team) -> Done (tick), stops on a gradient road, each labelled. Replaced an
+    // abstract glowing circle that was asked about directly ("what does the orange circle mean?")
+    // -- it meant nothing. Asked for instead: "creative yet it explains what this PM tool is for".
+    // Every shape here stands for something; keep it that way.
     welcome:
-      '<svg viewBox="0 0 240 120" class="w-full h-auto" fill="none" aria-hidden="true">' +
-        '<defs>' +
-          '<linearGradient id="tg-w-poppy" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff9470"></stop><stop offset="1" stop-color="#ff4e20"></stop></linearGradient>' +
-          '<linearGradient id="tg-w-indigo" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#a5b4fc"></stop><stop offset="1" stop-color="#6366f1"></stop></linearGradient>' +
-          '<linearGradient id="tg-w-cyan" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#67e8f9"></stop><stop offset="1" stop-color="#0891b2"></stop></linearGradient>' +
-          '<linearGradient id="tg-w-blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#93c5fd"></stop><stop offset="1" stop-color="#2563eb"></stop></linearGradient>' +
-          '<radialGradient id="tg-w-glow"><stop offset="0" stop-color="#ff4e20" stop-opacity=".35"></stop><stop offset="1" stop-color="#ff4e20" stop-opacity="0"></stop></radialGradient>' +
-        '</defs>' +
-        '<rect x="0" y="0" width="240" height="120" rx="14" class="fill-zinc-100 dark:fill-white/5"></rect>' +
-        '<circle cx="62" cy="62" r="58" fill="url(#tg-w-glow)"></circle>' +
-        '<circle cx="62" cy="62" r="47" stroke="url(#tg-w-indigo)" stroke-width="2" stroke-dasharray="2 7" stroke-linecap="round"></circle>' +
-        '<circle cx="62" cy="62" r="33" fill="url(#tg-w-poppy)"></circle>' +
-        '<circle cx="52" cy="52" r="9" fill="#ffffff" fill-opacity=".28"></circle>' +
-        '<path d="M95 62 C104 62 103 46 113 46" stroke="url(#tg-w-poppy)" stroke-width="2.5" stroke-linecap="round"></path>' +
-        '<rect x="113" y="20" width="106" height="78" rx="12" class="fill-white stroke-zinc-200 dark:fill-zinc-800 dark:stroke-zinc-600" stroke-width="1.5"></rect>' +
-        '<rect x="123" y="31" width="25" height="11" rx="4" fill="url(#tg-w-poppy)"></rect>' +
-        '<rect x="123" y="46" width="25" height="11" rx="4" fill="url(#tg-w-poppy)" fill-opacity=".5"></rect>' +
-        '<rect x="154" y="31" width="25" height="11" rx="4" fill="url(#tg-w-indigo)"></rect>' +
-        '<rect x="154" y="46" width="25" height="11" rx="4" fill="url(#tg-w-indigo)" fill-opacity=".5"></rect>' +
-        '<rect x="154" y="61" width="25" height="11" rx="4" fill="url(#tg-w-indigo)" fill-opacity=".25"></rect>' +
-        '<rect x="185" y="31" width="25" height="11" rx="4" fill="url(#tg-w-cyan)"></rect>' +
-        '<path d="M192 36.5 l3 3 l6 -6" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>' +
-        '<g transform="rotate(-8 121 92)">' +
-          '<rect x="100" y="80" width="44" height="24" rx="7" fill="url(#tg-w-blue)"></rect>' +
-          '<path d="M108 89 h22 M108 96 h14" stroke="#ffffff" stroke-opacity=".85" stroke-width="2.5" stroke-linecap="round"></path>' +
-        '</g>' +
-        '<path d="M22 24 l11 -3 l-3 11 z" fill="url(#tg-w-cyan)"></path>' +
-        '<rect x="194" y="104" width="28" height="8" rx="4" fill="url(#tg-w-indigo)"></rect>' +
-        '<circle cx="227" cy="16" r="3.5" fill="url(#tg-w-poppy)"></circle>' +
-        '<circle cx="24" cy="102" r="4.5" fill="url(#tg-w-blue)"></circle>' +
-        '<circle cx="104" cy="13" r="2.5" fill="url(#tg-w-indigo)"></circle>' +
+      '<svg viewBox="0 0 240 128" class="w-full h-auto" fill="none" aria-hidden="true">' +
+        '<defs><linearGradient id="tg-w-poppy" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff9470"></stop><stop offset="1" stop-color="#ff4e20"></stop></linearGradient><linearGradient id="tg-w-indigo" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#a5b4fc"></stop><stop offset="1" stop-color="#6366f1"></stop></linearGradient><linearGradient id="tg-w-cyan" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#67e8f9"></stop><stop offset="1" stop-color="#0891b2"></stop></linearGradient><linearGradient id="tg-w-blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#93c5fd"></stop><stop offset="1" stop-color="#2563eb"></stop></linearGradient><linearGradient id="tg-w-road" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ff4e20"></stop><stop offset=".5" stop-color="#6366f1"></stop><stop offset=".8" stop-color="#0891b2"></stop><stop offset="1" stop-color="#ff4e20"></stop></linearGradient><radialGradient id="tg-w-glow"><stop offset="0" stop-color="#ff4e20" stop-opacity=".3"></stop><stop offset="1" stop-color="#ff4e20" stop-opacity="0"></stop></radialGradient></defs>' +
+        '<rect x="0" y="0" width="240" height="128" rx="14" class="fill-zinc-100 dark:fill-white/5"></rect>' +
+        '<path d="M12 108 Q120 92 228 108" stroke="url(#tg-w-road)" stroke-width="3" stroke-linecap="round"></path>' +
+        '<rect x="18" y="30" width="50" height="44" rx="8" class="fill-white stroke-zinc-200 dark:fill-zinc-800 dark:stroke-zinc-600" stroke-width="1.4"></rect>' +
+        '<rect x="24" y="38" width="11" height="7" rx="2.5" fill="url(#tg-w-poppy)"></rect>' +
+        '<rect x="24" y="48" width="11" height="7" rx="2.5" fill="url(#tg-w-poppy)" fill-opacity=".5"></rect>' +
+        '<rect x="37.5" y="38" width="11" height="7" rx="2.5" fill="url(#tg-w-indigo)"></rect>' +
+        '<rect x="37.5" y="48" width="11" height="7" rx="2.5" fill="url(#tg-w-indigo)" fill-opacity=".5"></rect>' +
+        '<rect x="37.5" y="58" width="11" height="7" rx="2.5" fill="url(#tg-w-indigo)" fill-opacity=".25"></rect>' +
+        '<rect x="51" y="38" width="11" height="7" rx="2.5" fill="url(#tg-w-cyan)"></rect>' +
+        '<path d="M54 41.5 l1.8 1.8 l3.4 -3.4" stroke="#ffffff" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"></path>' +
+        '<path d="M43 76 V100" class="stroke-zinc-300 dark:stroke-zinc-600" stroke-width="1.4" stroke-dasharray="1.5 3.5" stroke-linecap="round"></path><circle cx="43" cy="104" r="4" class="fill-white dark:fill-zinc-800" stroke="url(#tg-w-poppy)" stroke-width="2.2"></circle><text x="43" y="123" text-anchor="middle" font-size="9" font-weight="700" class="fill-zinc-500 dark:fill-zinc-400" style="font-family:inherit">Plan</text>' +
+        '<rect x="84" y="14" width="56" height="42" rx="8" class="fill-white stroke-zinc-200 dark:fill-zinc-800 dark:stroke-zinc-600" stroke-width="1.4"></rect>' +
+        '<path d="M92 50 H132" class="stroke-zinc-200 dark:stroke-zinc-600" stroke-width="1"></path>' +
+        '<rect x="91" y="21" width="22" height="6" rx="3" fill="url(#tg-w-poppy)"></rect>' +
+        '<rect x="99" y="31" width="28" height="6" rx="3" fill="url(#tg-w-indigo)"></rect>' +
+        '<rect x="109" y="41" width="24" height="6" rx="3" fill="url(#tg-w-cyan)"></rect>' +
+        '<path d="M127 18 l2.5 2.5 l-2.5 2.5 l-2.5 -2.5 z" fill="url(#tg-w-poppy)"></path>' +
+        '<path d="M112 58 V95" class="stroke-zinc-300 dark:stroke-zinc-600" stroke-width="1.4" stroke-dasharray="1.5 3.5" stroke-linecap="round"></path><circle cx="112" cy="99" r="4" class="fill-white dark:fill-zinc-800" stroke="url(#tg-w-indigo)" stroke-width="2.2"></circle><text x="112" y="123" text-anchor="middle" font-size="9" font-weight="700" class="fill-zinc-500 dark:fill-zinc-400" style="font-family:inherit">Track</text>' +
+        '<path d="M153 44 h26 a9 9 0 0 1 9 9 v10 a9 9 0 0 1 -9 9 h-18 l-8 7 l1 -7 a9 9 0 0 1 -9 -9 v-10 a9 9 0 0 1 8 -9 z" fill="url(#tg-w-blue)"></path>' +
+        '<path d="M155 54 h24 M155 62 h15" stroke="#ffffff" stroke-opacity=".9" stroke-width="2.5" stroke-linecap="round"></path>' +
+        '<circle cx="156" cy="34" r="7.5" fill="url(#tg-w-poppy)" class="stroke-white dark:stroke-zinc-800" stroke-width="1.8"></circle><circle cx="156" cy="32.2" r="2.3" fill="#ffffff"></circle><path d="M152 39 Q156 34.5 160 39" fill="#ffffff"></path>' +
+        '<circle cx="167" cy="32" r="7.5" fill="url(#tg-w-indigo)" class="stroke-white dark:stroke-zinc-800" stroke-width="1.8"></circle><circle cx="167" cy="30.2" r="2.3" fill="#ffffff"></circle><path d="M163 37 Q167 32.5 171 37" fill="#ffffff"></path>' +
+        '<circle cx="178" cy="34" r="7.5" fill="url(#tg-w-cyan)" class="stroke-white dark:stroke-zinc-800" stroke-width="1.8"></circle><circle cx="178" cy="32.2" r="2.3" fill="#ffffff"></circle><path d="M174 39 Q178 34.5 182 39" fill="#ffffff"></path>' +
+        '<path d="M166 82 V96" class="stroke-zinc-300 dark:stroke-zinc-600" stroke-width="1.4" stroke-dasharray="1.5 3.5" stroke-linecap="round"></path><circle cx="166" cy="100" r="4" class="fill-white dark:fill-zinc-800" stroke="url(#tg-w-cyan)" stroke-width="2.2"></circle><text x="166" y="123" text-anchor="middle" font-size="9" font-weight="700" class="fill-zinc-500 dark:fill-zinc-400" style="font-family:inherit">Talk</text>' +
+        '<circle cx="216" cy="52" r="24" fill="url(#tg-w-glow)"></circle>' +
+        '<circle cx="216" cy="52" r="15" fill="url(#tg-w-poppy)"></circle>' +
+        '<path d="M209 52 l5 5 l9 -10" stroke="#ffffff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"></path>' +
+        '<path d="M229 21 Q230 26 235 27 Q230 28 229 33 Q228 28 223 27 Q228 26 229 21 Z" fill="url(#tg-w-indigo)"></path>' +
+        '<circle cx="198" cy="26" r="2.2" fill="url(#tg-w-cyan)"></circle>' +
+        '<path d="M216 68 V102" class="stroke-zinc-300 dark:stroke-zinc-600" stroke-width="1.4" stroke-dasharray="1.5 3.5" stroke-linecap="round"></path><circle cx="216" cy="106" r="4" class="fill-white dark:fill-zinc-800" stroke="url(#tg-w-poppy)" stroke-width="2.2"></circle><text x="216" y="123" text-anchor="middle" font-size="9" font-weight="700" class="fill-zinc-500 dark:fill-zinc-400" style="font-family:inherit">Done</text>' +
       '</svg>',
     // A Poppy badge with a tick, orbit rings in indigo and cyan, and floating shapes and sparkles.
     done:
@@ -14001,7 +14006,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T16:36:54Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T16:40:50Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
