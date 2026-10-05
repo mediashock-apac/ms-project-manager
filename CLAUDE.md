@@ -2984,14 +2984,19 @@ everyone. If you change a threshold, change it in the one place and this follows
 Three sections, and the shape of them is where the design work is:
 
 - **Needs a decision** — overdue, crunch days, a deadline landing while its owner is away, a
-  project its own task dates say it will miss, and work stuck in review. **One flat list with a
+  project its own task dates say it will miss, work stuck in review, and **Behind** — a task that
+  isn't overdue yet but has an overdue checklist step (one row per task, oldest late step named;
+  skipped for tasks already in the Overdue roll-up). Catches a slip before the task's own deadline. **One flat list with a
   chip for the kind, not five labelled sub-lists**: they are all "somebody has to say something
   about this", and five headers over lists that are usually one row long is most of a screen
   spent on scaffolding. Rows that stand for exactly one task carry `data-open-task` and ride the
   existing document-level delegation; roll-ups have nothing single to open and are plain `div`s.
 - **The next N days** — the chronological spine. One row per day that has anything on it, empty
   days skipped entirely. Project deadlines and task deadlines share a day's row, because in the
-  meeting they are the same question.
+  meeting they are the same question. **Dated open checklist steps are on it too**, under the day's tasks with a grey
+  step diamond, the step's owner (falling back to the task owner) and "Step in <task> · <project>".
+  Added so the Suits team could trial running WIP off checklist steps (their sheet's "Next steps"
+  column) — before this, steps only appeared as timeline diamonds and were missing from the agenda.
 - **Away** — one row per leave *period* overlapping the window, including periods that started
   before today and run into it.
 

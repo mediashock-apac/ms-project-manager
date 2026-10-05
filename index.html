@@ -10412,7 +10412,7 @@
   }
 
   /* ---------------------------------------------------------
-     The five things worth interrupting the agenda for. All five are ALREADY notification
+     The six things worth interrupting the agenda for. The first five are ALREADY notification
      automations or already-rendered board signals -- this is the same set of risks, gathered
      into one list that the whole room can see at once instead of arriving one person at a time
      in their own notification bell.
@@ -10524,6 +10524,28 @@
       });
     });
 
+    // BEHIND ON STEPS -- a task that isn't late yet but has a checklist step that is. Catches a
+    // slip a week or two before the task's own deadline does, with the late step named. Tasks that
+    // are already overdue are skipped: the Overdue roll-up above already covers them. One row per
+    // task, not per step, so a task with three late steps doesn't take three rows.
+    open.forEach(function (t) {
+      if (dueUrgency(t).overdue) return;
+      var late = (t.checklist || []).filter(function (it) {
+        return it && !it.done && it.due && parseDate(it.due) && it.due < today;
+      }).sort(function (a, b) { return a.due < b.due ? -1 : 1; });
+      if (!late.length) return;
+      var first = late[0];
+      var who = first.assignee || t.assignee || 'Unassigned';
+      out.push({
+        overdue: false, date: first.due, kind: 'Behind', tone: 'amber',
+        title: late.length === 1
+          ? t.name + ' — "' + first.text + '" was due ' + formatShortDate(first.due)
+          : t.name + ' — ' + late.length + ' steps overdue',
+        detail: (late.length === 1 ? who : 'Oldest: "' + first.text + '" · ' + formatShortDate(first.due) + ' · ' + who) + ' · ' + t.project,
+        taskId: t.id
+      });
+    });
+
     // Late first, then strictly chronological across every other kind -- which is the order the
     // room will want to walk them in.
     return out.sort(function (a, b) {
@@ -10564,11 +10586,20 @@
   --------------------------------------------------------- */
   function wipAheadHtml(open, today, horizon, scopedProjects) {
     var byDay = {};
-    function bucket(d) { return (byDay[d] = byDay[d] || { tasks: [], projects: [] }); }
+    function bucket(d) { return (byDay[d] = byDay[d] || { tasks: [], projects: [], steps: [] }); }
 
     open.forEach(function (t) {
       if (!t.deadline || t.deadline < today || t.deadline > horizon) return;
       bucket(t.deadline).tasks.push(t);
+    });
+    // Dated checklist steps -- what the Suits sheet calls "Next steps". Open steps only, on open
+    // tasks in this teamspace. Without these, a project run off steps had nothing in the agenda.
+    open.forEach(function (t) {
+      (t.checklist || []).forEach(function (it) {
+        if (!it || it.done || !it.due || !parseDate(it.due)) return;
+        if (it.due < today || it.due > horizon) return;
+        bucket(it.due).steps.push({ t: t, item: it });
+      });
     });
     projectDocs.forEach(function (pd) {
       if (!pd.deadline || pd.deadline < today || pd.deadline > horizon) return;
@@ -10623,12 +10654,28 @@
         '</button>';
       }).join('');
 
+      // Steps under the tasks, marked with the same grey diamond the timeline uses for a step, so
+      // they read as part of a task rather than as tasks of their own. Owner on the right is the
+      // step's own assignee, falling back to the task owner.
+      var stepsHtml = day.steps.sort(function (a, b) { return a.t.name.localeCompare(b.t.name); }).map(function (s) {
+        return '<button type="button" data-open-task="' + s.t.id + '" class="group flex items-start gap-2 w-full text-left">' +
+          '<span class="w-1.5 h-1.5 mt-[7px] ml-[1px] mr-[1px] rotate-45 shrink-0 bg-zinc-400 dark:bg-zinc-500" title="Checklist step"></span>' +
+          '<span class="min-w-0 flex-1">' +
+            '<span class="flex items-baseline gap-2">' +
+              '<span class="min-w-0 truncate text-sm text-zinc-600 dark:text-zinc-300 group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(s.item.text || '') + '</span>' +
+              '<span class="shrink-0 ml-auto text-xs text-zinc-500 dark:text-zinc-400 truncate max-w-[9rem]">' + escapeHtml(s.item.assignee || s.t.assignee || 'Unassigned') + '</span>' +
+            '</span>' +
+            '<span class="hidden sm:block text-xs text-zinc-400 dark:text-zinc-500 break-words">Step in ' + escapeHtml(s.t.name) + ' · ' + escapeHtml(s.t.project) + '</span>' +
+          '</span>' +
+        '</button>';
+      }).join('');
+
       return '<div class="flex gap-3 px-4 py-3' + (isToday ? ' bg-brand-50/50 dark:bg-brand-500/[0.07]' : '') + '">' +
         '<div class="w-[5.5rem] shrink-0">' +
           '<p class="text-xs font-bold ' + (isToday ? 'text-brand-700 dark:text-brand-300' : 'text-zinc-700 dark:text-zinc-200') + '">' + escapeHtml(wipDayLabel(d)) + '</p>' +
           '<p class="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5">' + escapeHtml(wipRelativeLabel(until)) + '</p>' +
         '</div>' +
-        '<div class="min-w-0 flex-1 flex flex-col gap-1.5">' + projectsHtml + tasksHtml + '</div>' +
+        '<div class="min-w-0 flex-1 flex flex-col gap-1.5">' + projectsHtml + tasksHtml + stepsHtml + '</div>' +
       '</div>';
     }).join('');
 
@@ -10900,6 +10947,10 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-05h', date: '2026-10-05', items: [
+      { type: 'new', title: 'Checklist steps in the WIP agenda', text: 'Dated checklist steps now show in WIP Meeting\'s day-by-day list, with who has them, so a project run on next steps shows up properly.' },
+      { type: 'new', title: '"Behind" in Needs a decision', text: 'WIP Meeting now flags a task when one of its checklist steps is overdue, before the task itself is late.' }
+    ] },
     { id: '2026-10-05g', date: '2026-10-05', items: [
       { type: 'fixed', title: 'WIP Meeting shows everyone\'s leave', text: 'The Away list now includes everyone who\'s off, whichever teamspace you\'re viewing. Before, leave from people outside your teamspace was left out even when their tasks were on screen.' }
     ] },
@@ -12155,7 +12206,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T06:10:49Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T06:26:43Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
