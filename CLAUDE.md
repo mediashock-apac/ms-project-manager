@@ -3077,9 +3077,29 @@ Client contact / Key links columns).
   (`allProjectNames`), and the WIP alerts/agenda only read `projectDocs` with a deadline AND
   tasks. Logged to Activity. When a lead becomes a job, create the real project as usual and set
   the lead entry to Not sorted.
-- **`wipNote`** — one line under a project's header ("Webinars", "Corporate video"), click to
-  edit (`wipProjectNoteHtml`); a project with no open tasks and no note shows "+ Add note".
-  Header reads no "0 open" for such entries.
+- **The sheet's row shape, for entries without tasks** (asked for: "these entries may not have a
+  deadline or owner yet if it's a hot or cold lead. I will also need status, next steps, notes").
+  Sheet = one row per deliverable: Deliverable | Status (dated log) | Next steps | Notes (usually
+  merged across a project) | Internal PIC. Mapped as:
+  - **Text deliverables** — `projects/{id}.wipDeliverables` [{id, text, status: [status lines],
+    next}], no owner/deadline, never tasks, never on Board/Timeline (`wipDeliverableRowHtml`,
+    "+ Deliverable" on an entry with no open tasks, "+ Status" / "+ Next step" while empty). Each
+    has the same tinted status band as a task: `wipStatusBandHtml(key, list)` is shared, keyed by
+    a task id or `"d:<deliverable id>"`, and `wipSaveEdit`/remove branch on that prefix. "+ Add
+    entry"'s second box creates the first deliverable. Real projects keep tasks as deliverables
+    (status band + checklist steps as next steps) — offered as a "+ Deliverable opens the task
+    window" option and declined for leads, since leads often have no owner or date yet.
+  - **Notes** — `wipNote`, one per project like the sheet's merged Notes column, multi-line
+    (textarea, Shift+Enter for a new line), click to edit. Shown when set; "+ Notes" sits on the
+    info line for entries with no tasks or in an owner category, and on the title bar **on hover
+    only** for a busy active project (a "+ Notes" line under every project would be clutter).
+  - **Owner** — `wipOwner`, a roster name, the sheet's "Internal PIC", only for Pitches, Hot
+    leads, Cold leads and Closing reports (`WIP_OWNER_CATEGORIES`, asked for by name); Active
+    jobs/Content marketing have owners on every task. Picked from roster pills (not a `<select>`,
+    which a live re-render would snap shut). Not counted in workload.
+  - Header count reads "N deliverables" for an entry with text deliverables and no tasks, never
+    "0 open". Deliverable/status/note/owner edits are not logged to Activity (only adding an entry
+    and changing category are); task status is, since tasks are.
 - **Collapse all / Expand all** in the By project section header (`data-wip-fold-all`,
   `wipProjectNamesShown`) folds or opens every project; it reads "Expand all" once all are folded.
 

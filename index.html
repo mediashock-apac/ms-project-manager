@@ -1888,12 +1888,13 @@
      so no rules change; the task modal saves with merge:true, so it never wipes this field.
      Logged to Activity as a task update, since task edits are meant to be recorded there.
   ========================================================= */
-  function taskStatusList(t) {
-    return (Array.isArray(t && t.statusUpdates) ? t.statusUpdates : []).slice().sort(function (a, b) {
+  function statusSorted(list) {
+    return (Array.isArray(list) ? list : []).slice().sort(function (a, b) {
       if (a.date !== b.date) return (a.date || '') < (b.date || '') ? 1 : -1;
       return (a.at || '') < (b.at || '') ? 1 : -1;
     });
   }
+  function taskStatusList(t) { return statusSorted(t && t.statusUpdates); }
   function addTaskStatus(task, date, text) {
     var entry = { id: uid(), date: date, text: text, author: myDisplayName(), at: new Date().toISOString() };
     return updateDoc(doc(tasksCol, task.id), { statusUpdates: arrayUnion(entry) }).then(function () {
@@ -2037,13 +2038,74 @@
       return updateDoc(doc(projectsCol, id), { wipNote: note || null });
     }).catch(function (err) { showToast('Could not save the note: ' + err.message, 'error'); throw err; });
   }
+  // Owner of a WIP entry (`projects/{id}.wipOwner`, a roster display name) -- the sheet's
+  // "Internal PIC", one per project. Only offered for Pitches, Hot leads, Cold leads and Closing
+  // reports (WIP_OWNER_CATEGORIES): Active jobs and Content marketing already have an owner on
+  // every task. Asked for directly. Not counted in workload; it is a who-to-ask, not a task.
+  var WIP_OWNER_CATEGORIES = ['pitch', 'hot', 'cold', 'closing'];
+  function setProjectWipOwner(name, owner) {
+    return ensureProjectDoc(name).then(function (id) {
+      return updateDoc(doc(projectsCol, id), { wipOwner: owner || null });
+    }).catch(function (err) { showToast('Could not save the owner: ' + err.message, 'error'); });
+  }
+
+  // Text deliverables (`projects/{id}.wipDeliverables` [{id, text, status: [status lines], next}])
+  // -- for entries that have no tasks yet (a lead, a pitch), where a deliverable has no owner or
+  // deadline to give it: "B. Because these entries may not have a deadline or owner yet". Each has
+  // its own status log (same shape as a task's statusUpdates) and a one-line next step, like a row
+  // of the sheet. They never become tasks and never reach the Board or Timeline; when the work is
+  // real, add tasks to the project as usual. Full-array rewrites on the project doc (no rules
+  // change -- `projects` update only guards `chat`).
+  function wipDeliverablesOf(pdoc) {
+    return Array.isArray(pdoc && pdoc.wipDeliverables) ? pdoc.wipDeliverables : [];
+  }
+  function findWipDeliverable(id) {
+    for (var i = 0; i < projectDocs.length; i++) {
+      var d = wipDeliverablesOf(projectDocs[i]).find(function (x) { return x.id === id; });
+      if (d) return { pdoc: projectDocs[i], d: d };
+    }
+    return null;
+  }
+  function addWipDeliverable(name, text) {
+    var entry = { id: uid(), text: text, status: [], next: '' };
+    return ensureProjectDoc(name).then(function (id) {
+      return updateDoc(doc(projectsCol, id), { wipDeliverables: arrayUnion(entry) });
+    }).catch(function (err) { showToast('Could not add the deliverable: ' + err.message, 'error'); throw err; });
+  }
+  function updateWipDeliverable(id, change, what) {
+    var f = findWipDeliverable(id);
+    if (!f) return Promise.resolve();
+    var list = wipDeliverablesOf(f.pdoc).map(function (d) { return d.id === id ? change(Object.assign({}, d)) : d; });
+    return updateDoc(doc(projectsCol, f.pdoc.id), { wipDeliverables: list })
+      .catch(function (err) { showToast('Could not save the ' + what + ': ' + err.message, 'error'); throw err; });
+  }
+  function removeWipDeliverable(id) {
+    var f = findWipDeliverable(id);
+    if (!f) return;
+    updateDoc(doc(projectsCol, f.pdoc.id), { wipDeliverables: wipDeliverablesOf(f.pdoc).filter(function (d) { return d.id !== id; }) })
+      .catch(function (err) { showToast('Could not remove the deliverable: ' + err.message, 'error'); });
+  }
+  function addWipDeliverableStatus(id, date, text) {
+    var entry = { id: uid(), date: date, text: text, author: myDisplayName(), at: new Date().toISOString() };
+    return updateWipDeliverable(id, function (d) { d.status = (d.status || []).concat([entry]); return d; }, 'status');
+  }
+  function editWipDeliverableStatus(id, statusId, date, text) {
+    return updateWipDeliverable(id, function (d) {
+      d.status = (d.status || []).map(function (u) { return u.id === statusId ? Object.assign({}, u, { date: date, text: text, editedBy: myDisplayName() }) : u; });
+      return d;
+    }, 'status');
+  }
+  function removeWipDeliverableStatus(id, statusId) {
+    updateWipDeliverable(id, function (d) { d.status = (d.status || []).filter(function (u) { return u.id !== statusId; }); return d; }, 'status')
+      .catch(function () { /* toast already shown */ });
+  }
   // A WIP-only entry is just a project doc with a category (and usually a note) and no tasks. It
   // never reaches the Board, Timeline, Projects or Chat, which all list projects from TASKS
   // (allProjectNames), not from projectDocs. A name that matches an existing project simply puts
   // that project in the category instead of making a second one.
-  function addWipEntry(name, key, note) {
+  function addWipEntry(name, key, firstDeliverable) {
     var patch = { wipCategory: key };
-    if (note) patch.wipNote = note;
+    if (firstDeliverable) patch.wipDeliverables = arrayUnion({ id: uid(), text: firstDeliverable, status: [], next: '' });
     return ensureProjectDoc(name).then(function (id) {
       return updateDoc(doc(projectsCol, id), patch);
     }).then(function () {
@@ -11153,36 +11215,127 @@
       wipEditorButtons(taskId) + '</div>';
   }
 
-  // The tinted status band under a task's line. '' when the task has no status and none is being added.
-  function wipTaskStatusHtml(t) {
-    var list = taskStatusList(t);
-    var adding = wipIsEditing(t.id, 'tstatus', '__new');
+  // The tinted status band under a deliverable's line. `key` identifies whose status it is: a task
+  // id, or "d:<deliverable id>" for a text deliverable on a WIP entry. '' when there is no status
+  // and none is being added.
+  function wipStatusBandHtml(key, list) {
+    var adding = wipIsEditing(key, 'tstatus', '__new');
     if (!list.length && !adding) return '';
-    var showAll = !!wipUpdatesExpanded[t.id];
+    var ek = escapeHtml(key);
+    var showAll = !!wipUpdatesExpanded[key];
     var shown = showAll ? list : list.slice(0, WIP_UPDATES_SHOWN);
     var lines = shown.map(function (u, i) {
-      if (wipIsEditing(t.id, 'tstatus', u.id)) {
-        return wipStatusEditorHtml(t.id, wipDraft.date || u.date || '', wipDraft.text != null ? wipDraft.text : u.text);
+      if (wipIsEditing(key, 'tstatus', u.id)) {
+        return wipStatusEditorHtml(key, wipDraft.date || u.date || '', wipDraft.text != null ? wipDraft.text : u.text);
       }
       var controls = i === 0 && !adding
         ? '<span class="shrink-0 flex items-center gap-3">' +
             (list.length > WIP_UPDATES_SHOWN
-              ? '<button type="button" data-wip-act="toggle-updates" data-project="' + t.id + '" class="' + WIP_ACT_BTN + '">' + (showAll ? 'Show fewer' : 'Show ' + (list.length - WIP_UPDATES_SHOWN) + ' earlier') + '</button>'
+              ? '<button type="button" data-wip-act="toggle-updates" data-project="' + ek + '" class="' + WIP_ACT_BTN + '">' + (showAll ? 'Show fewer' : 'Show ' + (list.length - WIP_UPDATES_SHOWN) + ' earlier') + '</button>'
               : '') +
-            '<button type="button" data-wip-act="add-status" data-project="' + t.id + '" class="' + WIP_ACT_BTN + '">+ Update</button>' +
+            '<button type="button" data-wip-act="add-status" data-project="' + ek + '" class="' + WIP_ACT_BTN + '">+ Update</button>' +
           '</span>'
         : '';
       return '<div class="group/upd flex items-start gap-2 text-sm">' +
         '<span class="shrink-0 w-14 pt-0.5 text-xs font-semibold text-zinc-500 dark:text-zinc-400">' + escapeHtml(u.date ? formatShortDate(u.date) : '') + '</span>' +
-        '<button type="button" data-wip-act="edit-status" data-project="' + t.id + '" data-id="' + escapeHtml(u.id) + '" title="Click to edit" class="min-w-0 flex-1 text-left text-zinc-800 dark:text-zinc-100 break-words hover:text-brand-700 dark:hover:text-brand-300">' + escapeHtml(u.text) +
+        '<button type="button" data-wip-act="edit-status" data-project="' + ek + '" data-id="' + escapeHtml(u.id) + '" title="Click to edit" class="min-w-0 flex-1 text-left text-zinc-800 dark:text-zinc-100 break-words hover:text-brand-700 dark:hover:text-brand-300">' + escapeHtml(u.text) +
           ' <span class="text-xs text-zinc-400 dark:text-zinc-500">— ' + escapeHtml(u.author || '') + (u.editedBy && u.editedBy !== u.author ? ', edited by ' + escapeHtml(u.editedBy) : '') + '</span></button>' +
-        '<button type="button" data-wip-act="remove-status" data-project="' + t.id + '" data-id="' + escapeHtml(u.id) + '" class="shrink-0 opacity-0 group-hover/upd:opacity-100 text-zinc-400 hover:text-rose-500" title="Remove">&times;</button>' +
+        '<button type="button" data-wip-act="remove-status" data-project="' + ek + '" data-id="' + escapeHtml(u.id) + '" class="shrink-0 opacity-0 group-hover/upd:opacity-100 text-zinc-400 hover:text-rose-500" title="Remove">&times;</button>' +
         controls +
       '</div>';
     }).join('');
-    var editor = adding ? wipStatusEditorHtml(t.id, wipDraft.date || toDateInputValue(todayMidnight()), wipDraft.text || '') : '';
+    var editor = adding ? wipStatusEditorHtml(key, wipDraft.date || toDateInputValue(todayMidnight()), wipDraft.text || '') : '';
     return '<div class="flex flex-col gap-1 rounded-md px-2.5 py-1.5 bg-brand-50/70 dark:bg-brand-500/10 border-l-[3px] border-l-brand-400 dark:border-l-brand-500">' +
       editor + lines + '</div>';
+  }
+  function wipTaskStatusHtml(t) { return wipStatusBandHtml(t.id, taskStatusList(t)); }
+
+  // Info block under a project's header: owner (Pitches / leads / Closing reports only), notes,
+  // and "+ Deliverable" for an entry with no open tasks. Notes is one per project, like the
+  // sheet's Notes column (merged across a project's rows). What's unset shows as a quiet "+"
+  // only where it's expected -- an entry with no tasks, or one in an owner category; a busy active
+  // project offers "+ Notes" from its title bar on hover instead of a line of its own.
+  function wipShowsInfoLine(name, openCount) {
+    return !openCount || WIP_OWNER_CATEGORIES.indexOf(projectWipCategory(name)) !== -1;
+  }
+  function wipProjectInfoHtml(name, openCount) {
+    var pdoc = projectDeadlineDoc(name) || {};
+    var en = escapeHtml(name);
+    var note = pdoc.wipNote || '';
+    var ownerCat = WIP_OWNER_CATEGORIES.indexOf(projectWipCategory(name)) !== -1;
+    var parts = [];
+
+    if (ownerCat) {
+      if (wipIsEditing(name, 'owner')) {
+        var current = pdoc.wipOwner || '';
+        var people = teamRoster();
+        if (current && people.indexOf(current) === -1) people.unshift(current);
+        parts.push('<span class="flex items-center gap-1.5 flex-wrap"><span class="text-xs font-semibold text-zinc-500 dark:text-zinc-400">Owner</span>' +
+          people.concat(['']).map(function (p) {
+            var on = p === current;
+            return '<button type="button" data-wip-act="set-owner" data-project="' + en + '" data-owner="' + escapeHtml(p) + '" class="text-xs font-semibold px-2.5 py-1 rounded-full border ' +
+              (on ? 'border-brand-500 bg-brand-500 text-white' : 'border-zinc-200 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:border-brand-400 hover:text-brand-600 dark:hover:text-brand-400') + '">' + escapeHtml(p || 'No owner') + '</button>';
+          }).join('') +
+          '<button type="button" data-wip-act="cancel" class="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200">Cancel</button></span>');
+      } else if (pdoc.wipOwner) {
+        parts.push('<span class="text-xs text-zinc-500 dark:text-zinc-400">Owner: <button type="button" data-wip-act="pick-owner" data-project="' + en + '" title="Change owner" class="font-semibold text-zinc-700 dark:text-zinc-200 hover:text-brand-600 dark:hover:text-brand-400">' + escapeHtml(pdoc.wipOwner) + '</button></span>');
+      } else {
+        parts.push('<button type="button" data-wip-act="pick-owner" data-project="' + en + '" class="' + WIP_ACT_BTN + '">+ Owner</button>');
+      }
+    }
+    var showLine = wipShowsInfoLine(name, openCount);
+    if (showLine && !note && !wipIsEditing(name, 'note')) {
+      parts.push('<button type="button" data-wip-act="edit-note" data-project="' + en + '" class="' + WIP_ACT_BTN + '">+ Notes</button>');
+    }
+    if (!openCount && !wipIsEditing(name, 'deliv', '__new')) {
+      parts.push('<button type="button" data-wip-act="add-deliv" data-project="' + en + '" class="' + WIP_ACT_BTN + '">+ Deliverable</button>');
+    }
+
+    var notesHtml = '';
+    if (wipIsEditing(name, 'note')) {
+      notesHtml = '<div class="flex items-start gap-1.5 flex-wrap">' +
+        '<textarea data-wip-field="note" data-wip-autofocus rows="2" placeholder="Notes for this project (Shift+Enter for a new line)" class="' + wipInputCls('flex-1 min-w-[14rem] resize-y') + '">' + escapeHtml(wipDraft.note != null ? wipDraft.note : note) + '</textarea>' +
+        '<span class="flex items-center gap-1.5 pt-1">' + wipEditorButtons(name) + '</span></div>';
+    } else if (note) {
+      notesHtml = '<div class="flex items-start gap-2 text-sm">' +
+        '<span class="shrink-0 pt-0.5 text-[10px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Notes</span>' +
+        '<button type="button" data-wip-act="edit-note" data-project="' + en + '" title="Click to edit" class="min-w-0 flex-1 text-left text-zinc-700 dark:text-zinc-200 whitespace-pre-line break-words hover:text-brand-700 dark:hover:text-brand-300">' + escapeHtml(note) + '</button></div>';
+    }
+
+    if (!parts.length && !notesHtml) return '';
+    return '<div class="px-4 py-2 flex flex-col gap-1.5 border-b border-zinc-100 dark:border-zinc-700/60">' +
+      (parts.length ? '<div class="flex items-center gap-x-4 gap-y-1 flex-wrap">' + parts.join('') + '</div>' : '') +
+      notesHtml + '</div>';
+  }
+
+  // One text deliverable on a WIP entry, laid out like a task row: name (click to edit), its
+  // status band, and a "Next:" line. Quiet "+ Status" / "+ Next step" while those are empty.
+  function wipDeliverableRowHtml(name, d) {
+    var key = 'd:' + d.id, ek = escapeHtml(key), eid = escapeHtml(d.id);
+    var status = statusSorted(d.status);
+    var title = wipIsEditing(name, 'deliv', d.id)
+      ? '<span class="min-w-0 flex-1 flex items-center gap-1.5 flex-wrap"><input data-wip-field="delivText" data-wip-autofocus class="' + wipInputCls('flex-1 min-w-[12rem]') + '" value="' + escapeHtml(wipDraft.delivText != null ? wipDraft.delivText : d.text) + '">' + wipEditorButtons(name) + '</span>'
+      : '<button type="button" data-wip-act="edit-deliv" data-project="' + escapeHtml(name) + '" data-id="' + eid + '" title="Click to rename" class="min-w-0 flex-1 text-left text-sm font-medium text-zinc-800 dark:text-zinc-100 break-words hover:text-brand-700 dark:hover:text-brand-400">' + escapeHtml(d.text) + '</button>';
+    var adds = '<span class="shrink-0 flex items-center gap-3">' +
+      (!status.length && !wipIsEditing(key, 'tstatus', '__new') ? '<button type="button" data-wip-act="add-status" data-project="' + ek + '" class="' + WIP_ACT_BTN + '">+ Status</button>' : '') +
+      (!d.next && !wipIsEditing(key, 'dnext') ? '<button type="button" data-wip-act="edit-dnext" data-project="' + ek + '" class="' + WIP_ACT_BTN + '">+ Next step</button>' : '') +
+      '<button type="button" data-wip-act="remove-deliv" data-id="' + eid + '" title="Remove deliverable" class="opacity-0 group-hover/dl:opacity-100 text-zinc-400 hover:text-rose-500">&times;</button>' +
+    '</span>';
+    var next = wipIsEditing(key, 'dnext')
+      ? '<div class="flex items-center gap-1.5 flex-wrap"><span class="text-xs font-semibold text-zinc-500 dark:text-zinc-400">Next:</span><input data-wip-field="next" data-wip-autofocus placeholder="What happens next" class="' + wipInputCls('flex-1 min-w-[12rem]') + '" value="' + escapeHtml(wipDraft.next != null ? wipDraft.next : (d.next || '')) + '">' + wipEditorButtons(key) + '</div>'
+      : d.next
+        ? '<div class="flex items-start gap-2 text-xs"><span class="shrink-0 font-semibold text-zinc-500 dark:text-zinc-400">Next:</span><button type="button" data-wip-act="edit-dnext" data-project="' + ek + '" title="Click to edit" class="min-w-0 text-left text-zinc-700 dark:text-zinc-200 break-words hover:text-brand-700 dark:hover:text-brand-300">' + escapeHtml(d.next) + '</button></div>'
+        : '';
+    return '<div class="px-4 py-2.5 flex flex-col gap-1.5">' +
+      '<div class="group/dl flex items-center gap-3">' + title + adds + '</div>' +
+      wipStatusBandHtml(key, status) + next +
+    '</div>';
+  }
+  function wipNewDeliverableHtml(name) {
+    if (!wipIsEditing(name, 'deliv', '__new')) return '';
+    return '<div class="px-4 py-2.5 flex items-center gap-1.5 flex-wrap">' +
+      '<input data-wip-field="delivText" data-wip-autofocus placeholder="Deliverable, e.g. Corporate video" class="' + wipInputCls('flex-1 min-w-[12rem]') + '" value="' + escapeHtml(wipDraft.delivText || '') + '">' +
+      wipEditorButtons(name) + '</div>';
   }
 
   // Contact & links panel for one project (Suits/admins, once opened). '' otherwise.
@@ -11213,26 +11366,6 @@
       contactHtml + linksHtml + linkEditor + '</div>';
   }
 
-  // One-line note on a project (`projects/{id}.wipNote`) -- what a lead is about ("Webinars",
-  // "Corporate video"), the sheet's description column for entries that have no tasks. Shown when
-  // set, click to edit; a project with no open tasks and no note offers "+ Add note".
-  function wipProjectNoteHtml(name, openCount) {
-    var note = (projectDeadlineDoc(name) || {}).wipNote || '';
-    if (wipIsEditing(name, 'note')) {
-      return '<div class="px-4 py-2 flex items-center gap-1.5 flex-wrap border-b border-zinc-100 dark:border-zinc-700/60">' +
-        '<input data-wip-field="note" data-wip-autofocus placeholder="What this is about" class="' + wipInputCls('flex-1 min-w-[12rem]') + '" value="' + escapeHtml(wipDraft.note != null ? wipDraft.note : note) + '">' +
-        wipEditorButtons(name) + '</div>';
-    }
-    if (note) {
-      return '<div class="px-4 py-2 border-b border-zinc-100 dark:border-zinc-700/60">' +
-        '<button type="button" data-wip-act="edit-note" data-project="' + escapeHtml(name) + '" title="Click to edit" class="text-left text-sm text-zinc-700 dark:text-zinc-200 break-words hover:text-brand-700 dark:hover:text-brand-300">' + escapeHtml(note) + '</button></div>';
-    }
-    if (!openCount) {
-      return '<div class="px-4 py-2 border-b border-zinc-100 dark:border-zinc-700/60">' +
-        '<button type="button" data-wip-act="edit-note" data-project="' + escapeHtml(name) + '" class="' + WIP_ACT_BTN + '">+ Add note</button></div>';
-    }
-    return '';
-  }
 
   // "+ Add entry": put something on WIP that has no tasks and no Drive folder (a cold lead, a
   // pitch) -- just a name, a one-line note and a category. Category pills, not a <select>, so a
@@ -11247,7 +11380,7 @@
     return '<div class="px-4 py-3 flex flex-col gap-2 bg-brand-50/70 dark:bg-brand-500/10 border-b border-zinc-100 dark:border-zinc-700">' +
       '<div class="flex items-center gap-1.5 flex-wrap">' +
         '<input data-wip-field="entryName" data-wip-autofocus placeholder="Client or project, e.g. BW Group" class="' + wipInputCls('w-56') + '" value="' + escapeHtml(wipDraft.entryName || '') + '">' +
-        '<input data-wip-field="entryNote" placeholder="What it is, e.g. Corporate video" class="' + wipInputCls('flex-1 min-w-[12rem]') + '" value="' + escapeHtml(wipDraft.entryNote || '') + '">' +
+        '<input data-wip-field="entryNote" placeholder="First deliverable (optional), e.g. Corporate video" class="' + wipInputCls('flex-1 min-w-[12rem]') + '" value="' + escapeHtml(wipDraft.entryNote || '') + '">' +
       '</div>' +
       '<div class="flex items-center gap-1.5 flex-wrap">' + pills + '<span class="flex-1"></span>' + wipEditorButtons('') + '</div>' +
     '</div>';
@@ -11270,7 +11403,29 @@
       var entryName = (d.entryName || '').trim();
       if (!entryName) { showToast('Give the entry a name', 'info'); return; }
       if (!d.cat) { showToast('Pick a category for it', 'info'); return; }
-      p = addWipEntry(entryName.slice(0, 100), d.cat, (d.entryNote || '').trim().slice(0, 300));
+      p = addWipEntry(entryName.slice(0, 100), d.cat, (d.entryNote || '').trim().slice(0, 200));
+    } else if (e.kind === 'deliv') {
+      var dText = (d.delivText != null ? d.delivText : '').trim();
+      if (e.id === '__new') {
+        if (!dText) { showToast('Name the deliverable first', 'info'); return; }
+        p = addWipDeliverable(e.project, dText.slice(0, 200));
+      } else {
+        if (d.delivText == null) { done(); return; }
+        if (!dText) { showToast('Name the deliverable first', 'info'); return; }
+        p = updateWipDeliverable(e.id, function (x) { x.text = dText.slice(0, 200); return x; }, 'deliverable');
+      }
+    } else if (e.kind === 'dnext') {
+      if (d.next == null) { done(); return; }
+      p = updateWipDeliverable(e.project.slice(2), function (x) { x.next = d.next.trim().slice(0, 300); return x; }, 'next step');
+    } else if (e.kind === 'tstatus' && e.project.indexOf('d:') === 0) {
+      // Status on a text deliverable (WIP entry), keyed "d:<id>".
+      var dl = findWipDeliverable(e.project.slice(2));
+      if (!dl) { done(); return; }
+      var dPrev = e.id !== '__new' ? (dl.d.status || []).find(function (u) { return u.id === e.id; }) : null;
+      var sText = (d.text != null ? d.text : (dPrev ? dPrev.text : '')).trim();
+      var sDate = d.date || (dPrev && dPrev.date) || toDateInputValue(todayMidnight());
+      if (!sText) { showToast('Write the status first', 'info'); return; }
+      p = e.id === '__new' ? addWipDeliverableStatus(dl.d.id, sDate, sText) : editWipDeliverableStatus(dl.d.id, e.id, sDate, sText);
     } else if (e.kind === 'tstatus') {
       var task = tasks.find(function (x) { return x.id === e.project; });
       if (!task) { done(); return; }
@@ -11395,20 +11550,31 @@
             }).join('') +
           '</div>'
         : '';
+      // Text deliverables (WIP entries without tasks), after any task rows.
+      var delivs = name ? wipDeliverablesOf(pdoc) : [];
+      var delivRows = folded ? '' : delivs.map(function (d) { return wipDeliverableRowHtml(name, d); }).join('');
+      var countText = list.length ? list.length + ' open'
+        : delivs.length ? delivs.length + ' deliverable' + (delivs.length === 1 ? '' : 's') : '';
+      // A busy project with no notes line of its own gets "+ Notes" on its title bar, on hover only.
+      var notesBtn = name && !folded && !pdoc.wipNote && !wipShowsInfoLine(name, list.length) && !wipIsEditing(name, 'note')
+        ? '<button type="button" data-wip-act="edit-note" data-project="' + escapeHtml(name) + '" class="shrink-0 px-3 ' + WIP_ACT_BTN + ' opacity-0 group-hover/hdr:opacity-100 focus:opacity-100">+ Notes</button>'
+        : '';
 
       cardHtml[name] = '<div class="border-b border-zinc-100 dark:border-zinc-700 last:border-b-0">' +
         '<div class="group/hdr flex items-stretch bg-zinc-50 dark:bg-zinc-700/40">' +
           '<button type="button" data-wip-fold="' + escapeHtml(name) + '" aria-expanded="' + !folded + '" class="min-w-0 flex-1 flex items-center gap-2 px-4 py-2.5 text-left hover:bg-zinc-100 dark:hover:bg-zinc-700/70">' +
             svgIcon('chevronDown', 'w-3.5 h-3.5 shrink-0 text-zinc-400 transition-transform' + (folded ? ' -rotate-90' : '')) +
             '<span class="min-w-0 flex-1 text-sm font-bold text-zinc-800 dark:text-zinc-100 break-words">' + (name ? projectNameHtml(name) : 'No project') + '</span>' +
-            '<span class="shrink-0 text-xs text-zinc-500 dark:text-zinc-400">' + (list.length ? list.length + ' open' : '') +
-              (due ? (list.length ? ' · ' : '') + (own ? 'Project due ' : 'Due ') + escapeHtml(formatShortDate(due)) : '') + '</span>' +
+            '<span class="shrink-0 text-xs text-zinc-500 dark:text-zinc-400">' + countText +
+              (due ? (countText ? ' · ' : '') + (own ? 'Project due ' : 'Due ') + escapeHtml(formatShortDate(due)) : '') + '</span>' +
           '</button>' +
+          notesBtn +
           catBtn +
           detailsBtn +
         '</div>' +
         catPicker +
-        (folded ? '' : (name ? wipProjectNoteHtml(name, list.length) + wipProjectDetailsHtml(name) : '') + '<div class="divide-y divide-zinc-100 dark:divide-zinc-700/50">' + rows + '</div>') +
+        (folded ? '' : (name ? wipProjectInfoHtml(name, list.length) + wipProjectDetailsHtml(name) : '') +
+          '<div class="divide-y divide-zinc-100 dark:divide-zinc-700/50">' + rows + delivRows + (name ? wipNewDeliverableHtml(name) : '') + '</div>') +
       '</div>';
     });
 
@@ -11452,11 +11618,27 @@
       }
       if (kind === 'remove-status') {
         openConfirm('Remove this status?', 'It will be removed for everyone.', function () {
+          if (proj.indexOf('d:') === 0) { removeWipDeliverableStatus(proj.slice(2), aid); return; }
           var task = tasks.find(function (x) { return x.id === proj; });
           if (task) removeTaskStatus(task, aid);
         }, { confirmText: 'Remove', cancelText: 'Cancel' });
         return;
       }
+      if (kind === 'remove-deliv') {
+        openConfirm('Remove this deliverable?', 'Its status and next step go with it, for everyone.', function () { removeWipDeliverable(aid); }, { confirmText: 'Remove', cancelText: 'Cancel' });
+        return;
+      }
+      if (kind === 'set-owner') {
+        var ownerName = act.getAttribute('data-owner') || '';
+        wipEdit = null; wipDraft = {};
+        if (ownerName !== ((projectDeadlineDoc(proj) || {}).wipOwner || '')) setProjectWipOwner(proj, ownerName);
+        renderWipView();
+        return;
+      }
+      if (kind === 'pick-owner') { wipDraft = {}; wipEdit = wipIsEditing(proj, 'owner') ? null : { project: proj, kind: 'owner' }; renderWipView(); return; }
+      if (kind === 'add-deliv') { wipDraft = {}; wipEdit = { project: proj, kind: 'deliv', id: '__new' }; renderWipView(); return; }
+      if (kind === 'edit-deliv') { wipDraft = {}; wipEdit = { project: proj, kind: 'deliv', id: aid }; renderWipView(); return; }
+      if (kind === 'edit-dnext') { wipDraft = {}; wipEdit = { project: proj, kind: 'dnext' }; renderWipView(); return; }
       if (kind === 'toggle-updates') { if (wipUpdatesExpanded[proj]) delete wipUpdatesExpanded[proj]; else wipUpdatesExpanded[proj] = true; renderWipView(); return; }
       if (kind === 'toggle-details') {
         if (wipDetailsOpen[proj]) delete wipDetailsOpen[proj]; else wipDetailsOpen[proj] = true;
@@ -11500,6 +11682,7 @@
   });
   document.getElementById('wip-projects').addEventListener('keydown', function (e) {
     if (!e.target.getAttribute || !e.target.getAttribute('data-wip-field') || !wipEdit) return;
+    if (e.key === 'Enter' && e.shiftKey && e.target.tagName === 'TEXTAREA') return;   // new line in Notes
     if (e.key === 'Enter') { e.preventDefault(); wipSaveEdit(wipEdit.project); }
     else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); wipEdit = null; wipDraft = {}; renderWipView(); }
   });
@@ -11616,6 +11799,10 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-05u', date: '2026-10-05', items: [
+      { type: 'new', title: 'Deliverables, status and next steps for leads', text: 'Entries in WIP Meeting that have no tasks yet, like a hot or cold lead, can now list their deliverables without an owner or deadline. Each deliverable has its own status and next step, like a row of the WIP sheet. Use "+ Deliverable" under the entry.' },
+      { type: 'new', title: 'Owner and notes on WIP entries', text: 'Pitches, hot leads, cold leads and closing reports now show an owner ("+ Owner"). Every project in WIP Meeting can hold notes, like the Notes column of the sheet. On a project with tasks, hover its title bar to add notes.' }
+    ] },
     { id: '2026-10-05t', date: '2026-10-05', items: [
       { type: 'new', title: 'Add leads and pitches straight to WIP', text: 'Use "+ Add entry" at the top of WIP Meeting\'s By project list to add something with no tasks or project folder yet, like a cold lead: type a name, a short note such as "Corporate video", and pick a category. It only appears in WIP Meeting, not on the Board or Timeline.' },
       { type: 'improved', title: 'Finished projects stay for closing reports', text: 'A project with a category now stays in WIP Meeting even when all its tasks are done, so Closing reports keeps its list. To take anything off WIP, set its category to Not sorted.' }
@@ -12927,7 +13114,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T10:25:04Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T10:34:58Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
