@@ -11119,7 +11119,16 @@
       var d = list.map(function (t) { return t.deadline; }).filter(Boolean).sort()[0];
       return d || '9999-99-99';
     }
+    // Pinned to the end, on request: the in-house Mediashock LinkedIn marketing project is
+    // ongoing work, discussed after the client projects. Matched loosely (both words, any case)
+    // because project names are free text and the exact spelling isn't fixed.
+    function sinksToEnd(n) {
+      var l = (n || '').toLowerCase();
+      return l.indexOf('mediashock') !== -1 && l.indexOf('linkedin') !== -1;
+    }
     names.sort(function (a, b) {
+      var sa = sinksToEnd(a), sb = sinksToEnd(b);
+      if (sa !== sb) return sa ? 1 : -1;
       var da = firstDeadline(byProject[a]), db = firstDeadline(byProject[b]);
       return da !== db ? (da < db ? -1 : 1) : a.localeCompare(b);
     });
@@ -11355,6 +11364,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-05n', date: '2026-10-05', items: [
+      { type: 'improved', title: 'LinkedIn marketing last in WIP Meeting', text: 'The Mediashock LinkedIn marketing project now always sits at the bottom of the By project list, after the client projects.' }
+    ] },
     { id: '2026-10-05m', date: '2026-10-05', items: [
       { type: 'improved', title: 'Clearer project status in WIP Meeting', text: 'Each project in WIP Meeting now has its own highlighted Status line showing the latest update. Click the update to edit it, or use + Add update. Client contact and links are tucked behind "Contact & links", which only the Suits team sees.' },
       { type: 'new', title: 'Collapse all in WIP Meeting', text: 'A Collapse all button at the top of the By project list folds every project to its name, so you can open them one at a time. Click Expand all to open them again.' }
@@ -12630,7 +12642,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T09:43:25Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T09:44:09Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

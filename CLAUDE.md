@@ -3020,6 +3020,10 @@ Activity (routine traffic, same reasoning as chat messages).
   not a boundary** — the fields are on the team-readable project doc, and the links are also the
   chat's Pinned links, visible to anyone who opens that chat. Open state `wipDetailsOpen`,
   session-only.
+- **The Mediashock LinkedIn marketing project always sorts last** on By project (`sinksToEnd` in
+  `wipProjectsHtml`: name contains both "mediashock" and "linkedin", any case), on request —
+  in-house ongoing work is discussed after client projects. Name-matched, so a rename that drops
+  either word silently returns it to deadline order.
 - **Collapse all / Expand all** in the By project section header (`data-wip-fold-all`,
   `wipProjectNamesShown`) folds or opens every project; it reads "Expand all" once all are folded.
 
