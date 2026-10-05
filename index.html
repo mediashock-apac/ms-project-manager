@@ -866,7 +866,7 @@
       <div class="flex items-center justify-between mb-2.5">
         <div class="flex items-center gap-2">
           <div class="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-500/15 flex items-center justify-center">
-            <svg class="w-4 h-4 text-amber-600 dark:text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg>
+            <svg class="w-4 h-4 text-amber-700 dark:text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg>
           </div>
           <h2 class="text-base font-bold text-zinc-900 dark:text-zinc-100">Focus of the Day</h2>
           <span id="focus-caption" class="text-xs text-zinc-400 dark:text-zinc-500">— highest priority &amp; most urgent, auto-sorted</span>
@@ -911,9 +911,9 @@
             <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-emerald-400"></span>Done</span>
             <span class="flex items-center gap-1"><span class="w-0.5 h-3 bg-rose-500"></span>Today</span>
             <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-amber-500 flex items-center justify-center text-white text-[8px] font-black leading-none">!</span>Deadline stack</span>
-            <span id="gantt-hidden-note" class="hidden text-amber-600 dark:text-amber-400 font-semibold" title="These tasks have a status, priority, and everything else -- just no start date and/or deadline, so there's nothing to plot a bar between."></span>
+            <span id="gantt-hidden-note" class="hidden text-amber-700 dark:text-amber-400 font-semibold" title="These tasks have a status, priority, and everything else -- just no start date and/or deadline, so there's nothing to plot a bar between."></span>
             <span id="gantt-stack-note" class="hidden text-rose-600 dark:text-rose-400 font-semibold" title="These tasks share an owner and a deadline -- more than one thing is due from the same person on the same day."></span>
-            <span id="gantt-leave-note" class="hidden text-amber-600 dark:text-amber-400 font-semibold" title="The deadline falls on a day the owner is away. The shaded stripes on a row are that person's leave -- set it in the People tab."></span>
+            <span id="gantt-leave-note" class="hidden text-amber-700 dark:text-amber-400 font-semibold" title="The deadline falls on a day the owner is away. The shaded stripes on a row are that person's leave -- set it in the People tab."></span>
             <button type="button" id="gantt-progress-toggle" data-tooltip="Progress column counts checklist items instead of status" class="tooltip-top flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700">
               <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 7 2 2 3-3"></path><path d="M9 7h12"></path><path d="m3 15 2 2 3-3"></path><path d="M9 15h12"></path></svg>
               <span>Progress</span>
@@ -1140,9 +1140,9 @@
                    editing). Same hidden+flex idiom as chat-reply-preview above, for the identical
                    specificity reason. Mutually exclusive with replying -- startChatEdit cancels
                    any in-progress reply first, and vice versa. -->
-              <div id="chat-edit-preview" hidden class="items-center gap-2 mb-1.5 pl-2.5 pr-2 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-500/10 border-l-2 border-amber-400">
-                <span class="flex-1 min-w-0 text-xs font-semibold text-amber-700 dark:text-amber-400">Editing message</span>
-                <button type="button" id="chat-edit-cancel" class="shrink-0 p-0.5 text-amber-500 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300" aria-label="Cancel edit">
+              <div id="chat-edit-preview" hidden class="items-center gap-2 mb-1.5 pl-2.5 pr-2 py-1.5 rounded-lg bg-amber-100 dark:bg-amber-500/10 border-l-2 border-amber-500">
+                <span class="flex-1 min-w-0 text-xs font-semibold text-amber-800 dark:text-amber-400">Editing message</span>
+                <button type="button" id="chat-edit-cancel" class="shrink-0 p-0.5 text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-300" aria-label="Cancel edit">
                   <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                 </button>
               </div>
@@ -3656,9 +3656,9 @@
     pinnedWrap.classList.toggle('flex', pinnedMessages.length > 0);
     document.getElementById('project-chat-pinned-list').innerHTML = pinnedMessages.map(function (m) {
       var body = m.text || (m.imageUrl ? 'Photo' : '');
-      return '<div class="flex items-center gap-1.5 bg-amber-50 dark:bg-amber-500/10 rounded-lg px-2.5 py-1.5">' +
+      return '<div class="flex items-center gap-1.5 bg-amber-100 dark:bg-amber-500/10 rounded-lg px-2.5 py-1.5">' +
         '<button type="button" class="chat-pinned-jump flex-1 min-w-0 text-left" data-message-id="' + m.id + '">' +
-          '<span class="text-xs font-semibold text-amber-700 dark:text-amber-400">' + escapeHtml(m.author || 'Unknown') + '</span>' +
+          '<span class="text-xs font-semibold text-amber-800 dark:text-amber-400">' + escapeHtml(m.author || 'Unknown') + '</span>' +
           '<span class="block text-xs text-zinc-500 dark:text-zinc-400 truncate">' + escapeHtml(body) + '</span>' +
         '</button>' +
         '<button type="button" class="chat-pinned-unpin p-0.5 text-zinc-300 dark:text-zinc-600 hover:text-rose-500 dark:hover:text-rose-400 shrink-0" data-message-id="' + m.id + '" aria-label="Unpin">' + svgIcon('x', 'w-3 h-3') + '</button>' +
@@ -5246,7 +5246,7 @@
 
   var PRIORITY_META = {
     High:   { badge: 'bg-rose-100 text-rose-700 ring-1 ring-inset ring-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-500/25', dot: 'bg-rose-500', bar: 'bg-rose-400', barLight: 'bg-rose-100 dark:bg-rose-500/10', border: 'border-l-rose-500' },
-    Medium: { badge: 'bg-amber-100 text-amber-700 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/25', dot: 'bg-amber-500', bar: 'bg-amber-400', barLight: 'bg-amber-100 dark:bg-amber-500/10', border: 'border-l-amber-500' },
+    Medium: { badge: 'bg-amber-100 text-amber-800 ring-1 ring-inset ring-amber-300 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/25', dot: 'bg-amber-500', bar: 'bg-amber-400', barLight: 'bg-amber-100 dark:bg-amber-500/10', border: 'border-l-amber-500' },
     Low:    { badge: 'bg-sky-100 text-sky-700 ring-1 ring-inset ring-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-500/25', dot: 'bg-sky-500', bar: 'bg-sky-400', barLight: 'bg-sky-100 dark:bg-sky-500/10', border: 'border-l-sky-500' }
   };
 
@@ -5273,7 +5273,7 @@
   // migration. SUGGESTION_STATUS_ORDER is the dropdown's option order.
   var SUGGESTION_STATUS_META = {
     open: { label: 'Open', badge: 'bg-zinc-100 text-zinc-600 ring-1 ring-inset ring-zinc-200 dark:bg-zinc-700 dark:text-zinc-300 dark:ring-zinc-600' },
-    wip: { label: 'WIP', badge: 'bg-amber-100 text-amber-700 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/25' },
+    wip: { label: 'WIP', badge: 'bg-amber-100 text-amber-800 ring-1 ring-inset ring-amber-300 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/25' },
     fixed: { label: 'Fixed', badge: DONE_META.badge },
     unabletofix: { label: 'Unable to Fix', badge: PRIORITY_META.High.badge }
   };
@@ -6121,7 +6121,7 @@
   var confirmCancelCallback = null;
   var CONFIRM_TONES = {
     danger: { wrap: 'bg-rose-100 dark:bg-rose-500/15', icon: 'text-rose-600 dark:text-rose-400', iconName: 'alert', okBtn: 'bg-rose-600 hover:bg-rose-700' },
-    question: { wrap: 'bg-amber-100 dark:bg-amber-500/15', icon: 'text-amber-600 dark:text-amber-400', iconName: 'info', okBtn: 'bg-brand-600 hover:bg-brand-700' }
+    question: { wrap: 'bg-amber-100 dark:bg-amber-500/15', icon: 'text-amber-700 dark:text-amber-400', iconName: 'info', okBtn: 'bg-brand-600 hover:bg-brand-700' }
   };
 
   function openConfirm(title, body, onConfirm, options) {
@@ -6519,7 +6519,7 @@
     var taskDeadline = document.getElementById('task-deadline').value;
     var overdue = !item.done && parseDate(item.due) < todayMidnight();
     var after = taskDeadline && item.due > taskDeadline;
-    var cls = overdue ? 'text-rose-600 dark:text-rose-400' : (after ? 'text-amber-600 dark:text-amber-400' : 'text-zinc-400 dark:text-zinc-500');
+    var cls = overdue ? 'text-rose-600 dark:text-rose-400' : (after ? 'text-amber-700 dark:text-amber-400' : 'text-zinc-400 dark:text-zinc-500');
     return '<span class="block text-[11px] ' + cls + '">Due ' + formatShortDate(item.due) + (overdue ? ' · overdue' : '') + (after ? ' · after the task deadline' : '');
   }
 
@@ -6892,7 +6892,7 @@
               ? '<span class="min-w-0 flex-1 truncate text-sm text-zinc-600 dark:text-zinc-300" title="' + escapeHtml(label) + '">' + escapeHtml(label) + '</span>'
               : '<span class="min-w-0 flex-1 truncate text-sm text-zinc-400 dark:text-zinc-500">General</span>') +
             (e.billable && !allBillable ? '<span class="shrink-0 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">Billable</span>' : '') +
-            (e.overtime ? '<span class="shrink-0 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">Overtime</span>' : '') +
+            (e.overtime ? '<span class="shrink-0 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-400">Overtime</span>' : '') +
             '<span class="shrink-0 w-12 text-right text-xs text-zinc-400 dark:text-zinc-500">' + formatShortDate(localDateOf(e.date)) + '</span>' +
             '<div class="flex items-center gap-0.5 shrink-0">' +
               '<button type="button" class="time-entry-edit p-1 text-zinc-300 dark:text-zinc-600 hover:text-brand-600 dark:hover:text-brand-400" data-i="' + i + '" aria-label="Edit time entry">' + svgIcon('pencil', 'w-3 h-3') + '</button>' +
@@ -6912,7 +6912,7 @@
       // classifications of the same minutes, and burying overtime inside billable made it
       // easy to miss when scanning the total.
       var badges = '';
-      if (overtimeMinutes) badges += '<span class="ml-1.5 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">' + formatDuration(overtimeMinutes) + ' overtime</span>';
+      if (overtimeMinutes) badges += '<span class="ml-1.5 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-400">' + formatDuration(overtimeMinutes) + ' overtime</span>';
       if (billableMinutes && billableMinutes === totalMinutes) badges += '<span class="ml-1 text-emerald-600 dark:text-emerald-400">· all billable</span>';
       else if (billableMinutes) badges += '<span class="ml-1.5 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">' + formatDuration(billableMinutes) + ' billable</span>';
       totalEl.innerHTML = formatDuration(totalMinutes) + ' logged' + badges;
@@ -6952,11 +6952,11 @@
   // toggle is more predictable and matches how Billable already works.
   function setOvertimeToggle(btn, active) {
     btn.setAttribute('data-active', active ? 'true' : 'false');
-    btn.classList.toggle('border-amber-200', active);
+    btn.classList.toggle('border-amber-300', active);
     btn.classList.toggle('dark:border-amber-500/30', active);
-    btn.classList.toggle('bg-amber-50', active);
+    btn.classList.toggle('bg-amber-100', active);
     btn.classList.toggle('dark:bg-amber-500/15', active);
-    btn.classList.toggle('text-amber-700', active);
+    btn.classList.toggle('text-amber-800', active);
     btn.classList.toggle('dark:text-amber-400', active);
     btn.classList.toggle('border-zinc-200', !active);
     btn.classList.toggle('dark:border-zinc-700', !active);
@@ -9481,7 +9481,7 @@
 
       var away = teamPeople.filter(function (p) { return isOnLeave(p.name, dateStr); }).map(function (p) { return p.name; });
       var awayHtml = away.length
-        ? '<div class="text-[10px] text-amber-600 dark:text-amber-400 truncate px-1" title="' + escapeHtml(away.join(', ') + ' away today') + '">' + escapeHtml(away.length === 1 ? away[0] + ' away' : away.length + ' away') + '</div>'
+        ? '<div class="text-[10px] text-amber-700 dark:text-amber-400 truncate px-1" title="' + escapeHtml(away.join(', ') + ' away today') + '">' + escapeHtml(away.length === 1 ? away[0] + ' away' : away.length + ' away') + '</div>'
         : '';
       var moreHtml = overflow > 0
         ? '<button type="button" data-calendar-day="' + dateStr + '" class="w-full text-left text-[11px] font-medium text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 px-1">+' + overflow + ' more</button>'
@@ -9636,7 +9636,7 @@
       var ended = l.end < todayStr;
       var pillClass = ended
         ? 'bg-zinc-100 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400'
-        : 'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300';
+        : 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300';
       return '<span class="inline-flex items-center gap-1 text-xs font-semibold px-1.5 py-0.5 rounded ' + pillClass + '">' +
         escapeHtml(formatShortDate(l.start) + ' – ' + formatShortDate(l.end)) +
         (ended ? '<span class="font-normal opacity-80">Ended</span>' : '') +
@@ -9835,7 +9835,7 @@
       // Away reads before overdue: "3 overdue" means something quite different once you know the
       // person is not at their desk, so the qualifier has to arrive first.
       var awayNow = leavePeriodOn(p.name, toDateInputValue(todayMidnight()));
-      if (awayNow) workloadChips += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300" title="' + escapeHtml('Away until ' + formatShortDate(awayNow.end) + (awayNow.note ? ' · ' + awayNow.note : '')) + '">Away until ' + escapeHtml(formatShortDate(awayNow.end)) + '</span>';
+      if (awayNow) workloadChips += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300" title="' + escapeHtml('Away until ' + formatShortDate(awayNow.end) + (awayNow.note ? ' · ' + awayNow.note : '')) + '">Away until ' + escapeHtml(formatShortDate(awayNow.end)) + '</span>';
       if (p.overdue > 0) workloadChips += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-rose-50 text-rose-600 dark:bg-rose-500/15 dark:text-rose-300">' + p.overdue + ' overdue</span>';
       if (p.high > 0) workloadChips += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-zinc-100 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400">' + p.high + ' high</span>';
 
@@ -9941,7 +9941,7 @@
         '</div>' +
         '<div class="text-right shrink-0">' +
           '<span class="block text-xs font-semibold text-zinc-400 dark:text-zinc-500">' + (minutes ? formatDuration(minutes) : '—') + '</span>' +
-          (overtimeMinutes ? '<span class="block text-[10px] font-bold text-amber-600 dark:text-amber-400 mt-0.5">' + formatDuration(overtimeMinutes) + ' OT</span>' : '') +
+          (overtimeMinutes ? '<span class="block text-[10px] font-bold text-amber-700 dark:text-amber-400 mt-0.5">' + formatDuration(overtimeMinutes) + ' OT</span>' : '') +
         '</div>' +
       '</button>'
     );
@@ -9959,7 +9959,7 @@
       : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-6">No tasks yet.</p>';
 
     var badges = '';
-    if (p.overtimeMinutes > 0) badges += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-300">' + formatDuration(p.overtimeMinutes) + ' overtime</span>';
+    if (p.overtimeMinutes > 0) badges += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">' + formatDuration(p.overtimeMinutes) + ' overtime</span>';
     if (p.billableMinutes > 0) badges += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300">' + formatDuration(p.billableMinutes) + ' billable</span>';
 
     // This is the one and only place a project deadline is set. Deliberately not also in the
@@ -10230,7 +10230,7 @@
     task_comment: 'bg-violet-100 text-violet-600 dark:bg-violet-500/15 dark:text-violet-400',
     // Amber, matching the Away chip on the People card and the Gantt's leave note -- one colour
     // means "someone is not available" everywhere it appears.
-    leave_changed: 'bg-amber-100 text-amber-600 dark:bg-amber-500/15 dark:text-amber-400',
+    leave_changed: 'bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400',
     board_imported: 'bg-zinc-200 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-400',
     board_seeded: 'bg-zinc-200 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-400',
     board_archived: 'bg-zinc-200 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-400',
@@ -10887,7 +10887,7 @@
 
   var WIP_TONES = {
     rose:   'bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300',
-    amber:  'bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300',
+    amber:  'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300',
     violet: 'bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300',
     purple: 'bg-purple-50 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300'
   };
@@ -11834,7 +11834,7 @@
           if (!hdrFlash.cls) hdrFlash = remoteFlashAttrs(t.id);
         });
         riskHtml = (overdueN ? '<span class="shrink-0 text-xs font-semibold text-rose-600 dark:text-rose-400">' + overdueN + ' overdue</span>' : '') +
-          (behindN ? '<span class="shrink-0 text-xs font-semibold text-amber-600 dark:text-amber-400">' + behindN + ' behind</span>' : '');
+          (behindN ? '<span class="shrink-0 text-xs font-semibold text-amber-700 dark:text-amber-400">' + behindN + ' behind</span>' : '');
       }
 
       cardHtml[name] = '<div class="border-b border-zinc-100 dark:border-zinc-700 last:border-b-0">' +
@@ -12015,14 +12015,17 @@
       var kinds = {};
       alerts.forEach(function (a) { kinds[a.kind] = (kinds[a.kind] || 0) + 1; });
       document.getElementById('wip-alerts').innerHTML = alerts.length
-        ? '<div class="rounded-xl border border-amber-200 dark:border-amber-500/30 overflow-hidden">' +
-            '<button type="button" data-wip-alerts-toggle aria-expanded="' + wipAlertsOpen + '" class="w-full flex items-center gap-2 flex-wrap px-4 py-2.5 bg-amber-50 dark:bg-amber-500/10 text-left hover:bg-amber-100 dark:hover:bg-amber-500/15">' +
-              svgIcon('chevronDown', 'w-3.5 h-3.5 shrink-0 transition-transform text-amber-600 dark:text-amber-400' + (wipAlertsOpen ? '' : ' -rotate-90')) +
+        // Light mode is deliberately firmer than the usual amber-50 tint (amber-100 fill, solid
+        // amber-500 left edge, full-strength detail text): the paler version barely separated from
+        // the page and its detail line sat around 3.4:1 contrast. Dark mode is unchanged.
+        ? '<div class="rounded-xl border border-amber-300 border-l-[4px] border-l-amber-500 dark:border dark:border-amber-500/30 overflow-hidden">' +
+            '<button type="button" data-wip-alerts-toggle aria-expanded="' + wipAlertsOpen + '" class="w-full flex items-center gap-2 flex-wrap px-4 py-2.5 bg-amber-100 dark:bg-amber-500/10 text-left hover:bg-amber-200/70 dark:hover:bg-amber-500/15">' +
+              svgIcon('chevronDown', 'w-3.5 h-3.5 shrink-0 transition-transform text-amber-700 dark:text-amber-400' + (wipAlertsOpen ? '' : ' -rotate-90')) +
               '<span class="text-sm font-semibold text-amber-800 dark:text-amber-200">' + alerts.length + ' item' + (alerts.length === 1 ? '' : 's') + ' need' + (alerts.length === 1 ? 's' : '') + ' a decision</span>' +
-              '<span class="text-xs text-amber-700/80 dark:text-amber-300/80">' + Object.keys(kinds).map(function (k) { return k + ' ' + kinds[k]; }).join(' · ') + '</span>' +
+              '<span class="text-xs text-amber-800 dark:text-amber-300/80">' + Object.keys(kinds).map(function (k) { return k + ' ' + kinds[k]; }).join(' · ') + '</span>' +
             '</button>' +
             (wipAlertsOpen
-              ? '<div class="bg-white dark:bg-zinc-800 border-t border-amber-200 dark:border-amber-500/30 divide-y divide-zinc-100 dark:divide-zinc-700' + openAnimClass('wipalerts') + '">' + alerts.map(wipAlertRowHtml).join('') + '</div>'
+              ? '<div class="bg-white dark:bg-zinc-800 border-t border-amber-300 dark:border-amber-500/30 divide-y divide-zinc-100 dark:divide-zinc-700' + openAnimClass('wipalerts') + '">' + alerts.map(wipAlertRowHtml).join('') + '</div>'
               : '') +
           '</div>'
         : '<p class="px-4 py-2 text-sm text-zinc-400 dark:text-zinc-500">Nothing needs a decision right now.</p>';
@@ -13427,7 +13430,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T15:26:21Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T15:35:07Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

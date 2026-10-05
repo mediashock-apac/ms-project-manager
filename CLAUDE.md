@@ -72,6 +72,12 @@ Concrete checks, each learned from one of the above:
   state, nothing to maintain, and it cannot drift out of date.
 - **Removing a redundant signal is a real fix**, not a cop-out. If a value is already visible
   somewhere on the same row, a second rendering of it is noise.
+- **Amber has a light-mode floor: fills `amber-100` (never `amber-50`), text `amber-700`+ on
+  white and `amber-800` on an amber fill, borders `amber-300`.** Reported as "pale yellow is hard
+  to see": `amber-50` barely separates from the near-white page, and `amber-600` text is ~3.2:1
+  (below the 4.5:1 minimum for small text). Every light-mode amber was raised in one pass; dark
+  mode was left as it was. The only exception is Chat's gold favourite star (`text-amber-500`),
+  a filled icon, not text.
 - **Two chips must never carry the same word.** "Admin" the department and "Admin" the role were
   briefly both on one card; the role became "Admin rights".
 
