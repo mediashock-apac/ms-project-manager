@@ -10131,7 +10131,8 @@
   var calendarViewDate = todayMidnight();
   var CALENDAR_SCOPE_KEY = 'flowboard_calendar_scope';
   var calendarScope = (function () {
-    try { return localStorage.getItem(CALENDAR_SCOPE_KEY) === 'all' ? 'all' : 'mine'; } catch (e) { return 'mine'; }
+    // Everyone by default (asked for directly); someone who picks Mine keeps it.
+    try { return localStorage.getItem(CALENDAR_SCOPE_KEY) === 'mine' ? 'mine' : 'all'; } catch (e) { return 'all'; }
   })();
   // Populated fresh by every renderCalendar() call, keyed by YYYY-MM-DD -- openCalendarDayModal
   // reads back into this instead of recomputing the whole grid's worth of spans a second time.
@@ -13059,6 +13060,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-06u', date: '2026-10-06', items: [
+      { type: 'improved', title: 'Calendar shows everyone first', text: 'The Calendar now opens on Everyone. Choose Mine to see only your own dates, and it will remember.' }
+    ] },
     { id: '2026-10-06t', date: '2026-10-06', items: [
       { type: 'improved', title: 'A more useful Calendar', text: 'The Calendar now opens on the next seven days and lists what happens on each one: task deadlines, checklist steps, dates from briefs such as client feedback or show day, project deadlines and who is away. Each kind of date has its own colour. Switch to Month for the bigger picture, or Mine to see only your own dates.', tourTarget: '[data-view-btn="calendar"]' }
     ] },
@@ -15032,7 +15036,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T19:01:33Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T19:06:17Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

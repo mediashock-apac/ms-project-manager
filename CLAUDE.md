@@ -3582,7 +3582,7 @@ scheduling (invites/RSVPs/time-of-day booking) — this app has no concept of a 
 invite system, and building one would be a fundamentally different, much larger feature than
 polishing an existing deadline grid. Four gaps, all requested together in one list:
 
-- **"Mine"/"Everyone" scope, defaulting to Mine** (`calendarScope`, `CALENDAR_SCOPE_KEY =
+- **"Mine"/"Everyone" scope, defaulting to Everyone** (it defaulted to Mine until 2026-10-06; changed on request, and a stored Mine choice is kept) (`calendarScope`, `CALENDAR_SCOPE_KEY =
   'flowboard_calendar_scope'` in `localStorage`) — the single biggest thing making this read as
   *your* calendar rather than a shared project grid. `#calendar-scope-mine`/`#calendar-scope-all`
   are a small segmented control (`.calendar-scope-btn.active`, same on/off shape as
