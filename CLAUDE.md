@@ -3051,7 +3051,7 @@ Client contact / Key links columns).
   Jobs stay in the sheet**. One inline editor at a time (`wipEdit`; for a task status its
   `project` holds the task id), drafts in `wipDraft` and focus restored after each live re-render
   so someone else's save doesn't wipe what you're typing. Enter saves, Escape cancels.
-- **Projects are grouped by WIP category**, in Suits' order: Active Jobs, Content Marketing,
+- **Projects are grouped by WIP category**, in Suits' order (labels in sentence case, like every in-page label): Active jobs, Content marketing,
   Pitches, Hot leads, Cold leads, Closing reports (`WIP_CATEGORIES`), then **Not sorted** for
   anything uncategorised, so nothing vanishes. Empty groups are skipped; within a group, soonest
   open deadline first. Stored as `projects/{id}.wipCategory` (absent or an unknown key = Not
@@ -3062,7 +3062,7 @@ Client contact / Key links columns).
   (`wipCategoryPicking`, kept in state so a live re-render doesn't close it — a native `<select>`
   would snap shut on every roster heartbeat). Anyone can change it (same as status); logged to
   Activity as `project_category`. No rules change.
-  - Decided with the user: **set by hand in WIP, anyone can change it**; **Content Marketing sits
+  - Decided with the user: **set by hand in WIP, anyone can change it**; **Content marketing sits
     second as listed** — this replaced a name-matched "Mediashock LinkedIn always last" rule
     shipped an hour earlier. "A lead needs at least one open task to appear" was the first
     answer, and was reversed the same day once the sheet's Cold leads (a client + one line, no
