@@ -8,7 +8,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Flowboard — a shared kanban/task-prioritization board for Mediashock APAC, built as a single
+**Name: "Project Manager"** (renamed from "Flowboard" on 2026-10-05, on request). Use "Project
+Manager" in anything the team reads — UI text, the New Updates changelog, toasts, notifications,
+export file names. "Flowboard" still appears in older notes below, in code identifiers, in the
+emulator project id (`demo-flowboard`) and in every `localStorage` key (`flowboard_*`). **Leave the
+keys alone**: renaming them would silently reset everyone's saved filters, sidebar state, chat
+width, teamspace and read-tracking on their next visit.
+
+Project Manager — a shared kanban/task-prioritization board for Mediashock APAC, built as a single
 client-side HTML file (no build step, no framework, no bundler), backed by Firebase (Firestore +
 Google Auth) so the whole team edits one live board together with real-time updates.
 

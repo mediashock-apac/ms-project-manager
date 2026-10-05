@@ -1,4 +1,4 @@
-# Flowboard
+# Project Manager
 
 A shared project & task prioritization kanban board for creative, fast-paced teams. Runs entirely
 as a single client-side HTML file (no build step), backed by Firebase (Firestore + Authentication)
