@@ -10651,7 +10651,10 @@
 
   // "Today" / "Tomorrow" / "in 9 days" -- the relative read is what people actually respond to in
   // a meeting; the absolute date above it is for writing down.
+  // Past dates read "Yesterday" / "3 days ago": a task in Review is exempt from overdue
+  // (dueUrgency), so its passed deadline reached here and printed "in -3 days" (reported).
   function wipRelativeLabel(days) {
+    if (days < 0) return days === -1 ? 'Yesterday' : Math.abs(days) + ' days ago';
     return days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : 'in ' + days + ' days';
   }
 
@@ -11813,6 +11816,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-05w', date: '2026-10-05', items: [
+      { type: 'fixed', title: 'Past dates in WIP Meeting', text: 'A task in review whose date has passed now reads "3 days ago" instead of "in -3 days".' }
+    ] },
     { id: '2026-10-05v', date: '2026-10-05', items: [
       { type: 'new', title: 'Who\'s away, in the By project view', text: 'WIP Meeting\'s By project view now lists everyone on leave in an Away panel beside the projects (below them on smaller screens), with their dates. The 1 / 2 / 4 week buttons set how far ahead it looks.' }
     ] },
@@ -13131,7 +13137,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T10:48:48Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T10:50:58Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
