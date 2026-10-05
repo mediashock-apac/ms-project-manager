@@ -539,6 +539,15 @@ to bottom:
      `rowHeight - 12` (40px) on the Timeline and ~30px on WIP; once bars went solid, a near
      row-height block per task drowned the weekend/today shading, leave stripes and diamonds and
      left no gap between rows. The Timeline row stays 52px for the two-line label.
+   - **The Progress column and its toggle are GONE (2026-10-06)**, on request: "is the progress column
+     and button necessary anymore? i want to keep things simple and intuitive", then "do it". The
+     toggle made one number mean two things (checklist share vs status stage), and what the column
+     said was already on screen: diamonds show checklist steps done/open/late, and bar colour shows
+     Ready for review and Done. Day columns now start at grid track **2** (`colCursor = 2`, day header
+     `i + 2`, rows `2 / -1`), and the today line is `GANTT_LABEL_WIDTH + todayIndex * dayWidth`. The
+     bar's hover title carries "N/M checklist steps done". **Don't add a percentage or a bar fill
+     back.** Verified by rendering the real app in Chromium with Firebase stubbed (diamonds and bars on
+     the right days, no page errors). The three bullets below are the history of the column.
    - **The Timeline has two frozen columns, not one: `Task` (track 1) and `Progress`
      (track 2, `GANTT_PCT_WIDTH`).** Day columns therefore start at grid track **3**, and the
      bar rows span `3 / -1` — the single easiest thing to break when touching this grid, since
@@ -2477,6 +2486,8 @@ needs revisiting.
 - **The header is no longer `position: sticky`.** It's a `shrink-0` flex sibling stacked above
   the scrolling `<main>` inside the same overflow-hidden column as the sidebar, which pins it at
   the top by construction — sticky positioning was only ever needed back when header+main
+  **(The footer itself was removed on 2026-10-06, on request: "why is this necessary?". It repeated
+  the app name, said "Firestore", and restated who is signed in, all already on screen.)**
   scrolled together as one ordinary page. `<footer>` moved from a sibling of `<main>` to the last
   thing *inside* it, so it's still only seen by actually scrolling to the end (unchanged
   behavior), not turned into a permanently-visible status bar.
