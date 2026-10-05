@@ -2961,7 +2961,8 @@ column, stacked-deadline badge and today line (today is the left edge by definit
 **The label column matches the Timeline tab's** (asked for directly: "can the timeline
 functionality match between WIP and Timeline page? ... adjustable column width, project name and
 task contrast"). Same label markup (text-sm project with hover tooltip, owner/task line at
-`dark:text-white`), and the **same width variable**: `GANTT_LABEL_WIDTH`, persisted under
+`text-zinc-500 dark:text-zinc-400` — WIP's original shade, which was then preferred over the
+Timeline's `dark:text-white` and applied to both), and the **same width variable**: `GANTT_LABEL_WIDTH`, persisted under
 `flowboard_gantt_label_width`, so dragging `#wip-resize-handle` resizes the Timeline tab's Task
 column too, and vice versa. Applied through a `--wip-label-w` CSS variable on `#wip-timeline` so
 a drag moves every row without re-rendering. Capped at 45% of the card (`wipLabelWidthCss`),
