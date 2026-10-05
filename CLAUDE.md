@@ -616,6 +616,10 @@ to bottom:
        sorted by due date, undated last (`ganttChecklistItems`), so diamonds step down left to
        right. While open, the task's own bar drops its small diamonds — the rows carry them.
        State is `ganttExpanded`, session-only, shared by both views, collapsed by default.
+       **The label text toggles too, not just the arrow** (asked for directly): the project/task
+       block beside the arrow carries the same `data-gantt-expand` (`ganttExpandLabelAttrs`), so
+       one click handler serves both, on both timelines. Tasks with no checklist get no attribute
+       and the label stays inert.
        - **Diamonds, not bars**: items have only a due date. Bars would need a start date on every
          item; offered and declined. **No dependency arrows** (task dependencies were removed —
          see below), and **no project grouping** (reverted before — see `projects`). This expands

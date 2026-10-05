@@ -5152,6 +5152,16 @@
       svgIcon('chevronDown', 'w-3.5 h-3.5 transition-transform' + (open ? '' : ' -rotate-90')) + '</button>';
   }
 
+  // The label text beside the arrow toggles too (asked for directly: "clicking on the project name
+  // should expand it too, not just by clicking the arrow"). Same data-gantt-expand attribute, so the
+  // one click handler below serves both. Only on tasks with a checklist -- elsewhere there is
+  // nothing to open, and the label stays inert.
+  function ganttExpandLabelAttrs(t) {
+    if (!(t.checklist || []).length) return ' class="min-w-0"';
+    var open = !!ganttExpanded[t.id];
+    return ' data-gantt-expand="' + t.id + '" class="min-w-0 cursor-pointer" aria-expanded="' + open + '"';
+  }
+
   // A person's photo (or coloured initials) in place of their written name on the timelines --
   // asked for directly: names "just add more text to read". The full name is in the hover tooltip.
   function ganttAvatarHtml(name, sizeCls, textCls) {
@@ -9197,7 +9207,7 @@
       // other views have no bar, which is exactly why they keep theirs.
       html += '<div class="sticky left-0 z-20 bg-white dark:bg-zinc-800 border-b border-r border-zinc-200 dark:border-zinc-700 flex items-center gap-2 px-3 py-1.5 overflow-hidden" data-gantt-row="' + r + '" style="grid-column:1;grid-row:' + rowIdx + ';">' +
         ganttExpandToggleHtml(t) +
-        '<div class="min-w-0">' +
+        '<div' + ganttExpandLabelAttrs(t) + '>' +
           // text-sm, not text-xs -- reported directly ("make the project title slightly bigger
           // so it is easier to identify and discern") against a screenshot of this exact badge.
           '<p class="min-w-0 mb-0.5"><span data-tooltip="' + escapeHtml(t.project) + '" class="tooltip-top inline-block max-w-full truncate align-bottom text-sm font-bold text-zinc-800 dark:text-zinc-100">' + projectNameHtml(t.project) + '</span></p>' +
@@ -11379,7 +11389,7 @@
         // and the owner/task line at the same contrast.
         '<div class="shrink-0 px-3 py-1.5 min-w-0 border-r border-zinc-100 dark:border-zinc-700 flex items-center gap-2" style="width:' + LABEL_W + ';">' +
           ganttExpandToggleHtml(t) +
-          '<div class="min-w-0">' +
+          '<div' + ganttExpandLabelAttrs(t) + '>' +
           '<p class="min-w-0 mb-0.5"><span data-tooltip="' + escapeHtml(t.project) + '" class="tooltip-top inline-block max-w-full truncate align-bottom text-sm font-bold text-zinc-800 dark:text-zinc-100">' + projectNameHtml(t.project) + '</span></p>' +
           '<p class="text-xs text-zinc-500 dark:text-zinc-400 truncate">' + escapeHtml(t.assignee) + ' · ' + escapeHtml(t.name) + '</p>' +
           '</div>' +
@@ -12123,6 +12133,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-06c', date: '2026-10-06', items: [
+      { type: 'improved', title: 'Open checklist steps by clicking the name', text: 'On the Timeline and the WIP Meeting timeline, clicking the project or task name now shows or hides its checklist steps, the same as the small arrow beside it.' }
+    ] },
     { id: '2026-10-06b', date: '2026-10-06', items: [
       { type: 'new', title: 'Guided tours', text: 'New teammates now get a short tour of Project Manager the first time they sign in, and new features will come with a quick tour of their own. Every tour can be skipped. To see the basics again, choose "Take the tour" in your profile menu.', tour: 'welcome' },
       { type: 'improved', title: 'Wider Away list in WIP Meeting', text: 'The Away list beside the projects is wider, and long leave notes now wrap onto a second line instead of being cut off.' }
@@ -13800,7 +13813,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T16:13:34Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T16:15:05Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
