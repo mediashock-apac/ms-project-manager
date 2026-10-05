@@ -2680,6 +2680,10 @@ version 1 first but I want to be able to revert cleanly if it is not for me."
   budget link (Suits and admins only), and **gaps to chase**, worked out without AI: no job, nothing to
   make, no dates, steps with no date or person, "TBA/TBC" anywhere, speaker headshots still needed.
   "Closing report" is not chased for a date.
+- **Key-date status on the card comes from the checklist**, not the calendar: a matching step (same name,
+  any task in the project) that's ticked shows green, a past date whose step isn't ticked shows LATE in
+  rose, a past date with no matching step is just grey. Shipped first as "past = green", which made an
+  overdue step look done.
 - **Key dates become checklist steps** on a chosen task in the project, matched by step name, so saving
   again updates the date and person instead of duplicating. Steps are never deleted. **If that task is
   open in the task window, the steps go into its checklist instead of the database**, so the task's own
@@ -2701,7 +2705,8 @@ version 1 first but I want to be able to revert cleanly if it is not for me."
 1. **Switch it off:** set `BRIEFS_ENABLED = false` in the "CREATIVE BRIEFS" section of `index.html`, bump
    the build version as usual, and ship. Every button disappears and nothing else changes. Verified with
    the switch off: no buttons anywhere, no errors.
-2. **Remove it entirely:** `git revert` the commit titled "Creative briefs". It was shipped on its own
+2. **Remove it entirely:** `git revert` the commit "Creative briefs: key-date status from the checklist", then
+   the commit titled "Creative briefs". It was shipped on its own
    on purpose: the section, three call sites each commented "see CREATIVE BRIEFS", one activity icon, the
    changelog entry and this note. Expect conflicts only in the build stamp and the changelog, as with the
    brief-links revert. Keep the changelog release object with `items: []` for read tracking.

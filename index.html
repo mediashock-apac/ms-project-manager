@@ -7849,17 +7849,36 @@
     var rows = (s.rows || []).filter(function (r) { return r.a; });
     if (!rows.length) return '';
     var today = toDateInputValue(todayMidnight());
+    // A date passing doesn't mean the step happened, so status comes from the matching checklist
+    // step (same name, any task in the project): ticked = done, past and unticked = late. A past
+    // date with no matching step is just "passed". The card and the checklist can't disagree.
+    var steps = {};
+    activeTasks().filter(function (t) { return t.project === briefOpen.name; }).forEach(function (t) {
+      (t.checklist || []).forEach(function (it) {
+        var k = (it.text || '').trim().toLowerCase();
+        if (k) steps[k] = steps[k] === true ? true : !!it.done;
+      });
+    });
     var nextMarked = false;
     var html = rows.map(function (r) {
       if (r.track) return '<li class="pt-2 text-[10px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">' + briefEsc(r.a) + '</li>';
+      var key = r.a.trim().toLowerCase();
+      var tracked = Object.prototype.hasOwnProperty.call(steps, key);
+      var done = tracked && steps[key];
       var past = r.b && r.b < today;
-      var isNext = !past && r.b && !nextMarked; if (isNext) nextMarked = true;
-      var dot = past ? 'bg-emerald-500 border-emerald-500' : (isNext ? 'border-brand-500 ring-2 ring-brand-500/20' : 'border-zinc-300 dark:border-zinc-600');
+      var late = past && tracked && !done;
+      var isNext = !done && !past && r.b && !nextMarked; if (isNext) nextMarked = true;
+      var dot = done ? 'bg-emerald-500 border-emerald-500'
+        : late ? 'border-rose-500'
+        : past ? 'bg-zinc-300 border-zinc-300 dark:bg-zinc-600 dark:border-zinc-600'
+        : isNext ? 'border-brand-500 ring-2 ring-brand-500/20' : 'border-zinc-300 dark:border-zinc-600';
+      var dim = done || (past && !late);
       return '<li class="grid grid-cols-[14px_56px_minmax(0,1fr)] gap-2 items-start py-1 text-xs">' +
-        '<span class="w-2.5 h-2.5 mt-1 rounded-full border-2 ' + dot + '"></span>' +
-        '<span class="tabular-nums font-semibold ' + (past ? 'text-zinc-400 dark:text-zinc-500' : 'text-zinc-700 dark:text-zinc-200') + '">' + (r.b ? briefEsc(formatShortDate(r.b)) : 'No date') + '</span>' +
-        '<span class="' + (past ? 'text-zinc-400 dark:text-zinc-500' : 'text-zinc-700 dark:text-zinc-200') + '">' + briefEsc(r.a) +
+        '<span class="w-2.5 h-2.5 mt-1 rounded-full border-2 ' + dot + '" title="' + (done ? 'Done' : late ? 'Late: the checklist step is not ticked' : past ? 'Date has passed' : isNext ? 'Next' : 'Coming up') + '"></span>' +
+        '<span class="tabular-nums font-semibold ' + (late ? 'text-rose-600 dark:text-rose-400' : dim ? 'text-zinc-400 dark:text-zinc-500' : 'text-zinc-700 dark:text-zinc-200') + '">' + (r.b ? briefEsc(formatShortDate(r.b)) : 'No date') + '</span>' +
+        '<span class="' + (dim ? 'text-zinc-400 dark:text-zinc-500' : 'text-zinc-700 dark:text-zinc-200') + '">' + briefEsc(r.a) +
           (isNext ? ' <span class="text-[9px] font-extrabold px-1 rounded bg-brand-500 text-white align-middle">NEXT</span>' : '') +
+          (late ? ' <span class="text-[9px] font-extrabold px-1 rounded bg-rose-500 text-white align-middle">LATE</span>' : '') +
           (r.c ? ' <span class="text-zinc-400 dark:text-zinc-500">· ' + briefEsc(r.c) + '</span>' : '') + '</span></li>';
     }).join('');
     return '<section class="flex flex-col gap-1"><h3 class="text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Key dates</h3><ol class="flex flex-col">' + html + '</ol></section>';
@@ -14778,7 +14797,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T18:17:57Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T18:25:50Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
