@@ -11265,6 +11265,10 @@
       editor + lines + '</div>';
   }
   function wipTaskStatusHtml(t) { return wipStatusBandHtml(t.id, taskStatusList(t)); }
+  function wipAddStatusIconHtml(key) {
+    return '<button type="button" data-wip-act="add-status" data-project="' + escapeHtml(key) + '" data-tooltip="Add status" aria-label="Add status" class="tooltip-top p-0.5 rounded text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-zinc-100 dark:hover:bg-zinc-700">' +
+      svgIcon('plus', 'w-4 h-4') + '</button>';
+  }
 
   // Info block under a project's header: owner (Pitches / leads / Closing reports only), notes,
   // and "+ Deliverable" for an entry with no open tasks. Notes is one per project, like the
@@ -11333,7 +11337,7 @@
       ? '<span class="min-w-0 flex-1 flex items-center gap-1.5 flex-wrap"><input data-wip-field="delivText" data-wip-autofocus class="' + wipInputCls('flex-1 min-w-[12rem]') + '" value="' + escapeHtml(wipDraft.delivText != null ? wipDraft.delivText : d.text) + '">' + wipEditorButtons(name) + '</span>'
       : '<button type="button" data-wip-act="edit-deliv" data-project="' + escapeHtml(name) + '" data-id="' + eid + '" title="Click to rename" class="min-w-0 flex-1 text-left text-sm font-medium text-zinc-800 dark:text-zinc-100 break-words hover:text-brand-700 dark:hover:text-brand-400">' + escapeHtml(d.text) + '</button>';
     var adds = '<span class="shrink-0 flex items-center gap-3">' +
-      (!status.length && !wipIsEditing(key, 'tstatus', '__new') ? '<button type="button" data-wip-act="add-status" data-project="' + ek + '" class="' + WIP_ACT_BTN + '">+ Status</button>' : '') +
+      (!status.length && !wipIsEditing(key, 'tstatus', '__new') ? wipAddStatusIconHtml(key) : '') +
       (!d.next && !wipIsEditing(key, 'dnext') ? '<button type="button" data-wip-act="edit-dnext" data-project="' + ek + '" class="' + WIP_ACT_BTN + '">+ Next step</button>' : '') +
       '<button type="button" data-wip-act="remove-deliv" data-id="' + eid + '" title="Remove deliverable" class="opacity-0 group-hover/dl:opacity-100 text-zinc-400 hover:text-rose-500">&times;</button>' +
     '</span>';
@@ -11519,10 +11523,11 @@
           : '');
 
         var statusHtml = wipTaskStatusHtml(t);
-        // "+ Status" only when there is no status line yet; the slot is kept either way so the
-        // due-date column stays aligned across rows.
-        var addSlot = '<span class="shrink-0 w-16 text-right">' +
-          (!statusHtml ? '<button type="button" data-wip-act="add-status" data-project="' + t.id + '" class="' + WIP_ACT_BTN + '">+ Status</button>' : '') +
+        // Add-status is a small grey "+" icon, only while the task has no status line; the slot is
+        // kept either way so the due-date column stays aligned. It was the words "+ Status" on every
+        // row, which read as the loudest thing on screen for an empty slot (reported as messy).
+        var addSlot = '<span class="shrink-0 w-6 flex justify-end">' +
+          (!statusHtml ? wipAddStatusIconHtml(t.id) : '') +
         '</span>';
 
         return '<div class="px-4 py-2.5 flex flex-col gap-1.5">' +
@@ -11543,8 +11548,15 @@
       var pdoc = name ? (projectDeadlineDoc(name) || {}) : {};
       var detailsCount = (pdoc.clientContact ? 1 : 0) + (pdoc.links || []).length;
       var detailsOpen = !!wipDetailsOpen[name];
-      var detailsBtn = name && canDetails && !folded
-        ? '<button type="button" data-wip-act="toggle-details" data-project="' + escapeHtml(name) + '" aria-expanded="' + detailsOpen + '" class="shrink-0 px-4 ' + WIP_ACT_BTN + (detailsOpen ? ' !text-brand-600 dark:!text-brand-400' : '') + '">Contact &amp; links' + (detailsCount ? ' (' + detailsCount + ')' : '') + '</button>'
+      // Contact & links lives in the ⋯ row. The title bar only shows a small link icon + count when
+      // something is actually saved, so a Suits member can see there's something to open; it used
+      // to be the words "Contact & links" on every project (reported as messy).
+      var detailsBtn = name && canDetails && !folded && detailsCount
+        ? '<button type="button" data-wip-act="toggle-details" data-project="' + escapeHtml(name) + '" aria-expanded="' + detailsOpen + '" data-tooltip="Contact &amp; links" aria-label="Contact and links" class="tooltip-top shrink-0 px-2 inline-flex items-center gap-1 text-xs font-semibold ' +
+            (detailsOpen ? 'text-brand-600 dark:text-brand-400' : 'text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400') + '">' + svgIcon('link', 'w-3.5 h-3.5') + detailsCount + '</button>'
+        : '';
+      var detailsMenuBtn = name && canDetails
+        ? '<span class="w-px h-4 mx-2 bg-zinc-200 dark:bg-zinc-600"></span><button type="button" data-wip-act="toggle-details" data-project="' + escapeHtml(name) + '" class="' + WIP_ACT_BTN + (detailsOpen ? ' !text-brand-600 dark:!text-brand-400' : '') + '">Contact &amp; links</button>'
         : '';
       // Project actions: "Set category" (brand, visible) until a category is picked, then a small
       // always-visible "⋯". Either opens one row under the header: category pills plus "+ Notes"
@@ -11568,6 +11580,7 @@
                 (on ? 'border-brand-500 bg-brand-500 text-white' : 'border-zinc-200 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:border-brand-400 hover:text-brand-600 dark:hover:text-brand-400') + '">' + escapeHtml(c.label) + '</button>';
             }).join('') +
             (!pdoc.wipNote ? '<span class="w-px h-4 mx-2 bg-zinc-200 dark:bg-zinc-600"></span><button type="button" data-wip-act="edit-note" data-project="' + escapeHtml(name) + '" class="' + WIP_ACT_BTN + '">+ Notes</button>' : '') +
+            detailsMenuBtn +
           '</div>'
         : '';
       // Text deliverables (WIP entries without tasks), after any task rows.
@@ -11816,6 +11829,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-05x', date: '2026-10-05', items: [
+      { type: 'improved', title: 'Tidier WIP Meeting rows', text: 'The "+ Status" on every task is now a small + icon, shown only where a task has no status yet. Contact & links moved into each project\'s ⋯; a project with a contact or links saved shows a small link icon with the count.' }
+    ] },
     { id: '2026-10-05w', date: '2026-10-05', items: [
       { type: 'fixed', title: 'Past dates in WIP Meeting', text: 'A task in review whose date has passed now reads "3 days ago" instead of "in -3 days".' }
     ] },
@@ -13137,7 +13153,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T10:50:58Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T10:53:02Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

@@ -3036,9 +3036,12 @@ Client contact / Key links columns).
     — the contrast asked for after the first version blended into the rows), older lines behind
     "Show N earlier" (`WIP_UPDATES_SHOWN` = 1), "+ Update" for a newer line. **Clicking the text
     edits it** (no hover-only pencil: WIP runs on a shared screen).
-  - A task with none shows a quiet "+ Status" at the end of its line, in a fixed `w-16` slot kept
-    even when empty so the due-date column stays aligned down the list. The task line became a
-    `div` holding the open-task button plus that slot, since buttons can't nest.
+  - A task with none shows a small grey "+" icon (`wipAddStatusIconHtml`, tooltip "Add status") at
+    the end of its line, in a fixed `w-6` slot kept even when empty so the due-date column stays
+    aligned. It was the words "+ Status" on every row and was reported as messy — a column of
+    identical words is the loudest thing on screen for what is only an empty slot. Text
+    deliverables use the same icon. The task line is a `div` holding the open-task button plus
+    that slot, since buttons can't nest.
   - **Logged to Activity** as `task_updated` with the task as target — task edits are meant to be
     recorded there ("anyone can edit the whole task but it still gets recorded in activity").
     Doesn't touch `updatedAt`, so a status note doesn't reset the stale-review clock.
@@ -3048,10 +3051,11 @@ Client contact / Key links columns).
 - **Client contact and links** stay on the project's own `projects/{id}` doc: `clientContact` and
   `links` — **the same array as the project chat's Pinned links**, so a link added in either place
   shows in both. Because of that, `createProjectChat` no longer resets `links` when it already
-  exists, and `deleteProjectChat` removes messages only, not links. **They are behind a "Contact &
-  links (N)" button on the project header**, on request ("no need to be shown at this level, just
-  accessible to Suits"), opening a panel under the header (`wipProjectDetailsHtml`,
-  `wipDetailsOpen`, session-only). The button only renders for Suits members and admins
+  exists, and `deleteProjectChat` removes messages only, not links. **They open from "Contact & links"
+  in the project's ⋯ row**, on request ("no need to be shown at this level, just accessible to
+  Suits"), as a panel under the header (`wipProjectDetailsHtml`, `wipDetailsOpen`, session-only).
+  The title bar itself shows only a small link icon + count, and only when something is saved — it
+  was the words "Contact & links" on every project and was reported as messy. Both only render for Suits members and admins
   (`wipCanSeeDetails`: `myDepartments()` includes `suits`, or `isAdminUser()`). **Display only,
   not a boundary** — the fields are on the team-readable project doc, and the links are also the
   chat's Pinned links, visible to anyone who opens that chat. Not logged to Activity.
