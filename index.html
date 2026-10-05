@@ -1367,8 +1367,12 @@
           <button type="button" id="task-involved-add-btn" class="mt-1.5 text-xs font-semibold text-zinc-500 dark:text-zinc-400 hover:text-brand-600 dark:hover:text-brand-400">+ Add people involved</button>
           <div id="task-involved-panel" class="hidden mt-1.5">
             <p title="Notified on comments and when added. Not counted in workload; deadline and time-off alerts go to the owner only." class="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 mb-1">Also involved <span class="font-normal">(gets comment updates)</span></p>
-            <div id="task-involved-chips" class="flex flex-wrap gap-1 mb-1.5"></div>
-            <select id="task-involved-select" aria-label="Add someone who is also involved" class="w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400"></select>
+            <div class="flex flex-wrap items-center gap-1">
+              <div id="task-involved-chips" class="contents"></div>
+              <!-- A small "+ Add" pill at the end of the chips rather than a full-width field under
+                   them. Still a native select, so keyboard and screen readers work unchanged. -->
+              <select id="task-involved-select" aria-label="Add someone who is also involved" class="appearance-none cursor-pointer text-xs font-medium rounded-full border border-dashed border-zinc-300 dark:border-zinc-600 bg-transparent dark:bg-zinc-800 dark:[color-scheme:dark] text-zinc-500 dark:text-zinc-400 hover:text-brand-600 dark:hover:text-brand-400 hover:border-brand-400 px-2.5 py-0.5 focus:outline-none focus:ring-2 focus:ring-brand-500/40"></select>
+            </div>
           </div>
         </div>
       </div>
@@ -1425,7 +1429,7 @@
 
       <div class="pt-1 border-t border-zinc-100 dark:border-zinc-700">
         <label class="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mt-3 mb-1.5">Checklist</label>
-        <div id="task-checklist-editor" class="flex flex-col gap-1.5 max-h-40 overflow-y-auto mb-2"></div>
+        <div id="task-checklist-editor" class="flex flex-col gap-1.5 mb-2"></div>
         <div class="flex flex-wrap items-center gap-2">
           <input type="text" id="task-checklist-input" placeholder="Add a checklist item…" class="flex-[2] min-w-[9rem] text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
           <input type="text" id="task-checklist-link-input" placeholder="Paste a link…" class="flex-1 min-w-[8rem] text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
@@ -1441,7 +1445,7 @@
           <label class="block text-xs font-semibold text-zinc-600 dark:text-zinc-400">Time Tracking</label>
           <span id="task-time-total" class="text-xs font-medium text-zinc-400 dark:text-zinc-500"></span>
         </div>
-        <div id="task-time-log" class="flex flex-col gap-1.5 max-h-40 overflow-y-auto mb-2"></div>
+        <div id="task-time-log" class="flex flex-col max-h-48 overflow-y-auto mb-2"></div>
         <div class="flex flex-wrap items-center gap-2">
           <div class="flex items-center shrink-0 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 overflow-hidden">
             <button type="button" id="task-time-hours-dec" title="Decrease hours" aria-label="Decrease hours" class="w-7 h-9 flex items-center justify-center text-zinc-400 dark:text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-300">
@@ -4855,7 +4859,7 @@
       }
       var escaped = escapeHtml(segment);
       var withMentions = mentionRe ? escaped.replace(mentionRe, function (match) {
-        return '<span class="text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-500/10 rounded px-1 font-semibold">' + match + '</span>';
+        return '<span class="text-brand-600 dark:text-brand-400 font-semibold">' + match + '</span>';
       }) : escaped;
       return applyBasicFormatting(withMentions);
     }).join('');
@@ -6315,6 +6319,8 @@
     // so the "Working on" select in Time Tracking always has something stable to link against
     // (self-heals into Firestore next time this task is saved -- see upsertUserDirectory in
     // the sibling Content Hub app for the same "fix it forward on load" pattern).
+    checklistDoneOpen = false;
+    checklistShownDone = {};
     currentChecklist = (task && task.checklist ? task.checklist.slice() : []).map(function (item) {
       return item.id ? item : Object.assign({}, item, { id: uid() });
     });
@@ -6427,6 +6433,37 @@
 
   // Which item's inline editor (text, link, due date / TBD) is open, or null.
   var checklistEditIndex = null;
+  // Completed items collapse under a "N done" line so the open ones are what you see.
+  // checklistShownDone: items ticked during THIS open of the modal stay in place (struck
+  // through) until it's reopened, so ticking doesn't make a row vanish under the cursor.
+  var checklistDoneOpen = false;
+  var checklistShownDone = {};
+
+  // A checklist link shows as a short chip naming the site ("Google Slides", "Frame.io"),
+  // not the full URL -- the URL was longer than the item name and the loudest thing on the row.
+  function linkChipLabel(url) {
+    var host = '', path = '';
+    try { var u = new URL(url); host = u.hostname.replace(/^www\./, ''); path = u.pathname; } catch (e) { return 'Link'; }
+    if (host === 'docs.google.com') {
+      if (path.indexOf('/presentation') === 0) return 'Google Slides';
+      if (path.indexOf('/document') === 0) return 'Google Docs';
+      if (path.indexOf('/spreadsheets') === 0) return 'Google Sheets';
+      if (path.indexOf('/forms') === 0) return 'Google Forms';
+      return 'Google Docs';
+    }
+    if (host === 'drive.google.com') return 'Google Drive';
+    if (/(^|\.)frame\.io$/.test(host)) return 'Frame.io';
+    if (/(^|\.)figma\.com$/.test(host)) return 'Figma';
+    if (/(^|\.)canva\.com$/.test(host)) return 'Canva';
+    if (/(^|\.)youtube\.com$|^youtu\.be$/.test(host)) return 'YouTube';
+    if (/(^|\.)vimeo\.com$/.test(host)) return 'Vimeo';
+    if (/(^|\.)dropbox\.com$/.test(host)) return 'Dropbox';
+    return host || 'Link';
+  }
+  function linkChipHtml(url) {
+    return '<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer" data-tooltip="' + escapeHtml(url) + '" class="tooltip-top inline-flex max-w-full items-center gap-1 mt-0.5 text-[11px] font-medium rounded px-1.5 py-0.5 bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 hover:text-brand-600 dark:hover:text-brand-400">' +
+      svgIcon('link', 'w-3 h-3 shrink-0') + '<span class="truncate">' + escapeHtml(linkChipLabel(url)) + '</span></a>';
+  }
   var draggedChecklistIndex = null;
 
   // Sums minutes from currentTimeEntries logged against one checklist item, so its row can
@@ -6491,8 +6528,7 @@
 
   function renderChecklistEditor() {
     var el = document.getElementById('task-checklist-editor');
-    el.innerHTML = currentChecklist.length
-      ? currentChecklist.map(function (item, i) {
+    function rowHtml(item, i) {
           var editing = checklistEditIndex === i;
           var itemMinutes = checklistItemMinutes(item.id);
           return '<div class="checklist-item-row rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-700/50' + (justCheckedItemIds[item.id] ? ' checklist-just-checked' : '') + '" data-checklist-i="' + i + '">' +
@@ -6512,7 +6548,7 @@
                   '</div>'
                 : '<div class="flex-1 min-w-0">' +
                   '<span class="block text-sm ' + (item.done ? 'line-through text-zinc-400 dark:text-zinc-500' : 'text-zinc-700 dark:text-zinc-200') + '">' + escapeHtml(item.text) + '</span>' +
-                  (item.link ? '<a href="' + escapeHtml(item.link) + '" target="_blank" rel="noopener noreferrer" class="block text-[11px] text-brand-600 dark:text-brand-400 truncate hover:underline">' + escapeHtml(item.link) + '</a>' : '') +
+                  (item.link ? '<div>' + linkChipHtml(item.link) + '</div>' : '') +
                   (item.assignee ? '<span class="flex items-center gap-1 text-[11px] text-zinc-500 dark:text-zinc-400">' + avatarHtml(item.assignee, 'w-3.5 h-3.5 shrink-0', 'text-[8px]') + escapeHtml(item.assignee) + '</span>' : '') +
                   checklistDueLabelHtml(item, i) +
                 '</div>') +
@@ -6521,7 +6557,20 @@
               '<button type="button" class="checklist-remove p-1 text-zinc-300 dark:text-zinc-600 hover:text-rose-500 dark:hover:text-rose-400 shrink-0" data-checklist-i="' + i + '" aria-label="Remove item">' + svgIcon('x', 'w-3 h-3') + '</button>' +
             '</div>' +
           '</div>';
-        }).join('')
+    }
+    var openRows = [], doneRows = [];
+    currentChecklist.forEach(function (item, i) {
+      var inOpen = !item.done || checklistShownDone[item.id] || checklistEditIndex === i;
+      (inOpen ? openRows : doneRows).push(rowHtml(item, i));
+    });
+    var doneToggle = doneRows.length
+      ? '<button type="button" class="checklist-done-toggle self-start flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-brand-600 dark:hover:text-brand-400">' +
+          svgIcon('chevronDown', 'w-3.5 h-3.5 transition-transform' + (checklistDoneOpen ? '' : ' -rotate-90')) +
+          (checklistDoneOpen ? 'Hide ' + doneRows.length + ' done' : (openRows.length ? '' : 'All ') + doneRows.length + ' done') +
+        '</button>'
+      : '';
+    el.innerHTML = currentChecklist.length
+      ? openRows.join('') + doneToggle + (checklistDoneOpen ? doneRows.join('') : '')
       : '<p class="text-xs text-zinc-400 dark:text-zinc-500">No checklist items yet.</p>';
     if (checklistEditIndex !== null) {
       var textInput = el.querySelector('.checklist-text-input');
@@ -6600,6 +6649,7 @@
       return;
     }
     if (e.target.closest('.checklist-edit-done')) { commitChecklistEdit(); return; }
+    if (e.target.closest('.checklist-done-toggle')) { checklistDoneOpen = !checklistDoneOpen; renderChecklistEditor(); return; }
     var checkbox = e.target.closest('.checklist-toggle');
     if (checkbox) {
       var item = currentChecklist[parseInt(checkbox.dataset.checklistI, 10)];
@@ -6607,6 +6657,7 @@
         var justChecked = checkbox.checked && !item.done;
         item.done = checkbox.checked;
         if (justChecked && item.id) {
+          checklistShownDone[item.id] = true;
           justCheckedItemIds[item.id] = true;
           setTimeout(function () { delete justCheckedItemIds[item.id]; }, 500);
         }
@@ -6792,21 +6843,24 @@
 
   function renderTimeEntriesEditor(entries, logEl, totalEl) {
     var list = entries || [];
+    // One line per entry. The per-row Billable pill is only drawn when entries are MIXED -- when
+    // all of them are billable the total says "all billable" once instead of on every row.
+    var allBillable = list.length > 0 && list.every(function (e) { return e.billable; });
     logEl.innerHTML = list.length
       ? list.map(function (e, i) {
           var linkedItem = e.checklistItemId ? currentChecklist.find(function (item) { return item.id === e.checklistItemId; }) : null;
-          return '<div class="flex items-start gap-2 bg-zinc-50 dark:bg-zinc-700/50 rounded-lg px-3 py-2">' +
-            avatarHtml(e.author || '', 'w-4 h-4 shrink-0 mt-0.5', 'text-[9px]') +
-            '<div class="min-w-0 flex-1">' +
-              '<div class="flex items-center gap-1.5">' +
-                '<span class="text-sm font-semibold text-zinc-700 dark:text-zinc-200">' + formatDuration(e.minutes) + '</span>' +
-                (e.billable ? '<span class="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">Billable</span>' : '') +
-                (e.overtime ? '<span class="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">Overtime</span>' : '') +
-                '<span class="text-xs text-zinc-400 dark:text-zinc-500 ml-auto">' + formatShortDate(localDateOf(e.date)) + '</span>' +
-              '</div>' +
-              (linkedItem ? '<p class="text-sm text-zinc-600 dark:text-zinc-300 mt-0.5">' + escapeHtml(linkedItem.text) + '</p>' : '') +
-              (e.note && !(linkedItem && e.note.trim().toLowerCase() === String(linkedItem.text).trim().toLowerCase()) ? '<p class="text-sm text-zinc-600 dark:text-zinc-300 mt-0.5">' + escapeHtml(e.note) + '</p>' : '') +
-            '</div>' +
+          var note = (e.note || '').trim();
+          var noteIsItem = linkedItem && note.toLowerCase() === String(linkedItem.text).trim().toLowerCase();
+          var label = linkedItem ? (linkedItem.text + (note && !noteIsItem ? ' — ' + note : '')) : note;
+          return '<div class="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-700/50">' +
+            avatarHtml(e.author || '', 'w-4 h-4 shrink-0', 'text-[9px]') +
+            '<span class="shrink-0 w-14 text-sm font-semibold text-zinc-700 dark:text-zinc-200">' + formatDuration(e.minutes) + '</span>' +
+            (label
+              ? '<span class="min-w-0 flex-1 truncate text-sm text-zinc-600 dark:text-zinc-300" title="' + escapeHtml(label) + '">' + escapeHtml(label) + '</span>'
+              : '<span class="min-w-0 flex-1 truncate text-sm text-zinc-400 dark:text-zinc-500">General</span>') +
+            (e.billable && !allBillable ? '<span class="shrink-0 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">Billable</span>' : '') +
+            (e.overtime ? '<span class="shrink-0 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">Overtime</span>' : '') +
+            '<span class="shrink-0 w-12 text-right text-xs text-zinc-400 dark:text-zinc-500">' + formatShortDate(localDateOf(e.date)) + '</span>' +
             '<div class="flex items-center gap-0.5 shrink-0">' +
               '<button type="button" class="time-entry-edit p-1 text-zinc-300 dark:text-zinc-600 hover:text-brand-600 dark:hover:text-brand-400" data-i="' + i + '" aria-label="Edit time entry">' + svgIcon('pencil', 'w-3 h-3') + '</button>' +
               '<button type="button" class="time-entry-remove p-1 text-zinc-300 dark:text-zinc-600 hover:text-rose-500 dark:hover:text-rose-400" data-i="' + i + '" aria-label="Remove time entry">' + svgIcon('x', 'w-3 h-3') + '</button>' +
@@ -6826,7 +6880,8 @@
       // easy to miss when scanning the total.
       var badges = '';
       if (overtimeMinutes) badges += '<span class="ml-1.5 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-400">' + formatDuration(overtimeMinutes) + ' overtime</span>';
-      if (billableMinutes) badges += '<span class="ml-1.5 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">' + formatDuration(billableMinutes) + ' billable</span>';
+      if (billableMinutes && billableMinutes === totalMinutes) badges += '<span class="ml-1 text-emerald-600 dark:text-emerald-400">· all billable</span>';
+      else if (billableMinutes) badges += '<span class="ml-1.5 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">' + formatDuration(billableMinutes) + ' billable</span>';
       totalEl.innerHTML = formatDuration(totalMinutes) + ' logged' + badges;
     }
   }
@@ -7332,14 +7387,16 @@
     }).join('');
     var options = teamRoster().filter(function (n) { return n !== assignee && currentInvolved.indexOf(n) === -1; });
     document.getElementById('task-involved-select').innerHTML =
-      '<option value="">Add a person…</option>' +
+      '<option value="">+ Add</option>' +
       options.map(function (n) { return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('');
   }
 
   document.getElementById('task-involved-add-btn').addEventListener('click', function () {
     involvedPanelOpen = true;
     renderInvolved();
-    document.getElementById('task-involved-select').focus();
+    var involvedSel = document.getElementById('task-involved-select');
+    involvedSel.focus();
+    try { involvedSel.showPicker(); } catch (err) { /* older browsers: focus is enough */ }
   });
   document.getElementById('task-involved-select').addEventListener('change', function (e) {
     var name = e.target.value;
@@ -11971,6 +12028,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-05zb', date: '2026-10-05', items: [
+      { type: 'improved', title: 'A simpler task window', text: 'Finished checklist items now fold away under "N done", so the steps still to do come first (an item you tick stays in place until you reopen the task). Checklist links show as a short label like "Google Slides" instead of the full address. Time entries take one line each, and "all billable" is said once at the top instead of on every entry. "Also involved" now has a small "+ Add" at the end of the names, and @mentions in comments are coloured text instead of filled boxes.' }
+    ] },
     { id: '2026-10-05za', date: '2026-10-05', items: [
       { type: 'improved', title: 'Clearer "Add status" button', text: 'In WIP Meeting, the button for adding a status to a task is now a speech bubble with a plus, instead of a plain +.' }
     ] },
@@ -13309,7 +13369,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T15:03:34Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T15:11:36Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

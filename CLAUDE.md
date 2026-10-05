@@ -786,6 +786,25 @@ to bottom:
        once-per-session popup queue. Delegated on `#projects-grid` alongside the two existing
        deadline handlers, same reasoning (innerHTML gets replaced on every snapshot).
    - Checklist items support drag-to-reorder (native HTML5 DnD) in `renderChecklistEditor`.
+   - **Task modal simplification pass** (asked "how can this be visually simpler without
+     compromising usability", then 1-3 of the shortlist built):
+     - **Completed checklist items fold under "N done"** (`checklistDoneOpen`, `.checklist-done-toggle`),
+       because open items were scrolled out of sight below finished ones. An item ticked during
+       the current open of the modal stays in place, struck through (`checklistShownDone`), so a
+       row never vanishes under the cursor and can be unticked; it folds away next time. Both
+       reset in `openTaskModal`. Rows keep their real array index, so drag-reorder is unchanged.
+     - **The checklist has no inner scroll box any more** (it was `max-h-40` inside a modal that
+       already scrolls: two scrollbars, rows cut off mid-item).
+     - **Checklist links are a chip naming the site** (`linkChipLabel`/`linkChipHtml`: Google
+       Slides/Docs/Sheets/Drive, Frame.io, Figma, Canva, YouTube…, else the bare host), full URL in
+       the tooltip. The raw URL was longer than the item name and brighter than it.
+     - **Time entries are one line each** (avatar, fixed-width duration, item/note, date, actions).
+       The per-row Billable pill only shows when entries are mixed; when all are billable the
+       total reads "6h 30m logged · all billable" once. Overtime always shows on its row.
+     - **"Also involved" adds people from a small dashed "+ Add" pill** at the end of the chips (a
+       native `<select>` styled as a pill, `showPicker()` on open) instead of a full-width field.
+     - **@mentions are coloured bold text, no filled pill** — in `enrichCommentText`, so chat
+       messages changed too.
    - `checkProjectDeadlinePopups()` (called after every `tasks` `onSnapshot`, guarded by
      `projectPopupShown` so each qualifying project only prompts once per session) nudges a
      project's own assignee(s) — anyone with at least one active task in it — around its
