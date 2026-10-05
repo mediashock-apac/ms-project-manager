@@ -703,11 +703,12 @@ to bottom:
        on hover-capable devices (`@media (hover: hover) and (pointer: fine)`) and shown on row hover
        or focus-within; always visible on touch. `display`, not opacity, so long names get the full
        width at rest. This is deliberately hover-REVEAL, not removal: an earlier removal of these
-       icons was reported as "compromising on usability". **Medium is a quiet grey outline on the
-       Board and Focus of the Day** (`priorityBadgeCls`, shared by `boardTaskRowHtml` and
-       `renderFocus`) so the few HIGHs stand out from a column of yellow. Focus kept the yellow
-       badge at first and was reported as inconsistent. `PRIORITY_META` and every other view
-       are unchanged.
+       icons was reported as "compromising on usability". **MEDIUM stays yellow (`PRIORITY_META.Medium`)
+       everywhere.** A quiet grey MEDIUM badge (so the few HIGHs stand out from a column of
+       yellow) shipped on the Board, spread to Focus of the Day, and was then reverted on request:
+       the Medium dots, the Focus card's left edge and the Timeline/WIP/Calendar bars all stayed
+       yellow, so one priority had two colours. **Don't give one view its own Medium colour**;
+       if Medium ever changes, change `PRIORITY_META` so every mark moves together.
        not a shrunken version of the old full task-card. Checklist/comment
        counts and the Drive-link shortcut stay dropped — reachable by opening the task
        (`data-open-task`, unchanged). Time logged (`taskTimeMinutes(t)`, clock icon +
