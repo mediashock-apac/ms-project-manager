@@ -269,6 +269,18 @@ sidebar so users will know whenever new updates are in."
   (`divide-y` can't draw a grid), and an odd last item spans both columns. **Don't put
   `bg-white` on that same container**: it overrides the tint and the dividers vanish (shipped
   that way for one build).
+- **The same "less scrolling" pass, applied to the other narrow pages** (all were `max-w-2xl`):
+  - **Archived**: `max-w-6xl`, a two-column grid from `lg`; year headings and the empty state
+    span both columns (`lg:col-span-2`).
+  - **Suggestions**: `max-w-6xl`, cards in **two independent columns** from `lg`, alternating
+    (newest top-left, next top-right). Reply threads make cards very uneven, so a row grid would
+    leave gaps. Below `lg` the columns are `display: contents` and each card carries an inline
+    `order`, so a phone gets one list in true newest-first order. CSS `columns` was rejected: it
+    fills the whole left column first, so the second-newest post could land halfway down the page.
+    Accepted trade: alternation can leave one column longer than the other.
+  - **Activity**: `max-w-4xl`, **still one column**. It's a log read top to bottom, so two
+    columns would scramble its order; search is the real fix for length.
+  - Verified in Chromium: 2 columns at 1440px, a single newest-first list at 390px.
 - Type chips: New = brand, Improved = violet, Fixed = emerald. Labelled chips on a page with no
   priorities on it, so the usual "these hues mean priority" concern doesn't apply here.
 - The seed entries (29 Sep – 5 Oct 2026) were written from that period's commits.

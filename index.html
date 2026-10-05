@@ -1247,12 +1247,15 @@
 
     <!-- ============ ACTIVITY VIEW ============ -->
     <section id="view-activity" data-view class="flex-1">
-      <div id="activity-feed" class="max-w-2xl mx-auto flex flex-col gap-1.5"></div>
+      <!-- max-w-4xl (was 2xl) to cut scrolling, asked for alongside New Updates. Deliberately still
+           ONE column: it is a timeline read top to bottom, and two columns would scramble its
+           order. Search is the real answer to a long log. -->
+      <div id="activity-feed" class="max-w-4xl mx-auto flex flex-col gap-1.5"></div>
     </section>
 
     <!-- ============ SUGGESTIONS VIEW ============ -->
     <section id="view-suggestions" data-view class="flex-1">
-      <div class="max-w-2xl mx-auto flex flex-col gap-4">
+      <div class="max-w-6xl mx-auto flex flex-col gap-4">
         <div class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card p-4">
           <label class="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-1.5">Suggest a change</label>
           <div class="flex items-end gap-2">
@@ -1270,8 +1273,8 @@
              with a competing display class in the static markup silently wins over it; both are
              toggled together in JS instead. -->
         <div id="ai-suggestions-import-bar" class="hidden gap-2 bg-white dark:bg-zinc-800 border border-dashed border-indigo-300 dark:border-indigo-500/40 rounded-xl px-4 py-3">
-          <!-- flex-wrap, not a sm: breakpoint switch -- this view's own container is capped at
-               max-w-2xl (672px), narrower than the viewport-width breakpoint sm:flex-row was
+          <!-- flex-wrap, not a sm: breakpoint switch -- this view's own container was capped at
+               max-w-2xl (672px) when this was written (it is 6xl now; the wrap still holds), narrower than the viewport-width breakpoint sm:flex-row was
                keying off. At that actual width, the label sentence plus both buttons don't fit
                on one line, and with no wrapping the row simply overflowed past the bar's own
                dashed border instead of dropping the button group to its own line (reported
@@ -1298,13 +1301,18 @@
             <button type="button" id="ai-suggestions-paste-import-btn" class="self-start shrink-0 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-indigo-300 dark:border-indigo-500/40 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10">Import pasted JSON</button>
           </div>
         </div>
-        <div id="suggestions-list" class="flex flex-col gap-3"></div>
+        <!-- Two independent columns from lg (renderSuggestions), not a row grid: reply threads make
+             cards very uneven, and a grid would leave gaps beside every short card. -->
+        <div id="suggestions-list" class="flex flex-col lg:flex-row lg:items-start gap-3"></div>
       </div>
     </section>
 
     <!-- ============ ARCHIVED VIEW ============ -->
     <section id="view-archived" data-view class="flex-1">
-      <div id="archived-list" class="max-w-2xl mx-auto flex flex-col gap-2"></div>
+      <!-- max-w-6xl and two rows per line from lg (was a 2xl single column), to cut scrolling on a
+           list that only ever grows. Rows are short and independent, so reading left to right then
+           down still follows newest-first. Year headings span both columns (renderArchived). -->
+      <div id="archived-list" class="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-2"></div>
     </section>
 
     <!-- max-w-6xl, not 2xl: asked for directly ("increase the width here so the scroll down isn't
@@ -10537,9 +10545,22 @@
       ? focused.getAttribute('data-suggestion-id') : null;
     var caret = focusedId ? focused.selectionStart : null;
 
+    // Masonry without a library: cards alternate between two columns (newest top-left, next
+    // newest top-right, and so on), so each column packs tight however long its reply threads
+    // run. Below lg the columns are display:contents, which makes every card a direct item of the
+    // one flex column again -- and the inline `order` puts them back in true newest-first
+    // sequence there. (CSS `columns` was the obvious alternative and was rejected: it fills the
+    // whole left column first, so the second-newest post could land halfway down the page.)
+    function suggestionColumn(parity) {
+      return '<div class="contents lg:flex lg:flex-col lg:flex-1 lg:min-w-0 lg:gap-3">' +
+        list.map(function (sg, k) {
+          return k % 2 === parity ? '<div style="order:' + k + '">' + suggestionCardHtml(sg) + '</div>' : '';
+        }).join('') +
+      '</div>';
+    }
     container.innerHTML = list.length
-      ? list.map(suggestionCardHtml).join('')
-      : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-10">No suggestions yet — be the first to share an idea.</p>';
+      ? suggestionColumn(0) + suggestionColumn(1)
+      : '<p class="w-full text-sm text-zinc-400 dark:text-zinc-500 text-center py-10">No suggestions yet — be the first to share an idea.</p>';
 
     Object.keys(openDetails).forEach(function (id) {
       var panel = document.getElementById(id);
@@ -10826,7 +10847,7 @@
       .filter(function (t) { return !q || taskMatchesSearch(t, q); })
       .sort(function (a, b) { return new Date(b.archivedAt) - new Date(a.archivedAt); });
     if (!archived.length) {
-      container.innerHTML = '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-10">' +
+      container.innerHTML = '<p class="lg:col-span-2 text-sm text-zinc-400 dark:text-zinc-500 text-center py-10">' +
         (q ? 'No archived tasks match "' + escapeHtml(filters.search.trim()) + '".' : 'No archived tasks.') + '</p>';
       return;
     }
@@ -10835,7 +10856,7 @@
     archived.forEach(function (t) {
       var year = localDateOf(t.archivedAt).slice(0, 4);
       if (year !== lastYear) {
-        html += '<div class="text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wide mt-4 first:mt-0 mb-1">' + year + '</div>';
+        html += '<div class="lg:col-span-2 text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wide mt-4 first:mt-0 mb-1">' + year + '</div>';
         lastYear = year;
       }
       html += '<div class="flex items-center gap-3 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card px-3.5 py-2.5">' +
@@ -12140,6 +12161,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-06g', date: '2026-10-06', items: [
+      { type: 'improved', title: 'Less scrolling on Archived, Suggestions and Activity', text: 'These pages are wider. On a big screen, Archived shows two tasks to a row and Suggestions shows posts in two columns, so long lists take far less scrolling. Activity stays a single list, so it still reads in order.' }
+    ] },
     { id: '2026-10-06f', date: '2026-10-06', items: [
       { type: 'improved', title: 'Less scrolling in New Updates', text: 'This page is wider, and on a big screen each day’s updates sit two to a row, so a busy week takes far less scrolling.' }
     ] },
@@ -14006,7 +14030,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T16:40:50Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T16:43:56Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
