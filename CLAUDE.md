@@ -2501,6 +2501,9 @@ needs revisiting.
   a tiny stand-in wiring only the collapse/drawer/nav-click behavior under test, screenshotted in
   light, dark, collapsed, and mobile-drawer states. Still not a live-browser/Firestore check (no
   emulator in this environment) — worth a real click-through after deploying.
+- **Superseded (2026-10-06): Export/Import now live in the profile menu under "Data"**, same ids
+  (`#btn-export`/`#btn-import`), each closing the menu on click. See "Sidebar groups" below.
+  Original note:
 - **Export/Import moved from the header's icon row into the sidebar nav** (direct request), as two
   more `view-toggle-btn`-styled rows below a divider after Archived, `#btn-export`/`#btn-import`/
   `#import-file-input` ids all unchanged so none of their click handlers needed touching. Reusing
@@ -2599,6 +2602,26 @@ needs revisiting.
   intentional, and reported directly from a screenshot as needing to look neater. If either
   row's content ever needs to grow taller than 64px, both heights need to move together or this
   drifts out of alignment again.
+
+### Sidebar groups (named, 11 rows)
+
+Asked directly: "how can I categorize these items or make this side bar better?", then "build all".
+
+- **Every group is named; the labels replace the dividers.** Work (Board, Timeline, Calendar,
+  Projects) · Team (People, Chat) · Meetings (WIP Meeting; was "Events", too vague) · History
+  (Activity, Archived). Before, only Events had a label, so nothing said why Activity sat beside
+  Suggestions. Labels are `.sidebar-label`, so the icon-only rail hides them.
+- **New Updates and Suggestions sit in the footer, above Collapse**, beside the account. They are
+  about the app, not the work: where Slack/Linear keep "What's new" and "Send feedback".
+- **Export/Import are in the profile menu under "Data"** ("Export board" / "Import board"): rare
+  whole-board actions that had two prime rows and a divider. 13 rows down to 11.
+- **Icons:** Projects is a folder (was a clock, which says "time"); Timeline is three staggered
+  Gantt bars (was a document glyph, also used in its page header and `ICONS.gantt`, all three
+  replaced).
+- **Unread New Updates no longer tints the row.** The tinted, glowing, light-sweep row looked
+  exactly like `.view-toggle-btn.active` ("is that the page I'm on?"). Still prominent, as
+  originally asked, via orange label text, the pulsing count and the ringing megaphone; just not
+  a background.
 
 ### No mock/sample data
 
@@ -3391,7 +3414,8 @@ The stale "Fill: checklist done…" legend entry was removed at the same time �
 nothing in Firestore for this feature at all — WIP is a standing meeting whose content is
 entirely derived from tasks, projects and leave, so there is nothing to save and nothing to keep
 current. A second event becomes one more nav item under the same header. That is also why
-**Events is the rail's one written label**: the other groups are loose sets of views separated by
+**Superseded (2026-10-06): every group is labelled now, and "Events" became "Meetings"** (see
+"Sidebar groups"). Original reasoning: **Events is the rail's one written label**: the other groups are loose sets of views separated by
 dividers, this one is a named category meant to grow. The header carries `.sidebar-label`, so it
 disappears with the dividers when the rail collapses to icons (that rule positions it absolute,
 so it costs no height and no flex gap either — verified, not assumed).

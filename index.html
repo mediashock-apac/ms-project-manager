@@ -275,30 +275,15 @@
   /* New Updates nav item while something is unread: a brand tint on the row itself plus a soft
      pulse on its count, so it is noticeable at a glance without a popup. Both go away the moment
      the tab is opened (see renderUpdatesNavBadge). */
-  .updates-unread:not(.active) { background: #fff1ec; color: #b93816; font-weight: 600; }
-  .dark .updates-unread:not(.active) { background: rgba(255,78,32,0.10); color: #ff9d7e; }
+  /* Unread New Updates: orange label text, the pulsing count and the ringing megaphone (below).
+     NO row background -- the tinted, glowing row it used to have looked exactly like the
+     selected-page state (.view-toggle-btn.active), so people couldn't tell "new" from "here". */
+  .updates-unread:not(.active) { color: #e0431a; font-weight: 600; }
+  .dark .updates-unread:not(.active) { color: #ff9d7e; }
   @keyframes updates-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255,78,32,0.45); } 50% { box-shadow: 0 0 0 5px rgba(255,78,32,0); } }
   .updates-pulse { animation: updates-pulse 2s ease-in-out infinite; }
 
-  /* New Updates while something is unread: the row glows, a light sweep crosses it every few
-     seconds and the megaphone rings -- loud on purpose, and gone the moment the tab is opened
-     (the class is dropped with .updates-unread). Inset ring rather than an outer shadow, since
-     the nav is a scroll container and would clip an outer glow. */
-  .updates-unread:not(.active) {
-    position: relative; overflow: hidden;
-    background: linear-gradient(100deg, #ffe4da 0%, #fff1ec 55%, #ffe4da 100%);
-    animation: updates-glow 2.4s ease-in-out infinite;
-  }
-  .dark .updates-unread:not(.active) { background: linear-gradient(100deg, rgba(255,78,32,0.26) 0%, rgba(255,78,32,0.12) 55%, rgba(255,78,32,0.26) 100%); }
-  .updates-unread:not(.active)::after {
-    content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 40%; pointer-events: none;
-    background: linear-gradient(100deg, transparent, rgba(255,255,255,0.65), transparent);
-    transform: translateX(-120%); animation: updates-sweep 3.2s ease-in-out infinite;
-  }
-  .dark .updates-unread:not(.active)::after { background: linear-gradient(100deg, transparent, rgba(255,157,126,0.28), transparent); }
   .updates-unread:not(.active) > svg { animation: updates-ring 3.2s ease-in-out infinite; transform-origin: 30% 70%; }
-  @keyframes updates-glow { 0%, 100% { box-shadow: inset 0 0 0 1px rgba(255,78,32,0.35); } 50% { box-shadow: inset 0 0 0 1.5px rgba(255,78,32,0.9), inset 0 0 14px rgba(255,78,32,0.22); } }
-  @keyframes updates-sweep { 0%, 55% { transform: translateX(-120%); } 100% { transform: translateX(360%); } }
   @keyframes updates-ring { 0%, 55%, 100% { transform: rotate(0); } 60% { transform: rotate(-16deg); } 66% { transform: rotate(14deg); } 72% { transform: rotate(-10deg); } 78% { transform: rotate(8deg); } 84% { transform: rotate(0); } }
 
   /* Sidebar icons move a little on hover -- each one says something about its tab. Hover only,
@@ -570,29 +555,38 @@
       <div id="teamspace-menu" role="listbox" class="hidden absolute left-2 right-2 mt-1 z-[28] bg-white dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 rounded-lg panel-raised py-1 panel-pop-in"></div>
     </div>
 
+    <!-- Every group is NAMED (Work / Team / Meetings / History) -- asked "how can I categorize these
+         items or make this side bar better?". Before, one group had a label (Events) and the rest
+         were bare dividers, so nothing said why Activity sat beside Suggestions. The labels replace
+         the dividers rather than adding to them. Items about the app itself (New Updates,
+         Suggestions) live in the footer above Collapse, and Export/Import moved to the profile
+         menu -- 13 rows down to 11. Labels carry .sidebar-label, so the icon-only rail hides them
+         (that rule positions them absolute, costing no height). -->
     <nav id="sidebar-nav" class="flex-1 overflow-y-auto py-2 px-2 flex flex-col gap-0.5">
+      <p class="sidebar-label px-2.5 pt-1 pb-1 text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Work</p>
       <button data-view-btn="board" data-tooltip="Board" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
         <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line></svg>
         <span class="sidebar-label truncate">Board</span>
       </button>
       <button data-view-btn="gantt" data-tooltip="Timeline" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
-        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="7" y1="8" x2="13" y2="8"></line><line x1="7" y1="12" x2="17" y2="12"></line><line x1="7" y1="16" x2="11" y2="16"></line></svg>
+        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="10" height="4" rx="1.5"></rect><rect x="7" y="10" width="12" height="4" rx="1.5"></rect><rect x="11" y="16" width="10" height="4" rx="1.5"></rect></svg>
         <span class="sidebar-label truncate">Timeline</span>
       </button>
       <button data-view-btn="calendar" data-tooltip="Calendar" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
         <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
         <span class="sidebar-label truncate">Calendar</span>
       </button>
+      <button data-view-btn="projects" data-tooltip="Projects" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
+        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+        <span class="sidebar-label truncate">Projects</span>
+      </button>
+      <p class="sidebar-label px-2.5 pt-3 pb-1 text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Team</p>
       <button data-view-btn="people" data-tooltip="People" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
         <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
         <span class="sidebar-label truncate">People</span>
       </button>
-      <button data-view-btn="projects" data-tooltip="Projects" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
-        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-        <span class="sidebar-label truncate">Projects</span>
-      </button>
       <!-- messageCircle (rounded bubble), not the rectangular "message" icon Suggestions already
-           uses right below it -- the two would be indistinguishable at a glance otherwise. -->
+           uses (now in the sidebar footer) -- the two would be indistinguishable at a glance otherwise. -->
       <button data-view-btn="chat" data-tooltip="Chat" class="view-toggle-btn tooltip-right relative w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
         <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
         <span class="sidebar-label truncate">Chat</span>
@@ -602,16 +596,14 @@
         <span id="chat-nav-badge" class="hidden absolute top-1 right-1.5 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">0</span>
       </button>
 
-      <div class="h-px bg-zinc-100 dark:bg-zinc-700 my-1.5 mx-2.5 sidebar-label"></div>
-
-      <!-- EVENTS -- the one group in this rail with a written label rather than just a divider.
+      <!-- MEETINGS (was "Events", too vague) -- once the one group in this rail with a written label rather than just a divider.
            The others are loose groupings of views ("things you look at"); this one is a named
            category holding recurring meetings, and it is meant to grow a second and third entry,
            so the header earns its row. Styled as the same 11px uppercase caption the digest
            panel's own section headers use rather than a new treatment, and it carries
            .sidebar-label so it disappears with the dividers when the rail collapses to icons
            (that rule positions it absolute, so it costs no height and no flex gap either). -->
-      <p class="sidebar-label px-2.5 pt-1 pb-0.5 text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Events</p>
+      <p class="sidebar-label px-2.5 pt-3 pb-1 text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Meetings</p>
       <!-- A presentation screen on a stand: deliberately not `users` (People has it), not
            `calendar` (Calendar has it) and not `message` (Suggestions has it). -->
       <button data-view-btn="wip" data-tooltip="WIP Meeting" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
@@ -619,45 +611,14 @@
         <span class="sidebar-label truncate">WIP Meeting</span>
       </button>
 
-      <div class="h-px bg-zinc-100 dark:bg-zinc-700 my-1.5 mx-2.5 sidebar-label"></div>
-
+      <p class="sidebar-label px-2.5 pt-3 pb-1 text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">History</p>
       <button data-view-btn="activity" data-tooltip="Activity" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
         <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
         <span class="sidebar-label truncate">Activity</span>
       </button>
-      <button data-view-btn="suggestions" data-tooltip="Suggestions" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
-        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-        <span class="sidebar-label truncate">Suggestions</span>
-      </button>
       <button data-view-btn="archived" data-tooltip="Archived" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
         <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>
         <span class="sidebar-label truncate">Archived</span>
-      </button>
-      <!-- New Updates: the changelog. Highlighted (tint + pulsing count) only while there are
-           entries this person hasn't seen; plain like every other item once they have. The count
-           is absolute, same as Chat's badge, so it still shows over the icon on the collapsed rail. -->
-      <button data-view-btn="updates" id="updates-nav-btn" data-tooltip="New Updates" class="view-toggle-btn tooltip-right relative w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
-        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 11 18-5v12L3 14v-3z"></path><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"></path></svg>
-        <span class="sidebar-label truncate">New Updates</span>
-        <span id="updates-nav-badge" class="hidden absolute top-1 right-1.5 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-brand-500 text-white text-[10px] font-bold flex items-center justify-center updates-pulse">0</span>
-      </button>
-
-      <div class="h-px bg-zinc-100 dark:bg-zinc-700 my-1.5 mx-2.5 sidebar-label"></div>
-
-      <!-- Moved out of the header's icon row (direct request) -- Export/Import are occasional
-           whole-board backup/restore actions, not something reached for as often as the bells
-           or Add Task, so they read better as rail items than as another button competing for
-           space next to notifications. Reuses .view-toggle-btn purely for matching hover/
-           tooltip styling; no data-view-btn attribute means setView's active-state toggle
-           (querySelectorAll('.view-toggle-btn')) just never matches these, so they never light
-           up as if they were a view. -->
-      <button id="btn-export" data-tooltip="Export" title="Export" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
-        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-        <span class="sidebar-label truncate">Export</span>
-      </button>
-      <button id="btn-import" data-tooltip="Import" title="Import" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
-        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
-        <span class="sidebar-label truncate">Import</span>
       </button>
       <input type="file" id="import-file-input" accept="application/json" class="hidden">
     </nav>
@@ -670,6 +631,20 @@
          top -- everything inside it (ids, content) is untouched, only its own position rule
          changed. -->
     <div class="border-t border-zinc-100 dark:border-zinc-700 p-2 shrink-0 relative">
+      <!-- About the app itself, not the work: pinned here beside the account, where Slack and
+           Linear keep "What's new" and "Send feedback". -->
+      <!-- New Updates: the changelog. Highlighted (tint + pulsing count) only while there are
+           entries this person hasn't seen; plain like every other item once they have. The count
+           is absolute, same as Chat's badge, so it still shows over the icon on the collapsed rail. -->
+      <button data-view-btn="updates" id="updates-nav-btn" data-tooltip="New Updates" class="view-toggle-btn tooltip-right relative w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
+        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 11 18-5v12L3 14v-3z"></path><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"></path></svg>
+        <span class="sidebar-label truncate">New Updates</span>
+        <span id="updates-nav-badge" class="hidden absolute top-1 right-1.5 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-brand-500 text-white text-[10px] font-bold flex items-center justify-center updates-pulse">0</span>
+      </button>
+      <button data-view-btn="suggestions" data-tooltip="Suggestions" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
+        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+        <span class="sidebar-label truncate">Suggestions</span>
+      </button>
       <!-- data-tooltip says "Expand", not "Collapse" -- the tooltip only ever shows once the
            rail IS collapsed (the sidebar-label text handles the expanded state directly, no
            tooltip needed then), so it should describe what clicking it does next, not repeat
@@ -711,6 +686,19 @@
         <button type="button" id="btn-tour-page" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-600">
           <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
           <span>Tour this page</span>
+        </button>
+        <div class="border-t border-zinc-100 dark:border-zinc-600 my-1"></div>
+        <!-- Export/Import: rare whole-board backup/restore, so here rather than two prime rows in
+             the nav (moved from the sidebar, which had moved them from the header). Same ids, so
+             their handlers are untouched. -->
+        <p class="px-3.5 pt-1 pb-0.5 text-[11px] font-semibold text-zinc-400 dark:text-zinc-500">Data</p>
+        <button type="button" id="btn-export" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-600">
+          <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          <span>Export board</span>
+        </button>
+        <button type="button" id="btn-import" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-600">
+          <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+          <span>Import board</span>
         </button>
         <div class="border-t border-zinc-100 dark:border-zinc-600 my-1"></div>
         <button type="button" id="btn-sign-out" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-rose-50 dark:hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400">
@@ -927,7 +915,7 @@
       <div class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card p-4">
         <div class="flex items-center justify-between mb-3">
           <div class="flex items-center gap-2">
-            <svg class="w-4 h-4 text-zinc-400 dark:text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="7" y1="8" x2="13" y2="8"></line><line x1="7" y1="12" x2="17" y2="12"></line><line x1="7" y1="16" x2="11" y2="16"></line></svg>
+            <svg class="w-4 h-4 text-zinc-400 dark:text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="10" height="4" rx="1.5"></rect><rect x="7" y="10" width="12" height="4" rx="1.5"></rect><rect x="11" y="16" width="10" height="4" rx="1.5"></rect></svg>
             <h2 class="text-base font-bold text-zinc-900 dark:text-zinc-100">Workload Timeline</h2>
           </div>
           <div class="flex items-center justify-end flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-500 dark:text-zinc-400">
@@ -5365,7 +5353,7 @@
     plus: '<line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line>',
     search: '<circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line>',
     columns: '<rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line>',
-    gantt: '<rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="7" y1="8" x2="13" y2="8"></line><line x1="7" y1="12" x2="17" y2="12"></line><line x1="7" y1="16" x2="11" y2="16"></line>',
+    gantt: '<rect x="3" y="4" width="10" height="4" rx="1.5"></rect><rect x="7" y="10" width="12" height="4" rx="1.5"></rect><rect x="11" y="16" width="10" height="4" rx="1.5"></rect>',
     flame: '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path>',
     x: '<line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>',
     link: '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>',
@@ -12161,6 +12149,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-06h', date: '2026-10-06', items: [
+      { type: 'improved', title: 'A tidier sidebar', text: 'Pages are now grouped under Work, Team, Meetings and History. New Updates and Suggestions sit at the bottom by your name, and Export and Import moved into your profile menu. Projects has a folder icon, and Timeline has its own bar-chart icon. When there are unread updates, New Updates turns orange with a count instead of looking like the page you are on.' }
+    ] },
     { id: '2026-10-06g', date: '2026-10-06', items: [
       { type: 'improved', title: 'Less scrolling on Archived, Suggestions and Activity', text: 'These pages are wider. On a big screen, Archived shows two tasks to a row and Suggestions shows posts in two columns, so long lists take far less scrolling. Activity stays a single list, so it still reads in order.' }
     ] },
@@ -13255,6 +13246,7 @@
      EXPORT / IMPORT
   ========================================================= */
   document.getElementById('btn-export').addEventListener('click', function () {
+    document.getElementById('user-menu-panel').classList.add('hidden');
     // Archived tasks live in a separate collection now and aren't loaded by default -- without
     // this, exporting from a tab that only ever used Board would silently produce a file missing
     // every archived task. First export in a session pays a brief one-time fetch for this; every
@@ -13327,7 +13319,7 @@
   }
 
   var importInput = document.getElementById('import-file-input');
-  document.getElementById('btn-import').addEventListener('click', function () { importInput.click(); });
+  document.getElementById('btn-import').addEventListener('click', function () { document.getElementById('user-menu-panel').classList.add('hidden'); importInput.click(); });
 
   importInput.addEventListener('change', function (e) {
     var file = e.target.files[0];
@@ -14056,7 +14048,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T16:46:53Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T16:53:14Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
