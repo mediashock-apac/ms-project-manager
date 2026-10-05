@@ -2886,7 +2886,7 @@ client-side domain check in `isAllowedEmail` is UX only, not enforcement):
         hashing, because a hash of ~6 clients into 10 hues almost always collides; client keys
         ignore case and spaces ("Little Paddington" = "LittlePaddington"). `CLIENT_PALETTE` avoids
         rose/amber/emerald/purple/orange, which already mean overdue/decision/done/review/brand.
-        **Also in the toolbar's Projects filter dropdown** (asked for directly, 2026-10-06, with the menu widened to 36rem via `enhanceSelect's` new `opts.menuWidthClass`/`opts.optionHtml`; a wide menu near the right edge flips to right-align). **Otherwise deliberately not on Board, Projects, Chat, Calendar or Focus** — offered and declined
+        **Also in the toolbar's Projects filter dropdown** (asked for directly, 2026-10-06, with the menu widened to 36rem via `enhanceSelect's` new `opts.menuWidthClass`/`opts.optionHtml`; a wide menu near the right edge flips to right-align). **Also on Calendar v2** (item project lines). **Otherwise deliberately not on Board, Projects, Chat or Focus** — offered and declined
         (2026-10-05) in favour of trialling it on WIP first; widen only if the team asks. On the
         Board it would also sit next to the priority colours. Chat avatars keep their
         hashed colour (`PROJECT_AVATAR_PALETTE`): a filled circle needs some colour, and nobody
@@ -3543,6 +3543,33 @@ itself before calling, and nothing had yet asked it about `'unassigned'` — whi
 since that is not a department key, so `indexOf` found it in nobody's list and the Unassigned
 teamspace listed no roster members at all. That is the one teamspace where people with no
 department are the entire point.
+
+### Calendar v2: what's on which day (supersedes the section below while switched on)
+
+Asked "calendar seems redundant", then "what can make it better so that it is usable?", then a mockup, then
+"build it". The old Calendar drew task **spans**, a weaker copy of Timeline. v2 draws **moments**, so the two
+pages answer different questions: Timeline = how long work takes; Calendar = what lands on which day.
+
+- **What it lists per day:** task deadlines, checklist step due dates (step assignee, else task owner), dates
+  from briefs that are **not** already a checklist step (client feedback, show day; a brief date that matches
+  a step name in that project is shown once, as the step), project deadlines, and who's away. Ordered brief
+  → project → deadline → step → away; late first, done last (faded, struck through).
+- **Opens on the next seven days from today** (`cal2WeekStart`), Month view one click away
+  (`flowboard_calendar_view`, Monday-first grid). Arrows move a week or a month; Today resets both.
+- **Late work is carried onto today's column** (`carryLate`) with "LATE · was due …". A week that starts today
+  would otherwise drop everything overdue. Shipped without it first; the screenshot showed a late step missing.
+- **Coloured by kind, not priority:** deadline = brand, step = indigo, from a brief = cyan, project deadline =
+  violet, away = amber (light-mode amber floor respected). Project names use `projectNameHtml`, so client tags
+  are coloured here too (the approved mockup showed them).
+- **Respects** the Mine/Everyone toggle (Mine = dates where you are the person named; project deadlines and brief
+  dates only for projects you have work in), the toolbar filters and the teamspace (tasks via `applyFilters`).
+- **Clicks:** a task deadline or step opens the task; a brief date opens the Brief card; a day header opens the
+  existing day pop-up with the full list.
+- **Reads only.** Nothing is saved, so switching it off cannot affect data.
+- **To switch back:** `CALENDAR_V2_ENABLED = false` in the "CALENDAR V2" section. `renderCalendar` then runs the
+  original code below, untouched, and the arrows/Today return to it (v2 takes them over with capture-phase
+  listeners only while on). Or `git revert` the commit titled "Calendar v2".
+- Verified in Chromium against the real page with stand-in data (21 checks, plus the switched-off run).
 
 ### Calendar view
 
