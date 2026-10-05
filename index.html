@@ -12814,6 +12814,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-06r', date: '2026-10-06', items: [
+      { type: 'fixed', title: 'Escape on an edited task', text: 'Pressing Escape on a task with unsaved changes now asks whether to discard them. Before, it quietly did nothing.' }
+    ] },
     { id: '2026-10-06q', date: '2026-10-06', items: [
       { type: 'new', title: 'Creative briefs', text: 'Briefs can now be written right here instead of in a Google Doc. On the Projects tab, click "+ Brief" on a project, pick a template like Quick job or Event, and add only the sections the job needs. Everyone on the job sees a clear Brief card from the project and its tasks, and the key dates can become checklist steps in one tick.' }
     ] },
@@ -14123,10 +14126,12 @@
   ========================================================= */
   document.addEventListener('keydown', function (e) {
     if (e.key === 'Escape') {
-      if (!taskModal.classList.contains('hidden')) requestCloseTaskModal();
+      // Close only the top-most thing. These used to be four independent ifs, so on an edited task
+      // Escape opened 'Discard changes?' and the very next line closed it again: the key did nothing.
       if (!confirmModal.classList.contains('hidden')) closeConfirm();
-      if (!calendarDayModal.classList.contains('hidden')) closeCalendarDayModal();
-      if (appRoot.classList.contains('sidebar-open')) closeMobileSidebar();
+      else if (!taskModal.classList.contains('hidden')) requestCloseTaskModal();
+      else if (!calendarDayModal.classList.contains('hidden')) closeCalendarDayModal();
+      else if (appRoot.classList.contains('sidebar-open')) closeMobileSidebar();
     }
   });
 
@@ -14773,7 +14778,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T18:15:17Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T18:17:57Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
