@@ -685,7 +685,9 @@ to bottom:
        first, and row order within it) — it just no longer controls *whether* tasks cluster,
        which happens unconditionally regardless of sort mode.
      - **`projectGroupCardHtml(g)`** is the one wrapper every project gets — project name as the
-       card header, tasks underneath as `divide-y`-separated rows — whether the project has one
+       card header (on its own tinted band, `bg-zinc-100` / `dark:bg-zinc-700/60`, in
+       `zinc-900`/white, while task names step down to `zinc-700`/`zinc-200` — asked for as "better
+       contrast between project name and tasks"; title and rows used to share one background), tasks underneath as `divide-y`-separated rows — whether the project has one
        task or five. That "always the same treatment" is what actually resolved the repeated
        feedback about grouped and ungrouped cards looking inconsistent: there's no longer a
        second look to be inconsistent with.
@@ -1891,8 +1893,10 @@ to bottom:
        real list-pane proportions (roughly 380-420px against a typical window), which this whole
        chat feature has been modeled on throughout, and gives each row's now-denser content
        (avatar, name, completed tag, unread dot, star, timestamp, preview line) real room.
-       `CHAT_LIST_WIDTH_MIN` ended back at its original 200 — a sensible floor the width debate
-       never actually had a reason to change.
+       `CHAT_LIST_WIDTH_MIN` is now **320** (it was 200): the three filter pills need ~316px side by
+       side and were crushed below that, reported directly. Enforced three ways: the drag clamp,
+       `applyChatListWidth` (never paints narrower, even when a small window's 50% cap is less),
+       and `lg:min-w-[320px]` on the pane. A width saved under the old floor is raised, not discarded.
        - **A real bug surfaced while landing on 400: the default was silently getting clamped
          down to the 200px floor on every fresh sign-in**, only correcting itself once someone
          manually dragged the column. Root cause: `chatListMaxWidth()` (the 50%-of-row cap) falls

@@ -986,7 +986,7 @@
              sense once the panes actually sit side by side. The lg:w-[400px] here is only the
              flash-of-unstyled-size fallback matching CHAT_LIST_WIDTH_DEFAULT; applyChatListWidth
              overrides it with an inline style as soon as the script runs. -->
-        <div id="chat-project-list-pane" class="w-full lg:w-[400px] shrink-0 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl lg:rounded-r-none overflow-hidden flex flex-col">
+        <div id="chat-project-list-pane" class="w-full lg:w-[400px] lg:min-w-[320px] shrink-0 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl lg:rounded-r-none overflow-hidden flex flex-col">
           <div class="px-3.5 py-3 border-b border-zinc-100 dark:border-zinc-700 flex items-center justify-between gap-2">
             <p class="text-xs font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Chats</p>
             <button type="button" id="chat-new-btn" class="shrink-0 flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300">
@@ -2571,7 +2571,10 @@
   // something this pass had a reason to change. Matches the `lg:w-[400px]` fallback class on
   // #chat-project-list-pane below, so there's no flash of a different size before
   // applyChatListWidth's inline style takes over on load.
-  var CHAT_LIST_WIDTH_MIN = 200;
+  // 320, not 200: the three filter pills (My chats / Favourites / Unread) need ~316px side by
+  // side, and below that they and each row's name/star/timestamp got crushed -- reported directly
+  // ("make a minimum width for CHATS column"). The pane also carries lg:min-w-[320px] as a floor.
+  var CHAT_LIST_WIDTH_MIN = 320;
   var CHAT_LIST_WIDTH_DEFAULT = 400;
 
   // The cap is relative (up to half the row), not a fixed pixel ceiling -- reported directly
@@ -2596,7 +2599,8 @@
   function loadChatListWidth() {
     try {
       var v = parseInt(localStorage.getItem(CHAT_LIST_WIDTH_KEY), 10);
-      if (v >= CHAT_LIST_WIDTH_MIN) return v;
+      // A width saved under the old 200px floor is raised to the new one, not thrown away.
+      if (v > 0) return Math.max(v, CHAT_LIST_WIDTH_MIN);
     } catch (e) { /* ignore */ }
     return CHAT_LIST_WIDTH_DEFAULT;
   }
@@ -2616,7 +2620,7 @@
   // again afterward -- every fresh sign-in silently got the floor width, never the real default.
   function applyChatListWidth() {
     var pane = document.getElementById('chat-project-list-pane');
-    var display = Math.min(chatListWidth, chatListMaxWidth());
+    var display = Math.max(CHAT_LIST_WIDTH_MIN, Math.min(chatListWidth, chatListMaxWidth()));
     pane.style.width = chatListDesktopQuery.matches ? (display + 'px') : '';
   }
   applyChatListWidth();
@@ -8773,7 +8777,7 @@
         // same thing in words, already colour-coded and at a fixed left position, so the dot was
         // the same fact twice on one row (asked directly; same call the Timeline made for its dot).
         '<div class="flex items-center gap-2.5">' +
-          '<p data-tooltip="' + escapeHtml(t.name) + '" class="tooltip-top min-w-0 flex-1 text-sm font-medium text-zinc-800 dark:text-zinc-100 truncate group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</p>' +
+          '<p data-tooltip="' + escapeHtml(t.name) + '" class="tooltip-top min-w-0 flex-1 text-sm font-medium text-zinc-700 dark:text-zinc-200 truncate group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</p>' +
           '<div class="board-row-actions flex items-center gap-0.5 shrink-0">' +
             '<span draggable="true" data-drag-handle title="Drag to move" aria-label="Drag to move" role="button" class="hidden sm:flex w-6 h-6 items-center justify-center rounded-md cursor-grab active:cursor-grabbing text-zinc-400 dark:text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700">' + svgIcon('grip', 'w-3.5 h-3.5') + '</span>' +
             // No pencil: clicking anywhere on the row opens the same task window, so it was a second
@@ -8823,8 +8827,11 @@
   function projectGroupCardHtml(g) {
     return (
       '<div class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card overflow-hidden">' +
-        '<div class="px-3.5 py-3 border-b border-zinc-100 dark:border-zinc-700">' +
-          '<p data-tooltip="' + escapeHtml(g.project) + '" class="tooltip-top text-base font-bold text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(g.project) + '</p>' +
+        // The project title sits on its own tinted band, a step brighter than the task names below
+        // it (asked for: "better contrast between project name and tasks"). Before, title and rows
+        // shared one background and nearly one text colour, so the card read as one flat list.
+        '<div class="px-3.5 py-3 bg-zinc-100 dark:bg-zinc-700/60 border-b border-zinc-200 dark:border-zinc-600">' +
+          '<p data-tooltip="' + escapeHtml(g.project) + '" class="tooltip-top text-base font-bold text-zinc-900 dark:text-white truncate">' + escapeHtml(g.project) + '</p>' +
         '</div>' +
         '<div class="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-700">' + g.tasks.map(boardTaskRowHtml).join('') + '</div>' +
       '</div>'
@@ -13447,7 +13454,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T15:43:43Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T15:50:13Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
