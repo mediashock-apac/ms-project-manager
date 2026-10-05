@@ -11298,15 +11298,16 @@
       var detailsBtn = name && canDetails && !folded
         ? '<button type="button" data-wip-act="toggle-details" data-project="' + escapeHtml(name) + '" aria-expanded="' + detailsOpen + '" class="shrink-0 px-4 ' + WIP_ACT_BTN + (detailsOpen ? ' !text-brand-600 dark:!text-brand-400' : '') + '">Contact &amp; links' + (detailsCount ? ' (' + detailsCount + ')' : '') + '</button>'
         : '';
-      // Category: "Set category" (brand) until one is picked, then a quiet "Category" -- the group
-      // heading already names it, so the header doesn't repeat the label. Opens a pill row under
+      // Category: "Set category" (brand) until one is picked. After that the button is hidden and
+      // only appears while hovering the project's title bar (reported: a "Category" on every row is
+      // noise, and the group heading already says it). Stays shown while its picker is open. Opens a pill row under
       // the header (state in wipCategoryPicking, so a live re-render doesn't close it).
       var cat = name ? projectWipCategory(name) : '';
       var picking = name && wipCategoryPicking === name;
       var catBtn = name
         ? '<button type="button" data-wip-act="pick-category" data-project="' + escapeHtml(name) + '" aria-expanded="' + !!picking + '" class="shrink-0 px-3 ' +
-            (cat ? WIP_ACT_BTN : 'text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline') + (picking ? ' !text-brand-600 dark:!text-brand-400' : '') + '">' +
-            (cat ? 'Category' : 'Set category') + '</button>'
+            (cat ? WIP_ACT_BTN + (picking ? '' : ' opacity-0 group-hover/hdr:opacity-100 focus:opacity-100') : 'text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline') + (picking ? ' !text-brand-600 dark:!text-brand-400' : '') + '">' +
+            (cat ? 'Change category' : 'Set category') + '</button>'
         : '';
       var catPicker = picking
         ? '<div class="px-4 py-2 flex items-center gap-1.5 flex-wrap bg-zinc-50/60 dark:bg-zinc-700/20 border-b border-zinc-100 dark:border-zinc-700/60">' +
@@ -11319,7 +11320,7 @@
         : '';
 
       cardHtml[name] = '<div class="border-b border-zinc-100 dark:border-zinc-700 last:border-b-0">' +
-        '<div class="flex items-stretch bg-zinc-50 dark:bg-zinc-700/40">' +
+        '<div class="group/hdr flex items-stretch bg-zinc-50 dark:bg-zinc-700/40">' +
           '<button type="button" data-wip-fold="' + escapeHtml(name) + '" aria-expanded="' + !folded + '" class="min-w-0 flex-1 flex items-center gap-2 px-4 py-2.5 text-left hover:bg-zinc-100 dark:hover:bg-zinc-700/70">' +
             svgIcon('chevronDown', 'w-3.5 h-3.5 shrink-0 text-zinc-400 transition-transform' + (folded ? ' -rotate-90' : '')) +
             '<span class="min-w-0 flex-1 text-sm font-bold text-zinc-800 dark:text-zinc-100 break-words">' + (name ? projectNameHtml(name) : 'No project') + '</span>' +
@@ -11535,6 +11536,10 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-05r', date: '2026-10-05', items: [
+      { type: 'improved', title: 'New Updates grouped by day', text: 'Everything released on the same day now sits under one date on this page.' },
+      { type: 'improved', title: 'Quieter WIP project titles', text: 'Once a project has a category, the category button only shows when you hover over its title bar.' }
+    ] },
     { id: '2026-10-05q', date: '2026-10-05', items: [
       { type: 'new', title: 'Client names in colour', text: 'The client name in square brackets in a project name, like [Google] or [Bosch], is now highlighted in WIP Meeting and on the Timeline. The same client always has the same colour, so you can spot all of one client\'s work at a glance.' }
     ] },
@@ -11546,14 +11551,12 @@
       { type: 'improved', title: 'Easier to close Needs a decision', text: 'Click the "items need a decision" row again to close the list.' }
     ] },
     { id: '2026-10-05n', date: '2026-10-05', items: [
-      { type: 'improved', title: 'LinkedIn marketing last in WIP Meeting', text: 'The Mediashock LinkedIn marketing project now always sits at the bottom of the By project list, after the client projects.' }
     ] },
     { id: '2026-10-05m', date: '2026-10-05', items: [
-      { type: 'improved', title: 'Clearer project status in WIP Meeting', text: 'Each project in WIP Meeting now has its own highlighted Status line showing the latest update. Click the update to edit it, or use + Add update. Client contact and links are tucked behind "Contact & links", which only the Suits team sees.' },
       { type: 'new', title: 'Collapse all in WIP Meeting', text: 'A Collapse all button at the top of the By project list folds every project to its name, so you can open them one at a time. Click Expand all to open them again.' }
     ] },
     { id: '2026-10-05l', date: '2026-10-05', items: [
-      { type: 'new', title: 'Project updates on WIP Meeting', text: 'Under each project in WIP Meeting you can now add dated updates, the client contact and key links, like the Status, Client contact and Key links columns of the WIP sheet. Anyone can add or edit. Key links are the same list as the project chat\'s pinned links.' }
+      { type: 'new', title: 'Client contact and key links in WIP Meeting', text: 'Each project in WIP Meeting can hold its client contact and key links, like those columns of the WIP sheet. Suits will find them under "Contact & links" on the project\'s title bar. Key links are the same list as the project chat\'s pinned links.' }
     ] },
     { id: '2026-10-05k', date: '2026-10-05', items: [
       { type: 'improved', title: 'Shorter top of WIP Meeting', text: 'In the By project view, Needs a decision is now one line at the top saying how many items there are. Click it to see them.' }
@@ -11671,23 +11674,36 @@
   function renderUpdatesView() {
     var list = document.getElementById('updates-list');
     if (!list) return;
-    list.innerHTML = CHANGELOG.map(function (r) {
+    // One heading and one card per DAY, not per release: several releases often ship on the same
+    // day and each used to get its own repeated date heading (reported). Releases stay separate
+    // entries in CHANGELOG because their ids drive read tracking; only the rendering merges them.
+    // "New since your last visit" is marked per item (orange edge) since a day can mix seen and
+    // unseen releases. A release with no items (its only change was later superseded) adds nothing.
+    var days = [];
+    CHANGELOG.forEach(function (r) {
+      if (!r.items.length) return;
+      var day = days.length && days[days.length - 1].date === r.date ? days[days.length - 1] : null;
+      if (!day) { day = { date: r.date, items: [] }; days.push(day); }
       var isNew = updatesUnseenAtOpen.indexOf(r.id) !== -1;
-      var d = parseDate(r.date);
-      var dateLabel = d ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : r.date;
+      r.items.forEach(function (it) { day.items.push({ it: it, isNew: isNew }); });
+    });
+    list.innerHTML = days.map(function (day) {
+      var anyNew = day.items.some(function (x) { return x.isNew; });
+      var d = parseDate(day.date);
+      var dateLabel = d ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : day.date;
       return '<div>' +
         '<div class="flex items-center gap-2 mb-2">' +
           '<h3 class="text-sm font-bold text-zinc-700 dark:text-zinc-200">' + escapeHtml(dateLabel) + '</h3>' +
-          (isNew ? '<span class="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-brand-500 text-white">New since your last visit</span>' : '') +
+          (anyNew ? '<span class="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-brand-500 text-white">New since your last visit</span>' : '') +
         '</div>' +
-        '<div class="bg-white dark:bg-zinc-800 border ' + (isNew ? 'border-brand-300 dark:border-brand-500/40' : 'border-zinc-200 dark:border-zinc-700') + ' rounded-xl shadow-card divide-y divide-zinc-100 dark:divide-zinc-700">' +
-          r.items.map(function (it) {
-            var meta = UPDATE_TYPE_META[it.type] || UPDATE_TYPE_META.improved;
-            return '<div class="flex items-start gap-3 px-4 py-3">' +
+        '<div class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card overflow-hidden divide-y divide-zinc-100 dark:divide-zinc-700">' +
+          day.items.map(function (x) {
+            var meta = UPDATE_TYPE_META[x.it.type] || UPDATE_TYPE_META.improved;
+            return '<div class="flex items-start gap-3 px-4 py-3 border-l-[3px] ' + (x.isNew ? 'border-l-brand-500' : 'border-l-transparent') + '">' +
               '<span class="shrink-0 w-[4.5rem] text-center text-[11px] font-bold px-1.5 py-0.5 rounded ' + meta.cls + '">' + meta.label + '</span>' +
               '<div class="min-w-0">' +
-                '<p class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">' + escapeHtml(it.title) + '</p>' +
-                '<p class="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">' + escapeHtml(it.text) + '</p>' +
+                '<p class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">' + escapeHtml(x.it.title) + '</p>' +
+                '<p class="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">' + escapeHtml(x.it.text) + '</p>' +
               '</div>' +
             '</div>';
           }).join('') +
@@ -12824,7 +12840,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T10:03:00Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T10:06:52Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

@@ -165,6 +165,14 @@ sidebar so users will know whenever new updates are in."
 - **Opening the tab** snapshots what was unseen (`updatesUnseenAtOpen`) *before* marking it
   seen, so those releases still carry a "New since your last visit" label and an orange border on
   that visit. Toolbar hidden (`TOOLBAR_FULLY_HIDDEN_VIEWS`) — nothing to search or filter.
+- **Rendered one heading and one card per DAY**, not per release (`renderUpdatesView` merges
+  consecutive releases with the same `date`) -- several releases a day each repeated the date
+  heading, reported as "why aren't updates on the same day grouped together?". Releases stay
+  separate in `CHANGELOG` because their ids are the read-tracking keys; "new since your last
+  visit" is an orange left edge per item, since one day can mix seen and unseen releases.
+- **Rewrite or empty a same-week entry once a later change makes it untrue** rather than leaving
+  two entries that contradict each other. Keep the release object (with `items: []`) so its id
+  still works for read tracking; an empty release renders nothing.
 - Type chips: New = brand, Improved = violet, Fixed = emerald. Labelled chips on a page with no
   priorities on it, so the usual "these hues mean priority" concern doesn't apply here.
 - The seed entries (29 Sep – 5 Oct 2026) were written from that period's commits.
@@ -3048,8 +3056,9 @@ Client contact / Key links columns).
   anything uncategorised, so nothing vanishes. Empty groups are skipped; within a group, soonest
   open deadline first. Stored as `projects/{id}.wipCategory` (absent or an unknown key = Not
   sorted, so a category can be renamed/retired without migrating). Set from the project header in
-  WIP: "Set category" (brand) until set, then a quiet "Category" — the group heading already
-  names it, so the header doesn't repeat the label. It opens a pill row under the header
+  WIP: "Set category" (brand) until set; after that the button is hidden and shows as "Change
+  category" only while hovering the project's title bar (`group/hdr`) — a "Category" on every
+  row was reported as noise, and the group heading already names it. It opens a pill row under the header
   (`wipCategoryPicking`, kept in state so a live re-render doesn't close it — a native `<select>`
   would snap shut on every roster heartbeat). Anyone can change it (same as status); logged to
   Activity as `project_category`. No rules change.
