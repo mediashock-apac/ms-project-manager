@@ -1087,13 +1087,24 @@
              styling. One control, at view level -- a weekly WIP wants a week, a monthly planning
              pass wants four, and the choice sticks (WIP_RANGE_KEY) so whoever runs the meeting
              sets it once. -->
+        <div class="flex items-center gap-2 flex-wrap shrink-0">
+        <!-- By project / Agenda. Opens on By project for everyone every time -- not remembered per
+             person -- because Suits runs the meeting project by project and everyone should be
+             looking at the same screen. -->
+        <div class="flex items-center rounded-lg border border-zinc-200 dark:border-zinc-700 p-0.5 text-xs font-semibold">
+          <button type="button" data-wip-mode="projects" class="calendar-scope-btn px-2.5 py-1 rounded-md">By project</button>
+          <button type="button" data-wip-mode="agenda" class="calendar-scope-btn px-2.5 py-1 rounded-md">Agenda</button>
+        </div>
         <div class="flex items-center rounded-lg border border-zinc-200 dark:border-zinc-700 p-0.5 text-xs font-semibold shrink-0">
           <button type="button" data-wip-range="7" class="calendar-scope-btn px-2.5 py-1 rounded-md">1 week</button>
           <button type="button" data-wip-range="14" class="calendar-scope-btn px-2.5 py-1 rounded-md">2 weeks</button>
           <button type="button" data-wip-range="28" class="calendar-scope-btn px-2.5 py-1 rounded-md">4 weeks</button>
         </div>
+        </div>
       </div>
       <div id="wip-alerts" class="mb-4"></div>
+      <div id="wip-projects"></div>
+      <div id="wip-agenda-body">
       <!-- min-w-0 on both columns: a grid track defaults to min-width:auto, so without it a long
            project name ("Bosch Building Technologies -- AIDC Infrastructure & Security" is a real
            one) sets the column's min-content width and widens the whole grid past its container
@@ -1103,6 +1114,7 @@
         <div id="wip-away" class="min-w-0"></div>
       </div>
       <div id="wip-timeline" class="mt-4"></div>
+      </div>
     </section>
 
     <!-- ============ ACTIVITY VIEW ============ -->
@@ -10890,7 +10902,120 @@
     return wipSectionHtml('Timeline', list.length, '<div class="overflow-x-auto"><div id="wip-timeline-grid" class="relative" style="--wip-label-w:' + wipLabelWidthCss(wipLabelWidth()) + ';">' + head + rows + handle + '</div></div>' + note, aside);
   }
 
+  /* ---------------------------------------------------------
+     BY PROJECT -- how Suits actually runs the meeting: open a project, talk through its
+     deliverables and deadlines, move on. Replaces the shape of their "Internal Content Project
+     Brief" sheet: project -> deliverables (open tasks) -> next steps (open checklist steps, with
+     owner and date). Only open work; Done tasks are out of the conversation, as the sheet strikes
+     them through. Projects ordered by their soonest open deadline (undated last), deliverables by
+     deadline, steps by due date (ganttChecklistItems). At most WIP_STEPS_SHOWN steps per task,
+     the rest behind "+N more". Each project can be folded; starts open so the walkthrough needs
+     no clicks. Fold/expand state is session-only.
+  --------------------------------------------------------- */
+  var wipMode = 'projects';       // opens on By project for everyone; deliberately not persisted
+  var wipProjectFolded = {};
+  var wipStepsExpanded = {};
+  var WIP_STEPS_SHOWN = 3;
+
+  function wipProjectsHtml(open, today) {
+    var byProject = {};
+    open.forEach(function (t) { (byProject[t.project || ''] = byProject[t.project || ''] || []).push(t); });
+    var names = Object.keys(byProject);
+    if (!names.length) return wipSectionHtml('By project', 0, wipEmptyHtml('No open work in this teamspace.'));
+
+    function firstDeadline(list) {
+      var d = list.map(function (t) { return t.deadline; }).filter(Boolean).sort()[0];
+      return d || '9999-99-99';
+    }
+    names.sort(function (a, b) {
+      var da = firstDeadline(byProject[a]), db = firstDeadline(byProject[b]);
+      return da !== db ? (da < db ? -1 : 1) : a.localeCompare(b);
+    });
+
+    var cards = names.map(function (name) {
+      var list = byProject[name].slice().sort(function (a, b) {
+        var da = a.deadline || '9999-99-99', db = b.deadline || '9999-99-99';
+        return da !== db ? (da < db ? -1 : 1) : a.name.localeCompare(b.name);
+      });
+      var own = name ? projectDeadlineFor(name) : '';
+      var latest = list.map(function (t) { return t.deadline; }).filter(Boolean).sort().pop() || '';
+      var due = own || latest;
+      var folded = !!wipProjectFolded[name];
+
+      var rows = folded ? '' : list.map(function (t) {
+        var until = t.deadline ? daysUntil(t.deadline) : null;
+        var late = dueUrgency(t).overdue;
+        var dueText = !t.deadline ? 'No deadline'
+          : late ? Math.abs(until) + 'd overdue · ' + formatShortDate(t.deadline)
+          : 'Due ' + formatShortDate(t.deadline) + ' · ' + wipRelativeLabel(until).toLowerCase();
+        var statusCls = t.status === 'Review' ? WIP_TONES.purple : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300';
+
+        var steps = ganttChecklistItems(t).filter(function (it) { return it && !it.done; });
+        var showAll = !!wipStepsExpanded[t.id];
+        var shown = showAll ? steps : steps.slice(0, WIP_STEPS_SHOWN);
+        var stepsHtml = shown.map(function (it) {
+          var itLate = ganttItemLate(t, it);
+          var when = it.due && parseDate(it.due) ? formatShortDate(it.due) : (it.dueTbd ? 'Due TBD' : 'No date');
+          return '<div class="flex items-center gap-2 pl-4 text-xs">' +
+            '<span class="w-1.5 h-1.5 rotate-45 shrink-0 ' + ganttItemDiamondColor(t, it) + '"></span>' +
+            '<span class="min-w-0 truncate text-zinc-600 dark:text-zinc-300">' + escapeHtml(it.text || '') + '</span>' +
+            '<span class="shrink-0 text-zinc-400 dark:text-zinc-500">' + (it.assignee ? escapeHtml(it.assignee) + ' · ' : '') +
+              '<span class="' + (itLate ? 'text-rose-600 dark:text-rose-400 font-semibold' : '') + '">' + escapeHtml(when) + (itLate ? ' (overdue)' : '') + '</span></span>' +
+          '</div>';
+        }).join('') +
+        (steps.length > WIP_STEPS_SHOWN
+          ? '<button type="button" data-wip-more="' + t.id + '" class="pl-4 text-xs font-semibold text-zinc-400 hover:text-brand-600 dark:hover:text-brand-400">' +
+              (showAll ? 'Show fewer' : '+' + (steps.length - WIP_STEPS_SHOWN) + ' more') + '</button>'
+          : '');
+
+        return '<div class="px-4 py-2.5 flex flex-col gap-1">' +
+          '<button type="button" data-open-task="' + t.id + '" class="group flex items-center gap-3 w-full text-left">' +
+            '<span class="min-w-0 flex-1 truncate text-sm font-medium text-zinc-800 dark:text-zinc-100 group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</span>' +
+            '<span class="hidden sm:inline shrink-0 w-32 truncate text-xs text-zinc-500 dark:text-zinc-400">' + escapeHtml(t.assignee || 'Unassigned') + '</span>' +
+            '<span class="shrink-0 w-24 text-center text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + statusCls + '">' + escapeHtml(STATUS_LABELS[t.status] || t.status) + '</span>' +
+            '<span class="shrink-0 w-40 text-right text-xs ' + (late ? 'text-rose-600 dark:text-rose-400 font-semibold' : 'text-zinc-500 dark:text-zinc-400') + '">' + escapeHtml(dueText) + '</span>' +
+          '</button>' +
+          stepsHtml +
+        '</div>';
+      }).join('');
+
+      return '<div class="border-b border-zinc-100 dark:border-zinc-700 last:border-b-0">' +
+        '<button type="button" data-wip-fold="' + escapeHtml(name) + '" aria-expanded="' + !folded + '" class="w-full flex items-center gap-2 px-4 py-2.5 bg-zinc-50 dark:bg-zinc-700/40 text-left hover:bg-zinc-100 dark:hover:bg-zinc-700/70">' +
+          svgIcon('chevronDown', 'w-3.5 h-3.5 shrink-0 text-zinc-400 transition-transform' + (folded ? ' -rotate-90' : '')) +
+          '<span class="min-w-0 flex-1 text-sm font-bold text-zinc-800 dark:text-zinc-100 break-words">' + escapeHtml(name || 'No project') + '</span>' +
+          '<span class="shrink-0 text-xs text-zinc-500 dark:text-zinc-400">' + list.length + ' open' +
+            (due ? ' · ' + (own ? 'Project due ' : 'Due ') + escapeHtml(formatShortDate(due)) : '') + '</span>' +
+        '</button>' +
+        (folded ? '' : '<div class="divide-y divide-zinc-50 dark:divide-zinc-700/50">' + rows + '</div>') +
+      '</div>';
+    }).join('');
+
+    return wipSectionHtml('By project', names.length, cards);
+  }
+
+  document.getElementById('wip-projects').addEventListener('click', function (e) {
+    var fold = e.target.closest('[data-wip-fold]');
+    if (fold) {
+      var n = fold.getAttribute('data-wip-fold');
+      if (wipProjectFolded[n]) delete wipProjectFolded[n]; else wipProjectFolded[n] = true;
+      renderWipView();
+      return;
+    }
+    var more = e.target.closest('[data-wip-more]');
+    if (more) {
+      var id = more.getAttribute('data-wip-more');
+      if (wipStepsExpanded[id]) delete wipStepsExpanded[id]; else wipStepsExpanded[id] = true;
+      renderWipView();
+    }
+  });
+  document.querySelectorAll('[data-wip-mode]').forEach(function (btn) {
+    btn.addEventListener('click', function () { wipMode = btn.getAttribute('data-wip-mode'); renderWipView(); });
+  });
+
   function renderWipView() {
+    document.querySelectorAll('[data-wip-mode]').forEach(function (btn) {
+      btn.classList.toggle('active', btn.getAttribute('data-wip-mode') === wipMode);
+    });
     document.querySelectorAll('[data-wip-range]').forEach(function (btn) {
       btn.classList.toggle('active', parseInt(btn.getAttribute('data-wip-range'), 10) === wipRangeDays);
     });
@@ -10921,6 +11046,15 @@
       : wipSectionHtml('Needs a decision', 0,
           wipEmptyHtml('Nothing overdue, clashing with leave, or stuck in review.'));
 
+    // Needs a decision stays on top in both modes -- it's short, and it's the list that is meant to
+    // interrupt the walkthrough. Everything else belongs to one mode or the other.
+    var byProject = wipMode === 'projects';
+    document.getElementById('wip-projects').classList.toggle('hidden', !byProject);
+    document.getElementById('wip-agenda-body').classList.toggle('hidden', byProject);
+    if (byProject) {
+      document.getElementById('wip-projects').innerHTML = wipProjectsHtml(open, today);
+      return;
+    }
     document.getElementById('wip-ahead').innerHTML = wipAheadHtml(open, today, horizon, scopedProjects);
     document.getElementById('wip-away').innerHTML = wipAwayHtml(today, horizon);
     document.getElementById('wip-timeline').innerHTML = wipTimelineHtml(scoped, open, today, horizon);
@@ -10947,6 +11081,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-05i', date: '2026-10-05', items: [
+      { type: 'new', title: 'WIP Meeting by project', text: 'WIP Meeting now opens on a project-by-project list: each project, its open deliverables with owner, status and deadline, and the next steps under each one. The previous date-based view is one click away under Agenda.' }
+    ] },
     { id: '2026-10-05h', date: '2026-10-05', items: [
       { type: 'new', title: 'Checklist steps in the WIP agenda', text: 'Dated checklist steps now show in WIP Meeting\'s day-by-day list, with who has them, so a project run on next steps shows up properly.' },
       { type: 'new', title: '"Behind" in Needs a decision', text: 'WIP Meeting now flags a task when one of its checklist steps is overdue, before the task itself is late.' }
@@ -12206,7 +12343,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T06:26:43Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T06:46:42Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

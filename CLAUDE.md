@@ -2981,7 +2981,19 @@ and `REVIEW_STALE_DAYS`. This is the whole reason it is safe to add — a summar
 "overdue" its own way eventually disagrees with the board it is summarising, in front of
 everyone. If you change a threshold, change it in the one place and this follows.
 
-Three sections, and the shape of them is where the design work is:
+**Two modes: By project (default) and Agenda.** Suits runs the meeting project by project — open a
+project, talk through its deliverables and deadlines, move on — replacing their "Internal Content
+Project Brief" sheet. So WIP opens on **By project** (`wipProjectsHtml`) for everyone, every time;
+`wipMode` is deliberately **not** persisted, on request ("WIP view should be the same for
+everyone"). Each project (open work in the teamspace, ordered by soonest open deadline, undated
+last) lists its open tasks by deadline with owner, status and due/overdue, and under each task its
+open checklist steps (the sheet's "Next steps") with owner and date, capped at `WIP_STEPS_SHOWN` (3)
+with "+N more". Projects can be folded (`wipProjectFolded`, session-only, start open). Done tasks are
+hidden. **Needs a decision stays on top in both modes**; the day list, Away and the timeline are the
+**Agenda** mode. Status history and the sheet's commercial Notes column are not built yet — they
+wait on whether notes are confidential and who writes status updates.
+
+Agenda mode — three sections, and the shape of them is where the design work is:
 
 - **Needs a decision** — overdue, crunch days, a deadline landing while its owner is away, a
   project its own task dates say it will miss, work stuck in review, and **Behind** — a task that
