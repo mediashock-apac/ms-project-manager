@@ -950,7 +950,7 @@
             <svg class="w-4 h-4 text-zinc-400 dark:text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="10" height="4" rx="1.5"></rect><rect x="7" y="10" width="12" height="4" rx="1.5"></rect><rect x="11" y="16" width="10" height="4" rx="1.5"></rect></svg>
             <h2 class="text-base font-bold text-zinc-900 dark:text-zinc-100">Workload Timeline</h2>
           </div>
-          <div class="flex items-center justify-end flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-500 dark:text-zinc-400">
+          <div id="gantt-legend" class="flex items-center justify-end flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-500 dark:text-zinc-400">
             <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-rose-400"></span>High</span>
             <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-amber-400"></span>Medium</span>
             <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-sky-400"></span>Low</span>
@@ -12847,7 +12847,7 @@
       { type: 'fixed', title: 'Escape on an edited task', text: 'Pressing Escape on a task with unsaved changes now asks whether to discard them. Before, it quietly did nothing.' }
     ] },
     { id: '2026-10-06q', date: '2026-10-06', items: [
-      { type: 'new', title: 'Creative briefs', text: 'Briefs can now be written right here instead of in a Google Doc. On the Projects tab, click "+ Brief" on a project, pick a template like Quick job or Event, and add only the sections the job needs. Everyone on the job sees a clear Brief card from the project and its tasks, and the key dates show the timeline of the job at a glance.' }
+      { type: 'new', title: 'Creative briefs', text: 'Briefs can now be written right here instead of in a Google Doc. On the Projects tab, click "+ Brief" on a project, pick a template like Quick job or Event, and add only the sections the job needs. Everyone on the job sees a clear Brief card from the project and its tasks, and the key dates show the timeline of the job at a glance.', tourTarget: '[data-view-btn="projects"]' }
     ] },
     { id: '2026-10-06p', date: '2026-10-06', items: [
       { type: 'improved', title: 'Creative brief links removed', text: 'The Creative Brief button added earlier today has been taken out. Keep adding brief links to checklist items, which already show them as a Google Docs link.' }
@@ -13351,7 +13351,8 @@
       { target: '#toolbar-row', title: "Looking for something?", text: "Search tasks, checklists and comments, or narrow things down by priority, project or person." }
     ] },
     gantt: { since: PAGE_TOURS_EXISTING, steps: [
-      { target: '#gantt-wrap', title: "Your work over time", text: "Each bar runs from a task's start date to its deadline. Click a task's name to see its checklist steps: green diamonds are done, grey are still to do." }
+      { target: '#gantt-wrap', title: "Your work over time", text: "Each bar runs from a task's start date to its deadline. Click a task's name to see its checklist steps: green diamonds are done, grey are still to do. Drag the edge of the Task column to make it wider." },
+      { target: '#gantt-legend', title: "What the marks mean", text: "Colours show priority. A red dot means overdue, an orange ! means one person has several things due the same day, and stripes mean the owner is away." }
     ] },
     calendar: { since: PAGE_TOURS_EXISTING, steps: [
       { target: '#calendar-scope-toggle', title: "Just you, or everyone?", text: "Mine shows only your work. Everyone shows the whole team's." },
@@ -13361,15 +13362,17 @@
       { target: '#people-grid', title: "Who's doing what", text: "Everyone gets a card with their open work and anything running late. Off on leave soon? Book it at the bottom of your own card." }
     ] },
     projects: { since: PAGE_TOURS_EXISTING, steps: [
-      { target: '#projects-grid', title: "All your projects in one place", text: "Ongoing projects come first, nearest deadline on top. Open a card to see its tasks and hours, or give the project a deadline of its own." }
+      { target: '#projects-grid', title: "All your projects in one place", text: "Ongoing projects come first, nearest deadline on top. Open a card to see its tasks and hours, or give the project a deadline of its own. When every task is done, \"Ready to archive\" tidies the project away." },
+      { target: '#projects-grid [data-open-brief]', title: "Write the brief here", text: "Every project can have a creative brief. Click \"+ Brief\", pick a template and add only the sections the job needs. Everyone on the job can open it from the project and its tasks." }
     ] },
     chat: { since: PAGE_TOURS_EXISTING, steps: [
       { target: '#chat-new-btn', title: "Chat with your project team", text: "Start a group chat for any project here. Everyone working on it hears about new messages." },
-      { target: '#chat-project-list-pane', title: "Your conversations", text: "Filter to your chats, favourites or unread ones. Right-click any message to reply, forward, copy or react." }
+      { target: '#chat-project-list-pane', title: "Your conversations", text: "Filter to your chats, favourites or unread ones. In a chat, type @ to mention someone, paste a screenshot straight in, and right-click any message to reply, forward, pin or react." }
     ] },
     wip: { since: PAGE_TOURS_EXISTING, steps: [
-      { target: '#wip-mode-toggle', title: "Ready for the WIP meeting?", text: "By project walks through each project one at a time. Agenda shows what needs a decision, what's coming up and who's away." },
-      { target: '#wip-range-toggle', title: "How far ahead?", text: "Pick how many weeks ahead the meeting looks." }
+      { target: '#wip-mode-toggle', title: "Ready for the WIP meeting?", text: "By project walks through each project one at a time. Agenda shows what's coming up and who's away. Next to it, pick how many weeks ahead to look." },
+      { target: '#wip-alerts', title: "Start with what needs a decision", text: "Late work, people with too much due at once, and deadlines while someone is away. Click it to see the list." },
+      { target: '#wip-projects', title: "Go project by project", text: "Click a project to open it. Use the ⋯ menu to set its category, add a status update to any task, and \"+ Add entry\" for leads that have no tasks yet." }
     ] },
     activity: { since: PAGE_TOURS_EXISTING, steps: [
       { target: '#activity-feed', title: "What's been happening", text: "Every change on the board, newest first. Click a row to jump to what it's about." }
@@ -14807,7 +14810,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T18:44:29Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T18:47:42Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

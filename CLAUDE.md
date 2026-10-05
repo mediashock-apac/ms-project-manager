@@ -220,6 +220,16 @@ tutorial should auto update on new features"** — so feature tours are generate
   - Fires from `setView` only, so never on the page you land on at sign-in (that's the welcome
     tour's moment), and never while the welcome or a feature tour is due or running — tours
     never stack.
+  - **What a page tour is for: the things a newcomer would NOT find alone** (hidden or non-obvious
+    actions), not a description of everything. Asked "the guided tour for other pages seem really brief. Is
+    it enough?": the simple pages were fine at 1-2 steps; four were extended, still capped at 3 steps:
+    Timeline (+ what the warning marks mean, via `#gantt-legend`; resizing the Task column in the text),
+    Projects (+ "+ Brief"; deadline and Ready to archive in the text), WIP (+ Needs a decision and the
+    project list with the ⋯ category menu, status updates and "+ Add entry"; the range picker folded into
+    step 1), Chat (@mentions, pasting screenshots and pinning in the text, since a message only exists
+    once a chat is open). Something that cannot be pointed at goes into a nearby step's text.
+  - **Existing teammates never see page tours for existing pages**, so a new feature on an existing page
+    also needs a what's-new tour: briefs got one via `tourTarget` on its CHANGELOG item.
   - Replay: profile menu → "Tour this page". Targets are each view's own containers/controls;
     `#calendar-scope-toggle`, `#wip-mode-toggle` and `#wip-range-toggle` ids exist for this. An
     empty container (zero height, e.g. an empty archive) falls back to a centred card.
