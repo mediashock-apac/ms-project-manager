@@ -10666,7 +10666,7 @@
     }
     head += '</div></div>';
 
-    var rows = list.map(function (t) {
+    var rows = list.map(function (t, wr) {
       var pm = isReadyForReview(t) ? READY_FOR_REVIEW_META : (PRIORITY_META[t.priority] || PRIORITY_META.Medium);
       var from = t.startDate < today ? 0 : daysBetween(rangeStart, parseDate(t.startDate));
       var to = t.deadline > horizon ? n - 1 : daysBetween(rangeStart, parseDate(t.deadline));
@@ -10684,7 +10684,9 @@
         return '<div class="gantt-leave absolute inset-y-0" title="' + escapeHtml(t.assignee + ' away ' + formatShortDate(l.start) + ' – ' + formatShortDate(l.end)) + '" style="left:' + (a / n * 100) + '%;width:' + ((b - a + 1) / n * 100) + '%;"></div>';
       }).join('');
 
-      return '<div class="flex border-b border-zinc-50 dark:border-zinc-700/50 last:border-b-0">' +
+      // data-gantt-row (prefixed 'w' so it can't collide with the Timeline tab's own keys) puts
+      // these rows on the same .gantt-row-hover highlight the Timeline uses.
+      return '<div class="flex border-b border-zinc-50 dark:border-zinc-700/50 last:border-b-0" data-gantt-row="w' + wr + '">' +
         // Same label as the Timeline tab's frozen Task column: text-sm project with a hover tooltip,
         // and the owner/task line at the same contrast.
         '<div class="shrink-0 px-3 py-1.5 min-w-0 border-r border-zinc-100 dark:border-zinc-700 flex items-center gap-2" style="width:' + LABEL_W + ';">' +
@@ -10705,14 +10707,14 @@
         '</div>' +
       '</div>' +
       // Expanded: one row per checklist item, same as the Timeline tab. A single flex row spans
-      // label and chart here, so a plain hover tint links the name to its diamond.
-      (ganttExpanded[t.id] ? ganttChecklistItems(t).map(function (item) {
+      // label and chart here, so the shared row highlight covers the whole of it.
+      (ganttExpanded[t.id] ? ganttChecklistItems(t).map(function (item, k) {
         var diamond = '';
         if (item.due && parseDate(item.due) && item.due >= today && item.due <= horizon) {
           var pos = (daysBetween(rangeStart, parseDate(item.due)) + 0.5) / n * 100;
           diamond = '<span data-open-task="' + t.id + '" title="' + escapeHtml(item.text + ' · due ' + formatShortDate(item.due) + (item.done ? ' · done' : '')) + '" class="absolute w-2.5 h-2.5 rotate-45 cursor-pointer ring-2 ring-white dark:ring-zinc-800 ' + ganttItemDiamondColor(t, item) + '" style="left:calc(' + pos + '% - 5px);top:calc(50% - 5px);"></span>';
         }
-        return '<div class="flex border-b border-zinc-50 dark:border-zinc-700/50 hover:bg-zinc-100 dark:hover:bg-zinc-700/60">' +
+        return '<div class="flex border-b border-zinc-50 dark:border-zinc-700/50" data-gantt-row="w' + wr + '-' + k + '">' +
           '<div class="shrink-0 pl-9 pr-3 min-w-0 border-r border-zinc-100 dark:border-zinc-700 flex items-center gap-1.5 text-xs whitespace-nowrap overflow-hidden" style="width:' + LABEL_W + ';height:' + GANTT_ITEM_ROW_HEIGHT + 'px;">' + ganttItemLabelHtml(t, item) + '</div>' +
           '<div class="relative flex-1 min-w-0">' + diamond + '</div>' +
         '</div>';
@@ -11912,7 +11914,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T04:55:01Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T04:56:41Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

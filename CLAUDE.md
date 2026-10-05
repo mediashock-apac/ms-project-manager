@@ -511,8 +511,11 @@ to bottom:
          (`"<r>-<k>"`), so the existing row-hover delegation lights up the whole row and links the
          name to its diamond. The grid's row tracks are built per row (`rowTracks`) since item rows
          are shorter; the resize handle and today line span `rowTracks.length`, not `list.length`.
-       - The WIP version is a plain flex row with a hover tint, since its rows already span label
-         and chart in one element.
+       - The WIP version is a plain flex row (label and chart in one element). Its task rows and
+         item rows carry `data-gantt-row="w<r>"` / `"w<r>-<k>"` (the `w` prefix keeps keys from
+         colliding with the Timeline's) and get the same `.gantt-row-hover` highlight. A Tailwind
+         `hover:bg-*` class was tried first and showed nothing on WIP; the shared highlight class
+         is `!important` precisely because of the CDN cascade-order problem documented on it.
      - **"Add to Google Calendar"** (`openChecklistInGoogleCalendar`, ): only offered on the add-item row, as a "Calendar" checkbox next to the date (a per-item link on the
        `Due …` line and a per-row icon both shipped and were removed as clutter -- an existing item is not
        re-exportable). The add-item row carries link, date, TBD and Calendar fields on the
