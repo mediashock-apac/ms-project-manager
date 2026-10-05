@@ -1401,8 +1401,6 @@
               <button type="button" id="task-drive-copy" class="shrink-0 font-medium text-zinc-500 dark:text-zinc-400 hover:text-brand-600 dark:hover:text-brand-400">Copy</button>
               <button type="button" id="task-drive-remove" class="shrink-0 font-medium text-zinc-500 dark:text-zinc-400 hover:text-rose-500 dark:hover:text-rose-400">Remove</button>
             </span>
-            <!-- Creative brief link for this project (see CREATIVE BRIEF LINKS); empty and hidden otherwise. -->
-            <span id="task-brief-link" class="hidden ml-auto shrink-0"></span>
           </div>
           <p class="field-error text-xs text-rose-500 dark:text-rose-400 mt-1 hidden"></p>
         </div>
@@ -6463,7 +6461,6 @@
     openEl.href = hasLink ? normalizeUrl(url) : '#';
     openEl.textContent = hasLink ? url.replace(/^https?:\/\//i, '') : '';
     openEl.title = url;
-    syncTaskBriefLink();   // creative brief link (see CREATIVE BRIEF LINKS)
   }
 
   // Pulls a link out of the Project field and parks it in task-drive, leaving whatever else
@@ -7612,122 +7609,6 @@
     projectDeadlineEditing = null;
     renderProjects();
   });
-
-/* =========================================================
-     CREATIVE BRIEF LINKS  (self-contained -- see "Creative brief links" in CLAUDE.md)
-     One Google Docs brief link per project, set on its Projects card ("+ Brief"), then shown as a
-     "Creative Brief" button on the project card, in the task window and on the WIP project
-     header. Briefs themselves stay in Google Docs (rich content, comments, sharing with outside
-     partners, internal-only budgets) -- this only makes them one click away from the work.
-
-     TO TURN THE WHOLE FEATURE OFF: set BRIEF_LINKS_ENABLED to false. Every call site outside
-     this section goes through briefChipHtml / briefRowHtml / syncTaskBriefLink /
-     restoreBriefEditFocus, which all do nothing when it is false, so nothing else changes. The
-     only data is a `briefUrl` field on projects/{id}; it can be left in Firestore harmlessly.
-  ========================================================= */
-  var BRIEF_LINKS_ENABLED = true;
-  var briefEditing = null;   // project name whose brief field is open on the Projects tab
-  var briefDraft = '';       // what's typed so far, so a live re-render doesn't wipe it
-
-  var BRIEF_ICON = '<svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="13" x2="16" y2="13"></line><line x1="8" y1="17" x2="13" y2="17"></line></svg>';
-
-  function projectBriefUrl(name) {
-    if (!BRIEF_LINKS_ENABLED || !name) return '';
-    var d = projectDeadlineDoc(name);
-    return (d && d.briefUrl) || '';
-  }
-
-  // The one button every surface shows, so a brief always looks the same wherever it appears.
-  function briefChipHtml(name) {
-    var url = projectBriefUrl(name);
-    if (!url) return '';
-    return '<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer" data-tooltip="Open the creative brief" ' +
-      'class="tooltip-top shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md bg-brand-50 text-brand-700 ring-1 ring-inset ring-brand-200 hover:bg-brand-100 dark:bg-brand-500/10 dark:text-brand-300 dark:ring-brand-500/30 dark:hover:bg-brand-500/20">' +
-      BRIEF_ICON + 'Creative Brief</a>';
-  }
-
-  // The row on a Projects card: "+ Brief" until set, then the button plus a quiet "Edit".
-  function briefRowHtml(name) {
-    if (!BRIEF_LINKS_ENABLED) return '';
-    var attr = 'data-project="' + escapeHtml(name) + '"';
-    if (briefEditing === name) {
-      return '<div class="flex flex-wrap items-center gap-1.5 mt-1.5">' +
-        '<input type="url" class="project-brief-input min-w-0 flex-1 text-[11px] rounded border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 px-1.5 py-0.5 focus:outline-none focus:ring-2 focus:ring-brand-500/40" ' +
-          attr + ' value="' + escapeHtml(briefDraft) + '" placeholder="Paste the brief\'s Google Docs link">' +
-        '<button type="button" class="project-brief-save text-[11px] font-semibold text-brand-600 dark:text-brand-400 hover:text-brand-700" ' + attr + '>Save</button>' +
-        '<button type="button" class="project-brief-cancel text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200" ' + attr + '>Cancel</button>' +
-      '</div>';
-    }
-    if (projectBriefUrl(name)) {
-      return '<div class="flex flex-wrap items-center gap-1.5 mt-1.5">' + briefChipHtml(name) +
-        '<button type="button" class="project-brief-edit text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400" ' + attr + '>Edit</button>' +
-      '</div>';
-    }
-    return '<div class="flex items-center mt-1.5">' +
-      '<button type="button" class="project-brief-add text-[11px] font-semibold text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 flex items-center gap-1" ' + attr + ' title="Link this project\'s creative brief (a Google Doc)">' +
-        svgIcon('plus', 'w-3 h-3') + 'Brief' +
-      '</button>' +
-    '</div>';
-  }
-
-  function setProjectBrief(name, raw) {
-    var url = (raw || '').trim();
-    if (url && !/^https?:\/\//i.test(url)) url = 'https://' + url;
-    if (url && !/^https?:\/\/[^\s]+\.[^\s]+/i.test(url)) { showToast('That doesn\'t look like a link. Paste the full address of the brief.', 'error'); return; }
-    briefEditing = null; briefDraft = '';
-    ensureProjectDoc(name).then(function (id) {
-      return updateDoc(doc(projectsCol, id), { briefUrl: url || null });
-    }).then(function () {
-      showToast(url ? 'Brief linked' : 'Brief link removed', 'success');
-    }).catch(function (err) {
-      showToast('Could not save the brief link: ' + err.message, 'error');
-    });
-    renderProjects();
-  }
-
-  // Keeps the cursor in the brief field when a live update redraws the Projects tab mid-typing.
-  function restoreBriefEditFocus() {
-    if (!BRIEF_LINKS_ENABLED || briefEditing === null) return;
-    var input = document.querySelector('#projects-grid .project-brief-input');
-    if (input && document.activeElement !== input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
-  }
-
-  // Task window: the button sits on the Project field's helper line, for whichever project is typed.
-  function syncTaskBriefLink() {
-    var el = document.getElementById('task-brief-link');
-    if (!el) return;
-    var url = projectBriefUrl((document.getElementById('task-project').value || '').trim());
-    el.innerHTML = url ? briefChipHtml(document.getElementById('task-project').value.trim()) : '';
-    el.classList.toggle('hidden', !url);
-  }
-
-  projectsGrid.addEventListener('click', function (e) {
-    if (!BRIEF_LINKS_ENABLED) return;
-    var t = e.target.closest('.project-brief-add, .project-brief-edit, .project-brief-save, .project-brief-cancel');
-    if (!t) return;
-    var name = t.getAttribute('data-project');
-    if (t.classList.contains('project-brief-save')) {
-      var input = projectsGrid.querySelector('.project-brief-input');
-      setProjectBrief(name, input ? input.value : '');
-      return;
-    }
-    if (t.classList.contains('project-brief-cancel')) { briefEditing = null; briefDraft = ''; renderProjects(); return; }
-    briefEditing = name;
-    briefDraft = projectBriefUrl(name);
-    renderProjects();
-    restoreBriefEditFocus();
-  });
-  projectsGrid.addEventListener('input', function (e) {
-    if (e.target.closest('.project-brief-input')) briefDraft = e.target.value;
-  });
-  projectsGrid.addEventListener('keydown', function (e) {
-    var input = e.target.closest('.project-brief-input');
-    if (!input) return;
-    if (e.key === 'Enter') { e.preventDefault(); setProjectBrief(input.getAttribute('data-project'), input.value); }
-    else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); briefEditing = null; briefDraft = ''; renderProjects(); }
-  });
-  document.getElementById('task-project').addEventListener('input', syncTaskBriefLink);
-  /* ===== end CREATIVE BRIEF LINKS ===== */
 
   document.getElementById('btn-add-task').addEventListener('click', function () { openTaskModal(null); });
   document.getElementById('task-deadline-tbd').addEventListener('change', function (e) {
@@ -10275,7 +10156,6 @@
               badges +
             '</div>' +
             deadlineRow +
-            briefRowHtml(p.name) +   // creative brief link (see CREATIVE BRIEF LINKS)
             (readyToArchive
               ? '<button type="button" class="project-archive-btn text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 flex items-center gap-1 mt-1.5" ' +
                 'data-project="' + escapeHtml(p.name) + '" title="Archive every task in this project and move it to Completed">' +
@@ -10422,7 +10302,6 @@
         '</div>' +
         '<div>' + completedHtml + '</div>' +
       '</div>';
-    restoreBriefEditFocus();   // creative brief link (see CREATIVE BRIEF LINKS)
   }
 
   /* =========================================================
@@ -12076,7 +11955,6 @@
           '</button>' +
 
           catBtn +
-          briefChipHtml(name) +   // creative brief link (see CREATIVE BRIEF LINKS)
           detailsBtn +
         '</div>' +
         catPicker +
@@ -12311,15 +12189,16 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-06p', date: '2026-10-06', items: [
+      { type: 'improved', title: 'Creative brief links removed', text: 'The Creative Brief button added earlier today has been taken out. Keep adding brief links to checklist items, which already show them as a Google Docs link.' }
+    ] },
     { id: '2026-10-06o', date: '2026-10-06', items: [
       { type: 'improved', title: 'New app icon', text: 'The Project Manager icon is now an orange logo on black. If you installed the app, the new icon may take a day or two to show on your taskbar.' }
     ] },
     { id: '2026-10-06n', date: '2026-10-06', items: [
       { type: 'fixed', title: 'Easier-to-read Board counts', text: 'The number of tasks next to each Board column heading is now clearly readable, especially in dark mode.' }
     ] },
-    { id: '2026-10-06m', date: '2026-10-06', items: [
-      { type: 'new', title: 'Creative brief links', text: 'Each project can now have its creative brief linked. On the Projects tab, click "+ Brief" on a project and paste the brief\'s Google Docs link. A "Creative Brief" button then appears on that project, in its tasks and on the WIP Meeting screen, so anyone can open the brief in one click.' }
-    ] },
+    { id: '2026-10-06m', date: '2026-10-06', items: [] },   // Creative brief links: shipped, then removed the same day (see 2026-10-06p)
     { id: '2026-10-06l', date: '2026-10-06', items: [
       { type: 'improved', title: 'A simpler Timeline', text: 'The Progress column and its button are gone, giving the chart more room. Progress is still on the bars: green diamonds are finished checklist steps, and purple and green bars mean ready for review and done. Point at a bar to see how many checklist steps are done.' },
       { type: 'improved', title: 'No more footer line', text: 'The small line of text at the bottom of every page is gone. It only repeated things already on screen.' }
@@ -14266,7 +14145,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T17:31:23Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T17:35:48Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

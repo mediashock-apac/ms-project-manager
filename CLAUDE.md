@@ -2664,29 +2664,14 @@ Asked "what can be improved here?" against a 4K screenshot, then "build all seve
 - **Teamspace button**: light fill and a firmer border so it lifts off the sidebar; icon centred on
   the collapsed rail (`#sidebar.collapsed #teamspace-trigger`).
 
-### Creative brief links (built to be reverted easily)
+### Creative brief links: built and removed (2026-10-06)
 
-Asked: "is it a good idea to integrate [Suits' creative briefs] into PM tool?", then "build it but I want to
-revert it simply without affecting everything else if it doesnt work".
-
-- **What it is:** one Google Docs brief link per project (`projects/{id}.briefUrl`). It is set on the
-  project's Projects card ("+ Brief", then a "Creative Brief" button plus a quiet "Edit"), and the same
-  button shows in the task window (on the Project field's helper line) and on the WIP project header.
-- **What it deliberately is not:** briefs are NOT rebuilt inside the app. Google Docs handles their rich
-  content, comments and tabs, sharing with outside partners (CPXI gets its own media brief), and
-  internal-only budgets that the whole company can see in Project Manager. Considered next step, not
-  built: "Import timeline from brief", turning the brief's timeline table into checklist steps (needs
-  Docs read access via Google OAuth). Also suggested to Suits: an "At a glance" box at the top of the
-  brief template.
-- **How to revert:**
-  1. **Switch it off:** set `BRIEF_LINKS_ENABLED = false` in the "CREATIVE BRIEF LINKS" section of
-     `index.html`, bump the build version as usual, and ship. Every trace disappears; nothing else changes.
-     Verified by rendering the real app with the switch off (no buttons anywhere, no errors).
-  2. **Remove it entirely:** `git revert` the commit titled "Creative brief links". It was shipped as its
-     own commit on purpose, containing only this feature (the code section, four call sites each
-     commented "see CREATIVE BRIEF LINKS", the changelog entry and this note).
-  - Either way, saved `briefUrl` values can stay in Firestore harmlessly. No rules change was needed
-    (`projects` update only restricts `chat`).
+A per-project "Creative Brief" button (`projects/{id}.briefUrl`, set via "+ Brief" on the Projects card, shown
+on the card, in the task window and on the WIP header) shipped as its own commit, then was reverted the same
+day: "It doesnt add much value and how I do it now is by adding it into checklist anyway." Brief links live
+on **checklist items**, which already render them as a "Google Docs" link chip where the work is. **Don't
+rebuild a project-level brief link.** Briefs themselves stay in Google Docs (rich content, comments, outside
+partners, internal-only budgets). Any `briefUrl` values saved during that window are harmless leftovers.
 
 ### No mock/sample data
 
