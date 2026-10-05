@@ -361,7 +361,18 @@
   .expand-in { animation: expand-in 0.22s ease-out; }
   .expand-fade { animation: expand-fade 0.22s ease-out; }
 
+  /* The "new version is ready" banner (see #update-banner / reloadIfPendingAndSafe). The slide-up
+     keyframes carry translateX(-50%) because the animation replaces the element's transform. */
+  @keyframes update-banner-in { from { opacity: 0; transform: translate(-50%, 24px) scale(0.96); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
+  @keyframes update-banner-glow {
+    0%, 100% { box-shadow: 0 12px 32px -10px rgba(0,0,0,0.45), 0 0 0 0 rgba(255,78,32,0.55); }
+    50% { box-shadow: 0 12px 32px -10px rgba(0,0,0,0.45), 0 0 0 9px rgba(255,78,32,0); }
+  }
+  .update-banner { box-shadow: 0 12px 32px -10px rgba(0,0,0,0.45); animation: update-banner-in 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.25) both, update-banner-glow 2.2s ease-in-out 0.6s infinite; }
+  .update-banner-icon svg { animation: nav-spin 0.8s ease 0.35s 1; }
+
   @media (prefers-reduced-motion: reduce) {
+    .update-banner, .update-banner-icon svg,
     .remote-change-flash, .saved-tick, .expand-in, .expand-fade,
     .updates-pulse, .updates-unread:not(.active), .updates-unread:not(.active)::after, .updates-unread:not(.active) > svg,
     .task-just-completed, .done-today-bounce, .modal-backdrop, .modal-pop-in, .panel-pop-in,
@@ -1558,9 +1569,17 @@
 
 <!-- Shown by reloadIfPendingAndSafe() once a new version is deployed and the person has stopped
      editing. `flex` is added by JS (not in the static classes) so [hidden] isn't overridden. -->
-<div id="update-banner" role="status" class="hidden fixed bottom-4 left-1/2 -translate-x-1/2 z-[70] items-center gap-3 bg-zinc-800 text-white text-sm font-medium pl-4 pr-2 py-2 rounded-lg shadow-pop">
-  <span>An update was made, please refresh.</span>
-  <button type="button" id="update-banner-btn" class="text-sm font-semibold px-3 py-1 rounded-md bg-brand-600 hover:bg-brand-700 text-white">Refresh</button>
+<!-- Brand orange, not zinc: the old dark-grey bar was the same colour as dark-mode cards and was
+     reported as easy to miss. Slides up once, then a soft glow pulses until it's clicked. -->
+<div id="update-banner" role="status" aria-live="polite" class="hidden update-banner fixed bottom-6 left-1/2 -translate-x-1/2 z-[70] items-center gap-3 sm:gap-4 w-[calc(100%-2rem)] max-w-lg pl-3 pr-3 py-3 rounded-xl text-white bg-gradient-to-r from-brand-600 to-brand-500 ring-1 ring-white/25">
+  <span class="update-banner-icon shrink-0 w-9 h-9 rounded-full bg-white/20 flex items-center justify-center">
+    <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 1-15.4 6.4L3 16"></path><path d="M3 21v-5h5"></path><path d="M3 12a9 9 0 0 1 15.4-6.4L21 8"></path><path d="M21 3v5h-5"></path></svg>
+  </span>
+  <div class="min-w-0 flex-1">
+    <p class="text-sm font-bold leading-snug">A new version of Project Manager is ready</p>
+    <p class="text-xs text-white/85 leading-snug">Refresh to get the latest features and fixes.</p>
+  </div>
+  <button type="button" id="update-banner-btn" class="shrink-0 text-sm font-bold px-4 py-2 rounded-lg bg-white text-brand-700 hover:bg-brand-50 shadow">Refresh now</button>
 </div>
 
 <!-- Shared "add a reaction" emoji picker for the Chat tab -- one instance, repositioned via JS
@@ -12028,6 +12047,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-05zc', date: '2026-10-05', items: [
+      { type: 'improved', title: 'Clearer "new version" notice', text: 'When a new version of Project Manager is out, the notice at the bottom of the screen is now orange, says what it is, and has a "Refresh now" button, so it is hard to miss.' }
+    ] },
     { id: '2026-10-05zb', date: '2026-10-05', items: [
       { type: 'improved', title: 'A simpler task window', text: 'Finished checklist items now fold away under "N done", so the steps still to do come first (an item you tick stays in place until you reopen the task). Checklist links show as a short label like "Google Slides" instead of the full address. Time entries take one line each, and "all billable" is said once at the top instead of on every entry. "Also involved" now has a small "+ Add" at the end of the names, and @mentions in comments are coloured text instead of filled boxes.' }
     ] },
@@ -13369,7 +13391,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T15:11:36Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T15:16:21Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
