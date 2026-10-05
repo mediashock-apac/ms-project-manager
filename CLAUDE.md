@@ -3014,6 +3014,11 @@ hidden. **Needs a decision stays on top in both modes, but in By project it is s
 walkthrough covers anyway and pushed the projects down) and over moving it to the bottom (easy to
 skip; crunch and leave-clash items appear nowhere else). Agenda mode keeps the full list, since
 there it is the first agenda item. The day list, Away and the timeline are the **Agenda** mode.
+**Away is in By project too, as one wrapping line** above the projects (`wipAwayStripHtml`,
+`#wip-away-strip`; asked for directly) — name, dates, "away now, back after …" in amber, the leave
+note on hover, "Everyone's in." when nobody is. A line rather than the Agenda's card for the same
+reason Needs a decision shrinks there. It reads the 1/2/4-week window, which is otherwise unused in
+By project. Both views share `wipAwayRows`, so they can never list different people.
 
 **Status per task, client contact and key links** (from the Suits "WIP Tracker" sheet's Status /
 Client contact / Key links columns).
