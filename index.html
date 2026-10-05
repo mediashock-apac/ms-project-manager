@@ -804,7 +804,7 @@
             <span id="gantt-hidden-note" class="hidden text-amber-600 dark:text-amber-400 font-semibold" title="These tasks have a status, priority, and everything else -- just no start date and/or deadline, so there's nothing to plot a bar between."></span>
             <span id="gantt-stack-note" class="hidden text-rose-600 dark:text-rose-400 font-semibold" title="These tasks share an owner and a deadline -- more than one thing is due from the same person on the same day."></span>
             <span id="gantt-leave-note" class="hidden text-amber-600 dark:text-amber-400 font-semibold" title="The deadline falls on a day the owner is away. The shaded stripes on a row are that person's leave -- set it in the People tab."></span>
-            <button type="button" id="gantt-progress-toggle" data-tooltip="Fill bars by checklist completion instead of status" class="tooltip-top flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700">
+            <button type="button" id="gantt-progress-toggle" data-tooltip="Progress column counts checklist items instead of status" class="tooltip-top flex items-center gap-1 text-xs font-semibold px-2 py-1 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700">
               <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 7 2 2 3-3"></path><path d="M9 7h12"></path><path d="m3 15 2 2 3-3"></path><path d="M9 15h12"></path></svg>
               <span>Progress</span>
             </button>
@@ -8563,7 +8563,6 @@
       var barWidth = (daysBetween(parseDate(t.startDate), parseDate(t.deadline)) + 1) * dayWidth - 6;
       var checklistPct = checklistProgressPct(t);
       var showChecklistProgress = ganttShowProgress && checklistPct !== null;
-      var fillPct = showChecklistProgress ? checklistPct : { Pipeline: 6, 'In Progress': 50, Review: 80, Done: 100 }[t.status];
       var checklistDoneCount = showChecklistProgress ? (t.checklist || []).filter(function (i) { return i.done; }).length : 0;
       var stackTitle = rowStacked.length
         ? ' · Deadline stack: ' + t.assignee + ' also has ' + rowStacked.map(function (o) { return o.name; }).join(', ') + ' due the same day'
@@ -8589,14 +8588,11 @@
       // Percent complete, frozen beside the Task column.
       //
       // Derived, never stored -- there is no "% done" field to fill in and nothing that can
-      // drift out of step with the task. It reads the SAME source the bar fill does, so the
-      // number and the bar can never disagree, including when the Progress toggle switches
-      // the fill between checklist completion and status stage.
+      // drift out of step with the task. The Progress toggle switches it between checklist
+      // completion and status stage.
       //
-      // The one place it deliberately differs from fillPct: Pipeline. fillPct uses 6 so that a
-      // not-started bar still draws a visible sliver instead of nothing -- that 6 is a drawing
-      // constant, not a measurement, and printing "6%" next to it would assert a precision
-      // that does not exist. Nothing has been done on a Pipeline task, so the column says 0%.
+      // This column is now the ONLY progress signal on the chart -- the bars no longer carry a
+      // fill (see the bar below). Pipeline reads 0%: nothing has been done on it.
       var STATUS_PCT = { Pipeline: 0, 'In Progress': 50, Review: 80, Done: 100 };
       var displayPct = showChecklistProgress ? checklistPct : STATUS_PCT[t.status];
       if (displayPct == null) displayPct = 0;
@@ -8625,12 +8621,14 @@
           // "3 Te"), which is noise rather than a label. The bar's `title` still carries the full
           // name, assignee, priority and dates on hover. The fill div is now a plain coloured
           // block -- its old `flex items-center px-2` existed only to lay out that span.
-          '<div class="' + pm.bar + ' h-full" style="width:' + fillPct + '%;"></div>' +
-          // Checklist-derived fill (above) already reflects progress as the bar's fill width,
-          // but that's subtle at a glance -- the count makes it legible without hovering.
-          // Only shown for tasks that actually have a checklist, and only while the
-          // "Progress" toggle (#gantt-progress-toggle, below) is expanded.
-          (showChecklistProgress ? '<span class="absolute bottom-0 right-1 text-[9px] font-bold text-zinc-600/80 dark:text-zinc-100/80 pointer-events-none">' + checklistDoneCount + '/' + t.checklist.length + '</span>' : '') +
+          // Solid bar, no progress fill and no "3/5" count. The fill grew left-to-right across the
+          // task's dates, so its edge read as a DATE ("done up to here") -- and once checklist
+          // items got real dates (the diamonds below) the two contradicted each other: an open
+          // item due inside the filled stretch looked finished. Asked about directly ("is it
+          // conflicting and confusing?"). Progress now lives in exactly one place, the Progress
+          // column; the diamonds say what is due when. Same split TeamGantt avoids by not
+          // dating checklist items at all.
+          '<div class="' + pm.bar + ' h-full w-full"></div>' +
           (overdue ? '<span class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-zinc-800"></span>' : '') +
           // Opposite corner from the overdue dot (top-left, not top-right) and a different shape
           // (a badge with a glyph, not a bare dot) -- overdue and a stacked deadline are both real
@@ -10583,10 +10581,9 @@
       var to = t.deadline > horizon ? n - 1 : daysBetween(rangeStart, parseDate(t.deadline));
       var left = from / n * 100;
       var width = (to - from + 1) / n * 100;
-      // Fill = checklist completion when the task has a checklist (an unticked list reads 0%, so
-      // the bar can't look 80% full with nothing done); otherwise the status stage, as before.
-      var checklistFill = checklistProgressPct(t);
-      var fillPct = checklistFill !== null ? checklistFill : ({ Pipeline: 6, 'In Progress': 50, Review: 80 }[t.status] || 0);
+      // Solid bar, no progress fill -- same reason as renderGantt: a fill edge on a date axis
+      // reads as a date and contradicted the checklist diamonds. Here it was worse, since the bar
+      // is clamped to the window, so the fill was a percentage of the visible slice only.
       var overdue = dueUrgency(t).overdue;
 
       var bands = leaveFor(t.assignee).map(function (l) {
@@ -10605,7 +10602,7 @@
           '<button type="button" data-open-task="' + t.id + '" title="' + escapeHtml(t.name + ' · ' + t.assignee + ' · ' + t.priority + ' priority · ' + formatShortDate(t.startDate) + ' – ' + formatShortDate(t.deadline)) + '" ' +
             'class="gantt-bar absolute top-2 bottom-2 rounded-md ' + pm.barLight + ' border border-black/5 dark:border-white/5 overflow-hidden text-left" ' +
             'style="left:' + left + '%;width:calc(' + width + '% - 3px);min-width:14px;">' +
-            '<div class="' + pm.bar + ' h-full" style="width:' + fillPct + '%;"></div>' +
+            '<div class="' + pm.bar + ' h-full w-full"></div>' +
             (overdue ? '<span class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-zinc-800"></span>' : '') +
           '</button>' +
           wipChecklistMarkers(t, today, horizon, rangeStart, n) +
@@ -11805,7 +11802,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T01:54:47Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T04:26:28Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

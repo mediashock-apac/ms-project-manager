@@ -373,11 +373,17 @@ to bottom:
      Both its cells carry `.gantt-pct`, because a sticky `left` offset does NOT move when the
      grid track does — the Task-column resize drag has to rewrite it explicitly, the same way
      it already rewrites the today line.
-   - **The percentage is derived, never stored.** It reads the same source as the bar fill, so
-     the number and the bar cannot disagree, and it follows the Progress toggle between
-     checklist completion and status stage. One deliberate difference from `fillPct`: Pipeline
-     shows **0%**, not the `6` the bar uses. That 6 exists only so a not-started bar draws a
-     visible sliver; printing it as a percentage would assert a precision that is not there.
+   - **The percentage is derived, never stored**, and follows the Progress toggle between
+     checklist completion and status stage. Pipeline shows 0%.
+   - **The Progress column is the ONLY progress signal; bars are solid, with no fill and no
+     "3/5" count** (Timeline and the WIP Meeting timeline both). The bars used to fill
+     left-to-right by percent, and a fill edge on a date axis reads as a date ("done up to
+     here"). Once checklist items got real dates (the diamonds) the two contradicted each other:
+     on a 28 Sep–16 Oct bar at 60%, the fill reached ~8 Oct and covered an *open* item due 6 Oct,
+     so it looked finished. Asked directly ("is it conflicting and confusing?"); TeamGantt
+     avoids the clash by not dating checklist items at all. Now: column = how much is done,
+     diamonds = what's due when. **Don't re-add a bar fill while the diamonds exist.** The WIP
+     timeline has no Progress column, so it shows no percentage at all.
    - **`renderGantt` stacking tiers** (all below 30, so a sticky Gantt cell can never cover the
      app header at `z-40` or its notification/user-menu panels at `z-30` — `z-40` vs `z-40` did
      exactly that once, with the corner cell covering the mobile nav menu):
