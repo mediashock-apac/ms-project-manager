@@ -23,7 +23,7 @@ Google Auth) so the whole team edits one live board together with real-time upda
 - `version.txt` — a timestamp stamped on every deploy; polled client-side to trigger auto-reload.
 
 Views: Board, Timeline (Gantt), Calendar, People, Projects, Chat, **Events → WIP Meeting**,
-Activity, Suggestions, Archived.
+Activity, Suggestions, Archived, **New Updates**.
 
 Live at https://mediashock-apac.github.io/ms-project-manager/ (deployed via GitHub Pages, not Firebase
 Hosting — `firebase.json` only configures Firestore + emulators).
@@ -127,6 +127,40 @@ It's wired in two places, because neither alone is enough:
   hasn't been done.
 
 Both paths run the same script, so there's one place to fix if the markup ever changes shape.
+
+**Add a `CHANGELOG` entry for anything the team would notice** (see "New Updates" below). A
+release nobody wrote up never lights the sidebar item, so the team never hears about it.
+
+## New Updates (the changelog tab)
+
+Asked for directly: a sidebar tab with "a simple to understand changelog of features that are
+newly created or updated, bug fixes and more", which "should highlight prominently on the
+sidebar so users will know whenever new updates are in."
+
+- **The content is a hand-written `CHANGELOG` array in `index.html`**, newest release first:
+  `{id, date, items: [{type: 'new'|'improved'|'fixed', title, text}]}`. Plain language for the
+  people using the board: what changed and where to find it, never function names. It is static
+  on purpose — no Firestore collection, no admin editor, no rules change — because the person
+  shipping the change is the one who knows what changed, and they are already editing this file.
+  `id` must be unique and is the read-tracking key (date plus a letter for a second release that
+  day). Not generated from git log: commit messages are written for whoever maintains the code.
+- **Read tracking**: `people/{uid}.updatesSeen` (last release id seen, follows you across devices,
+  no rules change since it's your own doc) mirrored to `localStorage` (`flowboard_updates_seen`);
+  whichever is newer wins, because the roster snapshot may not have arrived yet. Unread = every
+  release above the seen one. **Someone who has never opened the tab gets only the newest release
+  counted**, so the first visit doesn't show the whole history as "new".
+- **Sidebar highlight** (`renderUpdatesNavBadge`, called from `renderCurrentSecondaryView`): while
+  anything is unread the item gets a brand tint (`.updates-unread`) and a pulsing brand-orange
+  count (`#updates-nav-badge`, `.updates-pulse`, off under reduced motion). The count is
+  absolute like Chat's, so it still shows on the collapsed rail. Orange, not Chat's rose, so the
+  two badges don't read as the same thing. All of it disappears the moment the tab is opened —
+  it's a quiet nav item the rest of the time.
+- **Opening the tab** snapshots what was unseen (`updatesUnseenAtOpen`) *before* marking it
+  seen, so those releases still carry a "New since your last visit" label and an orange border on
+  that visit. Toolbar hidden (`TOOLBAR_FULLY_HIDDEN_VIEWS`) — nothing to search or filter.
+- Type chips: New = brand, Improved = violet, Fixed = emerald. Labelled chips on a page with no
+  priorities on it, so the usual "these hues mean priority" concern doesn't apply here.
+- The seed entries (29 Sep – 5 Oct 2026) were written from that period's commits.
 
 The deployed page polls `version.txt` every 60s and, once it changes, shows an "An update was made, please refresh." banner (it no longer reloads by itself; the banner waits until the person stops editing) --- formerly auto-reloaded clients when it changed — but
 `reloadIfPendingAndSafe()` will never reload out from under a user with a modal open, so a stale

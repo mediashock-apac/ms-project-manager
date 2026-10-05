@@ -272,7 +272,16 @@
   @keyframes field-shake { 10%, 90% { transform: translateX(-1px); } 20%, 80% { transform: translateX(2px); } 30%, 50%, 70% { transform: translateX(-3px); } 40%, 60% { transform: translateX(3px); } }
   .field-shake { animation: field-shake 0.4s ease-in-out; }
 
+  /* New Updates nav item while something is unread: a brand tint on the row itself plus a soft
+     pulse on its count, so it is noticeable at a glance without a popup. Both go away the moment
+     the tab is opened (see renderUpdatesNavBadge). */
+  .updates-unread:not(.active) { background: #fff1ec; color: #b93816; font-weight: 600; }
+  .dark .updates-unread:not(.active) { background: rgba(255,78,32,0.10); color: #ff9d7e; }
+  @keyframes updates-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255,78,32,0.45); } 50% { box-shadow: 0 0 0 5px rgba(255,78,32,0); } }
+  .updates-pulse { animation: updates-pulse 2s ease-in-out infinite; }
+
   @media (prefers-reduced-motion: reduce) {
+    .updates-pulse,
     .task-just-completed, .done-today-bounce, .modal-backdrop, .modal-pop-in, .panel-pop-in,
     .checklist-just-checked, .bell-nudge, .chat-message-enter, .chat-receipt-flip,
     .chat-star-pop, .chat-typing-dots span, .field-shake, .chat-message-jump-flash { animation: none; }
@@ -509,6 +518,14 @@
       <button data-view-btn="archived" data-tooltip="Archived" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
         <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>
         <span class="sidebar-label truncate">Archived</span>
+      </button>
+      <!-- New Updates: the changelog. Highlighted (tint + pulsing count) only while there are
+           entries this person hasn't seen; plain like every other item once they have. The count
+           is absolute, same as Chat's badge, so it still shows over the icon on the collapsed rail. -->
+      <button data-view-btn="updates" id="updates-nav-btn" data-tooltip="New Updates" class="view-toggle-btn tooltip-right relative w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
+        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 11 18-5v12L3 14v-3z"></path><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"></path></svg>
+        <span class="sidebar-label truncate">New Updates</span>
+        <span id="updates-nav-badge" class="hidden absolute top-1 right-1.5 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-brand-500 text-white text-[10px] font-bold flex items-center justify-center updates-pulse">0</span>
       </button>
 
       <div class="h-px bg-zinc-100 dark:bg-zinc-700 my-1.5 mx-2.5 sidebar-label"></div>
@@ -1148,6 +1165,14 @@
     <!-- ============ ARCHIVED VIEW ============ -->
     <section id="view-archived" data-view class="flex-1">
       <div id="archived-list" class="max-w-2xl mx-auto flex flex-col gap-2"></div>
+    </section>
+
+    <section id="view-updates" data-view class="flex-1">
+      <div class="max-w-2xl mx-auto">
+        <h2 class="text-lg font-bold text-zinc-900 dark:text-zinc-100">New Updates</h2>
+        <p class="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5 mb-5">What's new, what's better and what's been fixed in Flowboard. Newest first.</p>
+        <div id="updates-list" class="flex flex-col gap-6"></div>
+      </div>
     </section>
 
     <!-- Inside the scrolling <main>, not pinned below it -- only reached by actually scrolling
@@ -10792,7 +10817,136 @@
   /* =========================================================
      VIEW SWITCH
   ========================================================= */
-  var VIEW_LABELS = { board: 'Board', gantt: 'Timeline', calendar: 'Calendar', people: 'People', projects: 'Projects', chat: 'Chat', wip: 'WIP Meeting', activity: 'Activity', suggestions: 'Suggestions', archived: 'Archived' };
+  /* =========================================================
+     NEW UPDATES (changelog)
+     ---------------------------------------------------------
+     The team-facing changelog behind the "New Updates" sidebar tab. Plain language, written for
+     the people using the board, not for whoever builds it: what changed and where to find it,
+     no function names. Newest release FIRST. Add a release for every deploy someone would
+     notice -- that is what lights the sidebar item up for the whole team.
+
+     Each release has a unique `id` (date plus a letter for a second release the same day).
+     Unread = every release above the one this person last saw. Someone who has never opened the
+     tab only gets the newest release counted, not the whole history.
+     Item types: 'new' | 'improved' | 'fixed'.
+  ========================================================= */
+  var CHANGELOG = [
+    { id: '2026-10-05c', date: '2026-10-05', items: [
+      { type: 'new', title: 'New Updates tab', text: 'This page. The sidebar item lights up whenever something new ships, and settles back once you\'ve had a look.' }
+    ] },
+    { id: '2026-10-05b', date: '2026-10-05', items: [
+      { type: 'new', title: 'Checklist items on the Timeline', text: 'Click the arrow next to a task on the Timeline or WIP Meeting to see each checklist item on its own row, with who has it and when it\'s due.' },
+      { type: 'improved', title: 'WIP Meeting timeline matches the Timeline', text: 'Same labels, rows highlight on hover, and you can drag the edge of the Task column to resize it. Both views share the width.' },
+      { type: 'improved', title: 'Cleaner Timeline bars', text: 'Bars are one solid colour now. How far along a task is lives in the Progress column, and project names no longer sit in coloured boxes.' }
+    ] },
+    { id: '2026-10-05a', date: '2026-10-05', items: [
+      { type: 'new', title: 'Projects show a start date', text: 'Each project card shows when its earliest task starts, next to its due date.' },
+      { type: 'improved', title: '"Time off" is now "Leaves"', text: 'On People cards, use "+ Add leave" to book time away.' }
+    ] },
+    { id: '2026-10-02', date: '2026-10-02', items: [
+      { type: 'new', title: 'Assign checklist items to people', text: 'Open a checklist item\'s pencil to pick who\'s doing it. They get a notification, and it shows on their People card.' },
+      { type: 'new', title: 'Hear back on your suggestions', text: 'You get a notification when a suggestion you posted is marked Fixed.' },
+      { type: 'fixed', title: 'Tasks you\'re involved in show in your teamspace', text: 'Even when someone from another team owns the task.' }
+    ] },
+    { id: '2026-10-01', date: '2026-10-01', items: [
+      { type: 'improved', title: 'Smoother task handovers', text: 'Picking a new owner from the people involved swaps them, so the previous owner stays on the task.' },
+      { type: 'improved', title: 'Tidier Projects tab', text: 'Cards fold down to just their header, Ongoing shows above Completed, finished projects are tinted green, and a due date shows even if you haven\'t set one.' },
+      { type: 'new', title: 'Search on Projects and People', text: 'The search box now finds projects, people, departments and the tasks inside them.' }
+    ] },
+    { id: '2026-09-30', date: '2026-09-30', items: [
+      { type: 'new', title: 'Add people involved', text: 'Add teammates who work on a task without making them the owner. They get comment updates.' },
+      { type: 'new', title: 'Checklist due dates', text: 'Give checklist items a date (or TBD). They show as diamonds on the Timeline, and you can add them to Google Calendar.' },
+      { type: 'improved', title: 'Anyone can edit a task', text: 'Every change is still recorded in Activity.' },
+      { type: 'improved', title: '"Assignee" is now "Owner"', text: 'Same field, clearer name.' },
+      { type: 'improved', title: 'No more surprise reloads', text: 'When there\'s an update, a banner asks you to refresh instead of the page reloading by itself.' }
+    ] },
+    { id: '2026-09-29', date: '2026-09-29', items: [
+      { type: 'new', title: 'WIP Meeting', text: 'Under Events in the sidebar: one screen for the weekly sync, with what needs a decision, what\'s coming up, who\'s away, and a timeline.' },
+      { type: 'new', title: 'Teamspaces', text: 'Suits, Production and Admin. Pick yours from the sidebar to see your team\'s work. You can belong to more than one.' },
+      { type: 'new', title: 'Progress column on the Timeline', text: 'Shows how far along each task is, from its checklist or its status.' },
+      { type: 'fixed', title: 'Searching the Archived list', text: 'The search box now works on archived tasks.' }
+    ] }
+  ];
+  var UPDATES_SEEN_KEY = 'flowboard_updates_seen';
+  var UPDATE_TYPE_META = {
+    'new': { label: 'New', cls: 'bg-brand-100 text-brand-700 dark:bg-brand-500/15 dark:text-brand-300' },
+    improved: { label: 'Improved', cls: 'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300' },
+    fixed: { label: 'Fixed', cls: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300' }
+  };
+  var updatesUnseenAtOpen = [];
+
+  // Last release seen: the person's own roster doc (follows them across devices) or this
+  // browser's copy, whichever is newer -- the roster snapshot may not have arrived yet.
+  function updatesSeenId() {
+    var local = null;
+    try { local = localStorage.getItem(UPDATES_SEEN_KEY); } catch (e) { /* ignore */ }
+    var me = typeof myPersonDoc === 'function' ? myPersonDoc() : null;
+    var remote = me && me.updatesSeen;
+    var idx = function (id) { var i = CHANGELOG.findIndex(function (r) { return r.id === id; }); return i === -1 ? Infinity : i; };
+    // Lower index = newer release.
+    return idx(local) <= idx(remote) ? local : remote;
+  }
+
+  function unseenUpdateIds() {
+    var seen = updatesSeenId();
+    var i = CHANGELOG.findIndex(function (r) { return r.id === seen; });
+    if (i === -1) return CHANGELOG.length ? [CHANGELOG[0].id] : [];   // never opened: just the latest
+    return CHANGELOG.slice(0, i).map(function (r) { return r.id; });
+  }
+
+  function markUpdatesSeen() {
+    if (!CHANGELOG.length) return;
+    var latest = CHANGELOG[0].id;
+    try { localStorage.setItem(UPDATES_SEEN_KEY, latest); } catch (e) { /* ignore */ }
+    var me = myPersonDoc();
+    var uid = auth.currentUser && auth.currentUser.uid;
+    if (uid && (!me || me.updatesSeen !== latest)) {
+      setDoc(doc(peopleCol, uid), { updatesSeen: latest }, { merge: true }).catch(function () { /* local copy still holds */ });
+    }
+  }
+
+  function renderUpdatesNavBadge() {
+    var badge = document.getElementById('updates-nav-badge');
+    var btn = document.getElementById('updates-nav-btn');
+    if (!badge || !btn) return;
+    var ids = currentView === 'updates' ? [] : unseenUpdateIds();
+    var count = CHANGELOG.filter(function (r) { return ids.indexOf(r.id) !== -1; })
+      .reduce(function (n, r) { return n + r.items.length; }, 0);
+    badge.textContent = count > 9 ? '9+' : String(count);
+    badge.classList.toggle('hidden', count === 0);
+    btn.classList.toggle('updates-unread', count > 0);
+    btn.setAttribute('data-tooltip', count > 0 ? 'New Updates (' + count + ' new)' : 'New Updates');
+  }
+
+  function renderUpdatesView() {
+    var list = document.getElementById('updates-list');
+    if (!list) return;
+    list.innerHTML = CHANGELOG.map(function (r) {
+      var isNew = updatesUnseenAtOpen.indexOf(r.id) !== -1;
+      var d = parseDate(r.date);
+      var dateLabel = d ? d.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' }) : r.date;
+      return '<div>' +
+        '<div class="flex items-center gap-2 mb-2">' +
+          '<h3 class="text-sm font-bold text-zinc-700 dark:text-zinc-200">' + escapeHtml(dateLabel) + '</h3>' +
+          (isNew ? '<span class="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-brand-500 text-white">New since your last visit</span>' : '') +
+        '</div>' +
+        '<div class="bg-white dark:bg-zinc-800 border ' + (isNew ? 'border-brand-300 dark:border-brand-500/40' : 'border-zinc-200 dark:border-zinc-700') + ' rounded-xl shadow-card divide-y divide-zinc-100 dark:divide-zinc-700">' +
+          r.items.map(function (it) {
+            var meta = UPDATE_TYPE_META[it.type] || UPDATE_TYPE_META.improved;
+            return '<div class="flex items-start gap-3 px-4 py-3">' +
+              '<span class="shrink-0 w-[4.5rem] text-center text-[11px] font-bold px-1.5 py-0.5 rounded ' + meta.cls + '">' + meta.label + '</span>' +
+              '<div class="min-w-0">' +
+                '<p class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">' + escapeHtml(it.title) + '</p>' +
+                '<p class="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5">' + escapeHtml(it.text) + '</p>' +
+              '</div>' +
+            '</div>';
+          }).join('') +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+
+  var VIEW_LABELS = { board: 'Board', gantt: 'Timeline', calendar: 'Calendar', people: 'People', projects: 'Projects', chat: 'Chat', wip: 'WIP Meeting', activity: 'Activity', suggestions: 'Suggestions', archived: 'Archived', updates: 'New Updates' };
 
   function setView(view) {
     currentView = view;
@@ -10824,6 +10978,9 @@
     if (view === 'chat') applyChatListWidth();
     // Opening Timeline always lands on today -- see ganttCenterOnToday.
     if (view === 'gantt') ganttCenterOnToday = true;
+    // Snapshot what was unseen BEFORE marking it seen, so the page can still flag those entries
+    // as new on this visit.
+    if (view === 'updates') { updatesUnseenAtOpen = unseenUpdateIds(); markUpdatesSeen(); }
     renderCurrentSecondaryView();
   }
 
@@ -10873,7 +11030,7 @@
   // always sorts newest-first and has no filters.sortBy branch at all, so the Sort control sat
   // there fully clickable and doing nothing -- the identical "control present, wired to
   // nothing" gap this codebase already hit and fixed twice before.
-  var SORT_DISABLED_VIEWS = ['projects', 'activity', 'suggestions', 'wip'];
+  var SORT_DISABLED_VIEWS = ['projects', 'activity', 'suggestions', 'wip', 'updates'];
 
   function syncSortAvailability() {
     var select = document.getElementById('sort-by');
@@ -10912,7 +11069,7 @@
   // WIP hides the whole toolbar rather than just disabling it. The filters persist across
   // sessions, so one left set last week would quietly drop items from a meeting agenda with
   // nothing on screen to say so -- see the EVENTS -> WIP section header.
-  var TOOLBAR_FULLY_HIDDEN_VIEWS = ['suggestions', 'wip'];
+  var TOOLBAR_FULLY_HIDDEN_VIEWS = ['suggestions', 'wip', 'updates'];
 
   function syncToolbarLayout() {
     var row = document.getElementById('toolbar-row');
@@ -11073,6 +11230,8 @@
     if (currentView === 'activity') renderActivityFeed();
     if (currentView === 'suggestions') renderSuggestions();
     if (currentView === 'archived') { ensureArchivedTasksListener(); renderArchived(); }
+    if (currentView === 'updates') renderUpdatesView();
+    renderUpdatesNavBadge();
   }
 
   var debouncedRender = debounce(function () { renderBoard(); renderCurrentSecondaryView(); renderFilterOptions(); }, 150);
@@ -11914,7 +12073,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T04:56:41Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T05:03:07Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
