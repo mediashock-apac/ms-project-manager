@@ -256,6 +256,12 @@ sidebar so users will know whenever new updates are in."
 - **Rewrite or empty a same-week entry once a later change makes it untrue** rather than leaving
   two entries that contradict each other. Keep the release object (with `items: []`) so its id
   still works for read tracking; an empty release renders nothing.
+- **Wide, two items per row from `lg`** (`max-w-6xl`, was `max-w-2xl`): asked for directly, "so
+  the scroll down isn't too long when things pile up". Width alone would only make long lines;
+  the saving is the grid. Dividers are a 1px grid `gap` over a tinted card background
+  (`divide-y` can't draw a grid), and an odd last item spans both columns. **Don't put
+  `bg-white` on that same container**: it overrides the tint and the dividers vanish (shipped
+  that way for one build).
 - Type chips: New = brand, Improved = violet, Fixed = emerald. Labelled chips on a page with no
   priorities on it, so the usual "these hues mean priority" concern doesn't apply here.
 - The seed entries (29 Sep – 5 Oct 2026) were written from that period's commits.

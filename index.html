@@ -1307,8 +1307,11 @@
       <div id="archived-list" class="max-w-2xl mx-auto flex flex-col gap-2"></div>
     </section>
 
+    <!-- max-w-6xl, not 2xl: asked for directly ("increase the width here so the scroll down isn't
+         too long when things pile up"). Width alone just makes long lines; the scroll saving comes
+         from each day's items sitting two to a row from lg (see renderUpdatesView). -->
     <section id="view-updates" data-view class="flex-1">
-      <div class="max-w-2xl mx-auto">
+      <div class="max-w-6xl mx-auto">
         <h2 class="text-lg font-bold text-zinc-900 dark:text-zinc-100">New Updates</h2>
         <p class="text-sm text-zinc-500 dark:text-zinc-400 mt-0.5 mb-5">What's new, what's better and what's been fixed in Project Manager. Newest first.</p>
         <div id="updates-list" class="flex flex-col gap-6"></div>
@@ -12137,6 +12140,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-06f', date: '2026-10-06', items: [
+      { type: 'improved', title: 'Less scrolling in New Updates', text: 'This page is wider, and on a big screen each day’s updates sit two to a row, so a busy week takes far less scrolling.' }
+    ] },
     { id: '2026-10-06e', date: '2026-10-06', items: [
       { type: 'improved', title: 'Friendlier tours', text: 'The tours now talk to you like a teammate would, and the welcome tour opens and closes with a splash of colourful Mediashock graphics.' }
     ] },
@@ -12360,10 +12366,14 @@
           '<h3 class="text-sm font-bold text-zinc-700 dark:text-zinc-200">' + escapeHtml(dateLabel) + '</h3>' +
           (anyNew ? '<span class="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-brand-500 text-white">New since your last visit</span>' : '') +
         '</div>' +
-        '<div class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card overflow-hidden divide-y divide-zinc-100 dark:divide-zinc-700">' +
-          day.items.map(function (x) {
+        // Two items per row from lg, roughly halving the scroll once a busy day piles up. The 1px
+        // grid gap over a tinted background draws the dividers (divide-y can't do a grid). An odd
+        // last item spans both columns so no empty half-cell is left showing.
+        '<div class="border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card overflow-hidden grid grid-cols-1 lg:grid-cols-2 gap-px bg-zinc-200 dark:bg-zinc-700">' +
+          day.items.map(function (x, k) {
             var meta = UPDATE_TYPE_META[x.it.type] || UPDATE_TYPE_META.improved;
-            return '<div class="flex items-start gap-3 px-4 py-3 border-l-[3px] ' + (x.isNew ? 'border-l-brand-500' : 'border-l-transparent') + '">' +
+            var spanBoth = k === day.items.length - 1 && day.items.length % 2 === 1;
+            return '<div class="flex items-start gap-3 px-4 py-3 bg-white dark:bg-zinc-800 border-l-[3px] ' + (spanBoth ? 'lg:col-span-2 ' : '') + (x.isNew ? 'border-l-brand-500' : 'border-l-transparent') + '">' +
               '<span class="shrink-0 w-[4.5rem] text-center text-[11px] font-bold px-1.5 py-0.5 rounded ' + meta.cls + '">' + meta.label + '</span>' +
               '<div class="min-w-0">' +
                 '<p class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">' + escapeHtml(x.it.title) + '</p>' +
@@ -13991,7 +14001,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T16:32:41Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T16:36:54Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
