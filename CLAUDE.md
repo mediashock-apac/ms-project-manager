@@ -182,6 +182,19 @@ tutorial should auto update on new features"** — so feature tours are generate
 - **A missing or off-screen target falls back to a centred card** (e.g. sidebar steps on a phone,
   where the sidebar is an off-canvas drawer), so a step never points at nothing.
 - **Replay**: profile menu → "Take the tour", or "Show me" on a New Updates item.
+- **Voice: conversational and friendly** (asked for directly). Talk to one person, use
+  contractions, open with a question where it fits ("Not sure where to begin?"), still one or two
+  short sentences. No emoji (the icon rule). Tour strings are double-quoted so apostrophes need no
+  escaping — single-quoted strings with a bare `'` have broken the syntax check twice this week.
+  A step can set `cta` to replace the Next/Done label ("Show me around", "Let's go!").
+- **Hand-drawn sketches (`TOUR_ART`) on the welcome tour's first and last cards only.** Inline
+  SVG line art (person waving at a task board; person jumping beside a big tick), `currentColor`
+  lines for light/dark, Poppy accents, roughened by an `feTurbulence` + `feDisplacementMap`
+  filter so the strokes wobble like pen. Bookends only, by agreement: those two cards point at
+  nothing, so a picture adds warmth there, whereas a sketch on every step would compete with the
+  spotlight and make the tour feel longer. A step opts in with `art: '<key>'`. Filter ids must
+  be unique per sketch. In dark mode the pale fills are `brand-500/20`; `brand-900` made the tick
+  muddy.
 - **Page tours** (`PAGE_TOURS`, `maybeStartPageTour`, asked for next: "guided tours should also be
   applied to other pages when new users click into it. When new pages are added, existing users
   should also be able to go through the tour"). One 1–2 step tour per view, seen as `page:<view>`.

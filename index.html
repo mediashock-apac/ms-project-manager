@@ -12137,6 +12137,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-06e', date: '2026-10-06', items: [
+      { type: 'improved', title: 'Friendlier tours', text: 'The tours now talk to you like a teammate would, and the welcome tour opens and closes with a couple of hand-drawn sketches.' }
+    ] },
     { id: '2026-10-06d', date: '2026-10-06', items: [
       { type: 'new', title: 'Page tours', text: 'New teammates get a quick tour of each page the first time they open it. When a new page is added, everyone gets its tour on their first visit. To replay the tour for the page you are on, choose "Tour this page" in your profile menu.' }
     ] },
@@ -12421,20 +12424,86 @@
   // Feature tours older than this don't pop up on their own (someone back from a long break
   // shouldn't get a queue of them); "Show me" still plays them.
   var FEATURE_TOUR_AUTO_DAYS = 60;
+  // Copy is conversational on purpose (asked for: "conversational and friendly") -- talk to one
+  // person, contractions, a question to open where it fits -- but still one or two short sentences
+  // per step. Double-quoted strings so apostrophes need no escaping. `art` names a sketch in
+  // TOUR_ART (only the first and last welcome steps -- see there); `cta` overrides the button.
   var TOURS = [
     { id: 'welcome', kind: 'welcome', steps: [
-      { target: null, title: 'Welcome to Project Manager', text: 'This is where the team plans and tracks work. A quick tour of the basics takes under a minute, and you can skip it at any time.' },
-      { target: '#btn-add-task', title: 'Add a task', text: 'Start here. Give it a project, an owner and a deadline, and break it into checklist steps if it needs them.' },
-      { target: '#focus-section', title: 'Focus of the Day', text: 'The most urgent and highest-priority work, picked for you, so you know what to do first.' },
-      { target: '#sidebar-nav', title: 'Different views of the same work', text: 'Board, Timeline, Calendar and People all show the same tasks in different ways. Chat holds each project\'s group conversation.' },
-      { target: '#teamspace-trigger', title: 'Your teamspace', text: 'Pick your department to see only your team\'s work, or choose All to see everything.' },
-      { target: '#btn-notifications', title: 'Stay in the loop', text: 'The bell shows mentions, comments and tasks given to you. The icon beside it lists what you have due this week.' },
-      { target: '#user-menu-trigger', title: 'You\'re all set', text: 'Your profile menu has dark mode, desktop notifications and your departments. You can replay this tour from there any time.' }
+      { target: null, art: 'welcome', cta: "Show me around", title: "Hi, welcome aboard!", text: "This is where the team plans, tracks and chats about the work. Let's take a quick look around. It takes less than a minute, and you can skip whenever you like." },
+      { target: '#btn-add-task', title: "Got something to do? Start here", text: "Add a task with a project, an owner and a deadline. Big job? Break it into checklist steps." },
+      { target: '#focus-section', title: "Not sure where to begin?", text: "Focus of the Day picks your most urgent, highest-priority work. Start at the top and work along." },
+      { target: '#sidebar-nav', title: "Same work, different angles", text: "Board, Timeline, Calendar and People all show the same tasks, just laid out differently. Every project can have its own group chat too." },
+      { target: '#teamspace-trigger', title: "Just want your team's work?", text: "Pick your department here to cut out the noise, or choose All to see everything." },
+      { target: '#btn-notifications', title: "We'll keep you posted", text: "The bell lights up when someone mentions you, comments or hands you a task. The icon next to it shows what's due this week." },
+      { target: '#user-menu-trigger', art: 'done', cta: "Let's go!", title: "You're all set!", text: "That's the basics. Dark mode, notifications and your departments live in your profile menu, and so does this tour if you ever want a refresher. Happy planning!" }
     ] },
     { id: 'tours-intro', kind: 'feature', date: '2026-10-06', steps: [
-      { target: '#user-menu-trigger', title: 'New: guided tours', text: 'New features will now come with a short tour like this one. Want a refresher on the basics? Choose "Take the tour" in your profile menu.' }
+      { target: '#user-menu-trigger', title: "Psst, we've added tours", text: "From now on, new features and pages come with a quick tour like this one. Fancy a refresher on the basics? Find \"Take the tour\" in your profile menu." }
     ] }
   ];
+
+  /* Hand-drawn sketches for the tour cards (asked for: "fun hand-drawn sketches in the tutorial").
+     Deliberately on the welcome tour's FIRST and LAST cards only: those two are the friendly
+     bookends with nothing on screen to point at, so a picture adds warmth without competing with
+     the spotlight. A sketch on every step would make every card taller and the tour feel longer,
+     which works against "not too long" -- agreed before drawing them.
+     Inline SVG line art like every other icon here (never emoji or images): currentColor strokes
+     follow light/dark mode, Poppy (brand-600) for the accents, and an feTurbulence +
+     feDisplacementMap filter roughens the lines so they read as drawn by hand rather than
+     geometric. Filter ids must stay unique per sketch. */
+  var TOUR_ART = {
+    welcome:
+      '<svg viewBox="0 0 240 120" class="w-full h-auto text-zinc-700 dark:text-zinc-200" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<defs><filter id="tour-rough-welcome"><feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="2" seed="4"></feTurbulence><feDisplacementMap in="SourceGraphic" scale="2.5"></feDisplacementMap></filter></defs>' +
+        '<g filter="url(#tour-rough-welcome)">' +
+          '<path d="M14 108 Q120 104 226 108" stroke-width="1.6" opacity=".45"></path>' +
+          // Someone waving hello...
+          '<circle cx="58" cy="34" r="12"></circle>' +
+          '<path d="M47 30 Q52 20 62 22 Q70 24 70 31"></path>' +
+          '<path d="M54 33 v1.5 M62 33 v1.5" stroke-width="2.8"></path>' +
+          '<path d="M53 39 Q58 43.5 63 39"></path>' +
+          '<path d="M46 52 Q58 46 70 52 L72 82 L44 82 Z" class="fill-brand-600"></path>' +
+          '<path d="M51 82 L47 106 M65 82 L69 106"></path>' +
+          '<path d="M47 56 Q38 66 40 78"></path>' +
+          '<path d="M69 55 Q80 46 84 31"></path>' +
+          '<circle cx="85" cy="27" r="3.5"></circle>' +
+          '<path d="M92 20 q4 4 2 9 M98 14 q6 7 3 15" stroke-width="1.8"></path>' +
+          // ...beside a little task board.
+          '<rect x="118" y="16" width="104" height="80" rx="8"></rect>' +
+          '<path d="M140 96 L134 108 M200 96 L206 108"></path>' +
+          '<path d="M152 24 Q153 58 152 90 M187 24 Q186 58 187 90" stroke-width="1.6"></path>' +
+          '<rect x="125" y="27" width="21" height="12" rx="2.5" stroke-width="1.6" class="fill-brand-100 dark:fill-brand-500/20"></rect>' +
+          '<rect x="125" y="45" width="21" height="12" rx="2.5" stroke-width="1.6" class="fill-brand-100 dark:fill-brand-500/20"></rect>' +
+          '<rect x="159" y="27" width="21" height="12" rx="2.5" stroke-width="1.6" class="fill-brand-100 dark:fill-brand-500/20"></rect>' +
+          '<rect x="194" y="27" width="21" height="12" rx="2.5" stroke-width="1.6" class="fill-brand-100 dark:fill-brand-500/20"></rect>' +
+          '<path d="M199 33 l3 3 l6 -6" stroke-width="1.6"></path>' +
+          '<path d="M104 8 v8 M100 12 h8 M230 48 v6 M227 51 h6 M24 28 v6 M21 31 h6" class="stroke-brand-600" stroke-width="2"></path>' +
+        '</g>' +
+      '</svg>',
+    done:
+      '<svg viewBox="0 0 240 120" class="w-full h-auto text-zinc-700 dark:text-zinc-200" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<defs><filter id="tour-rough-done"><feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="2" seed="9"></feTurbulence><feDisplacementMap in="SourceGraphic" scale="2.5"></feDisplacementMap></filter></defs>' +
+        '<g filter="url(#tour-rough-done)">' +
+          // Someone jumping for joy...
+          '<ellipse cx="74" cy="111" rx="22" ry="3" stroke-width="1.4" opacity=".45"></ellipse>' +
+          '<circle cx="74" cy="28" r="12"></circle>' +
+          '<path d="M67 27 q2.5 -2.5 5 0 M76 27 q2.5 -2.5 5 0" stroke-width="1.8"></path>' +
+          '<path d="M67 33 Q74 40 81 33"></path>' +
+          '<path d="M62 46 Q74 40 86 46 L88 74 L60 74 Z" class="fill-brand-600"></path>' +
+          '<path d="M63 49 Q52 38 48 22 M85 49 Q96 38 100 22"></path>' +
+          '<circle cx="47" cy="18" r="3.5"></circle><circle cx="101" cy="18" r="3.5"></circle>' +
+          '<path d="M66 74 Q58 86 65 97 M82 74 Q91 85 84 97"></path>' +
+          '<path d="M58 104 h9 M80 104 h9" stroke-width="1.4" opacity=".6"></path>' +
+          // ...next to a big tick.
+          '<circle cx="170" cy="58" r="32" class="fill-brand-100 dark:fill-brand-500/20"></circle>' +
+          '<path d="M155 58 l10 10 l20 -22" class="stroke-brand-600" stroke-width="4.5"></path>' +
+          '<path d="M170 16 v-9 M212 58 h9 M200 28 l6 -6 M140 28 l-6 -6 M200 88 l6 6" stroke-width="1.8"></path>' +
+          '<path d="M120 20 l7 4 M126 94 q3 -4 6 0 q3 4 6 0 M218 96 l4 6 M24 40 l6 -3 M22 82 q3 -3 6 0 M124 56 l5 -2" class="stroke-brand-600" stroke-width="2"></path>' +
+          '<path d="M114 72 v.5 M226 28 v.5 M34 60 v.5" stroke-width="3.5"></path>' +
+        '</g>' +
+      '</svg>'
+  };
 
   function tourDaysAgo(dateStr) {
     var d = Date.parse(dateStr + 'T00:00:00');
@@ -12484,42 +12553,42 @@
   var PAGE_TOURS_EXISTING = '2026-01-01';
   var PAGE_TOURS = {
     board: { since: PAGE_TOURS_EXISTING, steps: [
-      { target: '#board-columns', title: 'The Board', text: 'Tasks sit in columns by stage, grouped into one card per project. Drag a task to move it along, or click it to open it.' },
-      { target: '#toolbar-row', title: 'Find things fast', text: 'Search tasks, checklists and comments, filter by priority, project or people, and change the sort order.' }
+      { target: '#board-columns', title: "Welcome to the Board", text: "Every task lives here, sorted into columns by stage and grouped by project. Drag a task to move it along, or click it to open it up." },
+      { target: '#toolbar-row', title: "Looking for something?", text: "Search tasks, checklists and comments, or narrow things down by priority, project or person." }
     ] },
     gantt: { since: PAGE_TOURS_EXISTING, steps: [
-      { target: '#gantt-wrap', title: 'The Timeline', text: 'Each bar runs from a task\'s start date to its deadline. Click a task\'s name to show its checklist steps, with diamonds on their due dates.' },
-      { target: '#gantt-progress-toggle', title: 'Progress', text: 'Choose whether the Progress column counts finished checklist steps or the task\'s stage.' }
+      { target: '#gantt-wrap', title: "Your work over time", text: "Each bar runs from a task's start date to its deadline. Click a task's name to see its checklist steps, with a diamond on each due date." },
+      { target: '#gantt-progress-toggle', title: "How far along?", text: "Switch the Progress column between checklist steps done and the task's stage." }
     ] },
     calendar: { since: PAGE_TOURS_EXISTING, steps: [
-      { target: '#calendar-scope-toggle', title: 'Mine or everyone', text: 'Mine shows only your work. Everyone shows the whole team.' },
-      { target: '#calendar-grid', title: 'The month at a glance', text: 'Tasks stretch across their dates, and anyone away is listed on the day. Click a day number to see everything on it.' }
+      { target: '#calendar-scope-toggle', title: "Just you, or everyone?", text: "Mine shows only your work. Everyone shows the whole team's." },
+      { target: '#calendar-grid', title: "Your month at a glance", text: "Tasks stretch across their dates, and you'll see who's away each day. Click a day number to see everything on it." }
     ] },
     people: { since: PAGE_TOURS_EXISTING, steps: [
-      { target: '#people-grid', title: 'Who is working on what', text: 'One card per person, with their open work and anything overdue. Book your own time off at the bottom of your card.' }
+      { target: '#people-grid', title: "Who's doing what", text: "Everyone gets a card with their open work and anything running late. Off on leave soon? Book it at the bottom of your own card." }
     ] },
     projects: { since: PAGE_TOURS_EXISTING, steps: [
-      { target: '#projects-grid', title: 'Every project', text: 'Ongoing projects come first, soonest deadline at the top. Open a card to see its tasks and hours, or give the project its own deadline.' }
+      { target: '#projects-grid', title: "All your projects in one place", text: "Ongoing projects come first, nearest deadline on top. Open a card to see its tasks and hours, or give the project a deadline of its own." }
     ] },
     chat: { since: PAGE_TOURS_EXISTING, steps: [
-      { target: '#chat-new-btn', title: 'Project chats', text: 'Start a group chat for a project here. Everyone working on the project is notified of new messages.' },
-      { target: '#chat-project-list-pane', title: 'Your chats', text: 'Filter to your chats, favourites or unread ones. Right-click a message to reply, forward, copy or react.' }
+      { target: '#chat-new-btn', title: "Chat with your project team", text: "Start a group chat for any project here. Everyone working on it hears about new messages." },
+      { target: '#chat-project-list-pane', title: "Your conversations", text: "Filter to your chats, favourites or unread ones. Right-click any message to reply, forward, copy or react." }
     ] },
     wip: { since: PAGE_TOURS_EXISTING, steps: [
-      { target: '#wip-mode-toggle', title: 'Two ways to run the meeting', text: 'By project walks through each project in turn. Agenda lists what needs a decision, what is coming up, and who is away.' },
-      { target: '#wip-range-toggle', title: 'How far ahead', text: 'Choose how many weeks ahead the meeting looks.' }
+      { target: '#wip-mode-toggle', title: "Ready for the WIP meeting?", text: "By project walks through each project one at a time. Agenda shows what needs a decision, what's coming up and who's away." },
+      { target: '#wip-range-toggle', title: "How far ahead?", text: "Pick how many weeks ahead the meeting looks." }
     ] },
     activity: { since: PAGE_TOURS_EXISTING, steps: [
-      { target: '#activity-feed', title: 'Activity', text: 'A record of every change on the board, newest first. Click a row to open what it is about.' }
+      { target: '#activity-feed', title: "What's been happening", text: "Every change on the board, newest first. Click a row to jump to what it's about." }
     ] },
     suggestions: { since: PAGE_TOURS_EXISTING, steps: [
-      { target: '#suggestion-input', title: 'Suggest a change', text: 'Ideas for improving Project Manager go here. You will be notified when yours is fixed.' }
+      { target: '#suggestion-input', title: "Got an idea?", text: "Tell us how to make Project Manager better. We'll let you know when yours is fixed." }
     ] },
     archived: { since: PAGE_TOURS_EXISTING, steps: [
-      { target: '#archived-list', title: 'Archived work', text: 'Finished tasks that have been put away. Search them from the toolbar, or restore one to the Board.' }
+      { target: '#archived-list', title: "The archive", text: "Finished work that's been tidied away. Search it from the toolbar, or bring a task back with Restore." }
     ] },
     updates: { since: PAGE_TOURS_EXISTING, steps: [
-      { target: '#updates-list', title: 'New Updates', text: 'What changed in Project Manager, newest first. "Show me" plays a quick tour of a new feature.' }
+      { target: '#updates-list', title: "What's new", text: "Every change to Project Manager, newest first. Hit \"Show me\" for a quick tour of a new feature." }
     ] }
   };
 
@@ -12667,6 +12736,7 @@
         (total > 1 ? '<span class="text-[11px] font-semibold text-zinc-400 dark:text-zinc-500">' + (i + 1) + ' of ' + total + '</span>' : '<span></span>') +
         '<button type="button" data-tour-skip class="text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-100">' + (last ? 'Close' : 'Skip tour') + '</button>' +
       '</div>' +
+      (step.art && TOUR_ART[step.art] ? '<div class="-mx-1 mb-2">' + TOUR_ART[step.art] + '</div>' : '') +
       '<h3 id="tour-title" class="text-base font-bold text-zinc-900 dark:text-white">' + escapeHtml(step.title) + '</h3>' +
       '<p class="text-sm text-zinc-600 dark:text-zinc-300 mt-1">' + escapeHtml(step.text) + '</p>' +
       '<div class="flex items-center justify-between gap-2 mt-4">' +
@@ -12678,7 +12748,7 @@
         '</div>' +
         '<div class="flex items-center gap-2">' +
           (i > 0 ? '<button type="button" data-tour-back class="text-sm font-medium px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">Back</button>' : '') +
-          '<button type="button" data-tour-next class="text-sm font-semibold px-3.5 py-1.5 rounded-lg bg-brand-600 text-white hover:bg-brand-700">' + (last ? (total > 1 ? 'Done' : 'Got it') : 'Next') + '</button>' +
+          '<button type="button" data-tour-next class="text-sm font-semibold px-3.5 py-1.5 rounded-lg bg-brand-600 text-white hover:bg-brand-700">' + (step.cta || (last ? (total > 1 ? 'Done' : 'Got it') : 'Next')) + '</button>' +
         '</div>' +
       '</div>';
     var el = step.target && document.querySelector(step.target);
@@ -13906,7 +13976,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T16:20:31Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T16:26:01Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
