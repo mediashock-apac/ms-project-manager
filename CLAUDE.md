@@ -2439,6 +2439,11 @@ client-side domain check in `isAllowedEmail` is UX only, not enforcement):
     project whose tasks all had dates; "+ Deadline" now only shows when no open task has a date
     either. Clicking "Due …" still opens the field to set an explicit project deadline. The card's
     Group chat button was removed in the same pass, on request — chats live in the Chat tab.
+  - **The card also shows a start date** ("Started 3 Sep" / "Starts 12 Oct"), derived, never
+    stored: the earliest `startDate` across the project's tasks, archived ones included so the
+    start doesn't drift later as early tasks are archived. It sits at the front of the deadline
+    line (`rowOpen` in `projectCardHtml`) so the card reads as one date range instead of gaining
+    a row; omitted when no task has a start date.
   - **Set in one place only — the Projects tab**, and progressively disclosed. A project with no
     deadline shows a quiet `+ Deadline` button (`.project-deadline-add`); the real
     `<input type="date">` (`.project-deadline-input`) is swapped in on click, or shown outright once a
