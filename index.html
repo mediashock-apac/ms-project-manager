@@ -11025,7 +11025,9 @@
     var horizon = wipShiftDate(today, wipRangeDays - 1);
 
     // applyFilters is deliberately NOT used here -- see this section's header comment.
-    var scoped = activeTasks().filter(taskInTeamspace);
+    // NOT teamspace-scoped either, on request: Suits runs one company-wide WIP on one shared screen,
+    // so everyone sees the same list whichever teamspace they have picked in the sidebar.
+    var scoped = activeTasks();
     var open = scoped.filter(function (t) { return t.status !== 'Done'; });
     var scopedProjects = Object.keys(scoped.reduce(function (acc, t) {
       if (t.project) acc[t.project] = true;
@@ -11034,7 +11036,7 @@
 
     document.getElementById('wip-context').textContent =
       todayMidnight().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' }) +
-      ' · ' + teamspaceLabel(currentTeamspace) +
+      ' · all teams' +
       ' · next ' + wipRangeDays + ' days';
 
     var alerts = wipAlerts(open, today, horizon, scopedProjects);
@@ -11081,6 +11083,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-05j', date: '2026-10-05', items: [
+      { type: 'improved', title: 'WIP Meeting is the same for everyone', text: 'WIP Meeting now shows every team\'s projects, whichever team you\'ve picked in the sidebar, so everyone in the meeting sees the same screen.' }
+    ] },
     { id: '2026-10-05i', date: '2026-10-05', items: [
       { type: 'new', title: 'WIP Meeting by project', text: 'WIP Meeting now opens on a project-by-project list: each project, its open deliverables with owner, status and deadline, and the next steps under each one. The previous date-based view is one click away under Agenda.' }
     ] },
@@ -12343,7 +12348,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T06:46:42Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T06:49:56Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

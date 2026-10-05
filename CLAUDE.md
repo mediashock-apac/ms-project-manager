@@ -3030,13 +3030,13 @@ Three things it deliberately does NOT do, each of which is the obvious version o
 
 **Scoping goes two ways on purpose**, and this is the part most likely to be "fixed" by mistake:
 
-- It **respects the teamspace switcher** — that is a workspace-level scope whose current value is
-  permanently visible in the rail, and running a Production-only WIP is a real use. **Except the
-  Away list, which is never scoped** — it lists everyone's leave in the window. It used to be scoped
-  by `personInTeamspace`, which hid the leave of people whose tasks were still on screen (a task
-  shows in every teamspace of the people on it, so an owner from another department appeared on the
-  timeline with their leave stripe while Away said "Everyone is in"). Changed on request: "WIP should
-  list everyone's leave."
+- It **ignores the teamspace switcher entirely** (changed on request, 2026-10-05): Suits runs one
+  company-wide WIP on one shared screen, so everyone sees the same projects, alerts, agenda, leave
+  and timeline whichever teamspace they have picked. The context line reads "all teams". It used to
+  respect the switcher (on the reasoning that a Production-only WIP was a real use), and before
+  that the Away list alone was unscoped after it hid the leave of people whose tasks were on screen.
+  If per-team WIP is ever wanted again, it should be an explicit control on this view, not the
+  sidebar switcher silently changing a shared meeting screen.
 - It **ignores the search/priority/project/assignee filter bar**, and hides the toolbar outright
   (`TOOLBAR_FULLY_HIDDEN_VIEWS`). Those filters persist across sessions by design, so a narrowing
   somebody left set last Tuesday would silently delete items from a meeting agenda with nothing
