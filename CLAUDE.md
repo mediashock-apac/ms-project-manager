@@ -2956,7 +2956,17 @@ review, Overdue dot, Away hatch — so a quiet week doesn't print keys for thing
 A month row sits above the day numbers (one cell per month in the window, full name when it spans
 6+ columns, short otherwise) — a 4-week window always crosses a month boundary and bare day
 numbers stop being unambiguous. Deliberately omitted: the frozen Progress
-column, resize handle, stacked-deadline badge and today line (today is the left edge by definition).
+column, stacked-deadline badge and today line (today is the left edge by definition).
+
+**The label column matches the Timeline tab's** (asked for directly: "can the timeline
+functionality match between WIP and Timeline page? ... adjustable column width, project name and
+task contrast"). Same label markup (text-sm project with hover tooltip, owner/task line at
+`dark:text-white`), and the **same width variable**: `GANTT_LABEL_WIDTH`, persisted under
+`flowboard_gantt_label_width`, so dragging `#wip-resize-handle` resizes the Timeline tab's Task
+column too, and vice versa. Applied through a `--wip-label-w` CSS variable on `#wip-timeline` so
+a drag moves every row without re-rendering. Capped at 45% of the card (`wipLabelWidthCss`),
+because this chart never scrolls sideways and a wide label column would squeeze the day columns.
+The stale "Fill: checklist done…" legend entry was removed at the same time — bars have no fill.
 
 **Not a stored event record.** There is no `events` collection, no create/edit/delete UI, and
 nothing in Firestore for this feature at all — WIP is a standing meeting whose content is

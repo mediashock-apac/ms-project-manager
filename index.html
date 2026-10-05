@@ -4725,6 +4725,36 @@
     });
   })();
 
+  // The WIP Meeting timeline uses the SAME Task-column width as the Timeline tab, so the two
+  // views read alike and resizing one resizes the other. Capped at 45% of the card there: the WIP
+  // chart never scrolls sideways, so a wide label column would squeeze the day columns instead.
+  function wipLabelWidth() { return GANTT_LABEL_WIDTH; }
+  function wipLabelWidthCss(px) { return 'min(' + Math.round(px) + 'px, 45%)'; }
+  (function () {
+    var dragging = false;
+    document.addEventListener('mousedown', function (e) {
+      if (!e.target.closest('#wip-resize-handle')) return;
+      dragging = true;
+      e.preventDefault();
+      document.body.style.userSelect = 'none';
+    });
+    document.addEventListener('mousemove', function (e) {
+      if (!dragging) return;
+      var box = document.getElementById('wip-timeline');
+      if (!box) return;
+      var r = box.getBoundingClientRect();
+      var max = Math.min(GANTT_LABEL_WIDTH_MAX, r.width * 0.45);
+      GANTT_LABEL_WIDTH = Math.min(max, Math.max(GANTT_LABEL_WIDTH_MIN, e.clientX - r.left));
+      box.style.setProperty('--wip-label-w', wipLabelWidthCss(GANTT_LABEL_WIDTH));
+    });
+    document.addEventListener('mouseup', function () {
+      if (!dragging) return;
+      dragging = false;
+      document.body.style.userSelect = '';
+      try { localStorage.setItem(GANTT_LABEL_WIDTH_KEY, String(Math.round(GANTT_LABEL_WIDTH))); } catch (e) { /* ignore */ }
+    });
+  })();
+
   var GANTT_PROGRESS_KEY = 'flowboard_gantt_progress';
   var ganttShowProgress = (function () {
     try { return localStorage.getItem(GANTT_PROGRESS_KEY) !== 'off'; } catch (e) { return true; }
@@ -10501,7 +10531,10 @@
     var n = wipRangeDays;
     var rangeStart = parseDate(today);
     var cols = 'repeat(' + n + ',minmax(0,1fr))';
-    var LABEL_W = 220;
+    // Shares the Timeline tab's Task-column width (GANTT_LABEL_WIDTH, persisted), so resizing it in
+    // either view resizes both. Applied through a CSS variable so a drag can move every row at once
+    // without re-rendering (see the WIP resize handler next to the Gantt one).
+    var LABEL_W = 'var(--wip-label-w)';
 
     // Month row: one cell per month present in the window, spanning its days. A short label
     // ("Sep") when the span is only a few columns wide, since the full name would clip.
@@ -10514,7 +10547,7 @@
       else monthCells.push({ key: key, span: 1, date: md });
     }
     var monthRow = '<div class="flex border-b border-zinc-100 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700/40">' +
-      '<div class="shrink-0" style="width:' + LABEL_W + 'px;"></div>' +
+      '<div class="shrink-0" style="width:' + LABEL_W + ';"></div>' +
       '<div class="flex-1 min-w-0 grid" style="grid-template-columns:' + cols + ';">' +
       monthCells.map(function (mc, idx) {
         var label = mc.date.toLocaleDateString('en-US', mc.span >= 6
@@ -10527,7 +10560,7 @@
       '</div></div>';
 
     var head = monthRow + '<div class="flex border-b border-zinc-100 dark:border-zinc-700">' +
-      '<div class="shrink-0" style="width:' + LABEL_W + 'px;"></div>' +
+      '<div class="shrink-0" style="width:' + LABEL_W + ';"></div>' +
       '<div class="flex-1 min-w-0 grid" style="grid-template-columns:' + cols + ';">';
     for (var i = 0; i < n; i++) {
       var d = addDays(rangeStart, i);
@@ -10559,9 +10592,11 @@
       }).join('');
 
       return '<div class="flex border-b border-zinc-50 dark:border-zinc-700/50 last:border-b-0">' +
-        '<div class="shrink-0 px-4 py-1.5 min-w-0" style="width:' + LABEL_W + 'px;">' +
-          '<p class="min-w-0 mb-0.5"><span class="inline-block max-w-full truncate align-bottom text-xs font-bold text-zinc-800 dark:text-zinc-100">' + escapeHtml(t.project) + '</span></p>' +
-          '<p class="text-xs text-zinc-500 dark:text-zinc-400 truncate">' + escapeHtml(t.assignee) + ' · ' + escapeHtml(t.name) + '</p>' +
+        // Same label as the Timeline tab's frozen Task column: text-sm project with a hover tooltip,
+        // and the owner/task line at the same contrast (dark:text-white).
+        '<div class="shrink-0 px-3 py-1.5 min-w-0 border-r border-zinc-100 dark:border-zinc-700" style="width:' + LABEL_W + ';">' +
+          '<p class="min-w-0 mb-0.5"><span data-tooltip="' + escapeHtml(t.project) + '" class="tooltip-top inline-block max-w-full truncate align-bottom text-sm font-bold text-zinc-800 dark:text-zinc-100">' + escapeHtml(t.project) + '</span></p>' +
+          '<p class="text-xs text-zinc-400 dark:text-white truncate">' + escapeHtml(t.assignee) + ' · ' + escapeHtml(t.name) + '</p>' +
         '</div>' +
         '<div class="relative flex-1 min-w-0" style="min-height:40px;">' + bands +
           '<button type="button" data-open-task="' + t.id + '" title="' + escapeHtml(t.name + ' · ' + t.assignee + ' · ' + t.priority + ' priority · ' + formatShortDate(t.startDate) + ' – ' + formatShortDate(t.deadline)) + '" ' +
@@ -10596,10 +10631,11 @@
     if (list.some(function (t) { return leaveFor(t.assignee).some(function (l) { return l.start <= horizon && l.end >= today; }); })) {
       legend += '<span class="flex items-center gap-1"><span class="gantt-leave w-3 h-2.5 rounded-sm border border-zinc-200 dark:border-zinc-600"></span>Away</span>';
     }
-    legend += '<span class="text-zinc-400 dark:text-zinc-500">Fill: checklist done, or status if no checklist</span>';
     var aside = '<div class="ml-auto flex items-center flex-wrap gap-x-3 gap-y-1 text-xs font-normal normal-case tracking-normal text-zinc-500 dark:text-zinc-400">' + legend + '</div>';
 
-    return wipSectionHtml('Timeline', list.length, '<div class="overflow-x-auto">' + head + rows + '</div>' + note, aside);
+    var handle = '<div class="absolute top-0 bottom-0 group cursor-col-resize" id="wip-resize-handle" title="Drag to resize the Task column" style="left:calc(var(--wip-label-w) - 3px);width:6px;z-index:5;">' +
+      '<div class="w-px h-full mx-auto bg-transparent group-hover:bg-brand-400 dark:group-hover:bg-brand-500"></div></div>';
+    return wipSectionHtml('Timeline', list.length, '<div class="overflow-x-auto"><div id="wip-timeline" class="relative" style="--wip-label-w:' + wipLabelWidthCss(wipLabelWidth()) + ';">' + head + rows + handle + '</div></div>' + note, aside);
   }
 
   function renderWipView() {
@@ -11767,7 +11803,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T04:34:39Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T04:40:45Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
