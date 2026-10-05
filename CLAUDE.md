@@ -3032,10 +3032,20 @@ Client contact / Key links columns).
   Jobs stay in the sheet**. One inline editor at a time (`wipEdit`; for a task status its
   `project` holds the task id), drafts in `wipDraft` and focus restored after each live re-render
   so someone else's save doesn't wipe what you're typing. Enter saves, Escape cancels.
-- **The Mediashock LinkedIn marketing project always sorts last** on By project (`sinksToEnd` in
-  `wipProjectsHtml`: name contains both "mediashock" and "linkedin", any case), on request —
-  in-house ongoing work is discussed after client projects. Name-matched, so a rename that drops
-  either word silently returns it to deadline order.
+- **Projects are grouped by WIP category**, in Suits' order: Active Jobs, Content Marketing,
+  Pitches, Hot leads, Cold leads, Closing reports (`WIP_CATEGORIES`), then **Not sorted** for
+  anything uncategorised, so nothing vanishes. Empty groups are skipped; within a group, soonest
+  open deadline first. Stored as `projects/{id}.wipCategory` (absent or an unknown key = Not
+  sorted, so a category can be renamed/retired without migrating). Set from the project header in
+  WIP: "Set category" (brand) until set, then a quiet "Category" — the group heading already
+  names it, so the header doesn't repeat the label. It opens a pill row under the header
+  (`wipCategoryPicking`, kept in state so a live re-render doesn't close it — a native `<select>`
+  would snap shut on every roster heartbeat). Anyone can change it (same as status); logged to
+  Activity as `project_category`. No rules change.
+  - Decided with the user: **set by hand in WIP, anyone can change it**; **Content Marketing sits
+    second as listed** — this replaced a name-matched "Mediashock LinkedIn always last" rule
+    shipped an hour earlier; **a lead still needs at least one open task to appear** (WIP has no
+    "add a project with no tasks" — offered and deferred as a bigger change).
 - **Collapse all / Expand all** in the By project section header (`data-wip-fold-all`,
   `wipProjectNamesShown`) folds or opens every project; it reads "Expand all" once all are folded.
 

@@ -1945,6 +1945,33 @@
     var u = auth.currentUser;
     return u ? (u.displayName || u.email) : 'unknown';
   }
+  // WIP category -- how Suits groups the meeting (asked for in this order). Stored on the project
+  // doc as `wipCategory` (one of the keys below, or absent = "Not sorted"); set from WIP Meeting's
+  // project header by anyone on the team. An unknown stored key reads as "Not sorted", so a
+  // category can be renamed or retired here without migrating data.
+  var WIP_CATEGORIES = [
+    { key: 'active', label: 'Active Jobs' },
+    { key: 'content', label: 'Content Marketing' },
+    { key: 'pitch', label: 'Pitches' },
+    { key: 'hot', label: 'Hot leads' },
+    { key: 'cold', label: 'Cold leads' },
+    { key: 'closing', label: 'Closing reports' }
+  ];
+  function wipCategoryLabel(key) {
+    var c = WIP_CATEGORIES.find(function (x) { return x.key === key; });
+    return c ? c.label : '';
+  }
+  function projectWipCategory(name) {
+    var key = (projectDeadlineDoc(name) || {}).wipCategory;
+    return wipCategoryLabel(key) ? key : '';
+  }
+  function setProjectWipCategory(name, key) {
+    return ensureProjectDoc(name).then(function (id) {
+      return updateDoc(doc(projectsCol, id), { wipCategory: key || null });
+    }).then(function () {
+      logActivity('project_category', key ? 'Moved ' + name + ' to ' + wipCategoryLabel(key) : 'Cleared the category of ' + name);
+    }).catch(function (err) { showToast('Could not save the category: ' + err.message, 'error'); });
+  }
   function setProjectClientContact(name, value) {
     return ensureProjectDoc(name).then(function (id) {
       return updateDoc(doc(projectsCol, id), { clientContact: value || null });
@@ -11020,6 +11047,7 @@
   var wipUpdatesExpanded = {};   // task id -> showing every status line
   var wipDetailsOpen = {};       // project name -> Contact & links open (session-only)
   var wipProjectNamesShown = []; // for Collapse all / Expand all
+  var wipCategoryPicking = null; // project name whose category pill row is open
 
   function wipCanSeeDetails() {
     return isAdminUser() || myDepartments().indexOf('suits') !== -1;
@@ -11141,22 +11169,15 @@
       var d = list.map(function (t) { return t.deadline; }).filter(Boolean).sort()[0];
       return d || '9999-99-99';
     }
-    // Pinned to the end, on request: the in-house Mediashock LinkedIn marketing project is
-    // ongoing work, discussed after the client projects. Matched loosely (both words, any case)
-    // because project names are free text and the exact spelling isn't fixed.
-    function sinksToEnd(n) {
-      var l = (n || '').toLowerCase();
-      return l.indexOf('mediashock') !== -1 && l.indexOf('linkedin') !== -1;
-    }
+    // Within each category group (below), soonest open deadline first.
     names.sort(function (a, b) {
-      var sa = sinksToEnd(a), sb = sinksToEnd(b);
-      if (sa !== sb) return sa ? 1 : -1;
       var da = firstDeadline(byProject[a]), db = firstDeadline(byProject[b]);
       return da !== db ? (da < db ? -1 : 1) : a.localeCompare(b);
     });
 
     var canDetails = wipCanSeeDetails();
-    var cards = names.map(function (name) {
+    var cardHtml = {};
+    names.forEach(function (name) {
       var list = byProject[name].slice().sort(function (a, b) {
         var da = a.deadline || '9999-99-99', db = b.deadline || '9999-99-99';
         return da !== db ? (da < db ? -1 : 1) : a.name.localeCompare(b.name);
@@ -11220,8 +11241,27 @@
       var detailsBtn = name && canDetails && !folded
         ? '<button type="button" data-wip-act="toggle-details" data-project="' + escapeHtml(name) + '" aria-expanded="' + detailsOpen + '" class="shrink-0 px-4 ' + WIP_ACT_BTN + (detailsOpen ? ' !text-brand-600 dark:!text-brand-400' : '') + '">Contact &amp; links' + (detailsCount ? ' (' + detailsCount + ')' : '') + '</button>'
         : '';
+      // Category: "Set category" (brand) until one is picked, then a quiet "Category" -- the group
+      // heading already names it, so the header doesn't repeat the label. Opens a pill row under
+      // the header (state in wipCategoryPicking, so a live re-render doesn't close it).
+      var cat = name ? projectWipCategory(name) : '';
+      var picking = name && wipCategoryPicking === name;
+      var catBtn = name
+        ? '<button type="button" data-wip-act="pick-category" data-project="' + escapeHtml(name) + '" aria-expanded="' + !!picking + '" class="shrink-0 px-3 ' +
+            (cat ? WIP_ACT_BTN : 'text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline') + (picking ? ' !text-brand-600 dark:!text-brand-400' : '') + '">' +
+            (cat ? 'Category' : 'Set category') + '</button>'
+        : '';
+      var catPicker = picking
+        ? '<div class="px-4 py-2 flex items-center gap-1.5 flex-wrap bg-zinc-50/60 dark:bg-zinc-700/20 border-b border-zinc-100 dark:border-zinc-700/60">' +
+            WIP_CATEGORIES.concat([{ key: '', label: 'Not sorted' }]).map(function (c) {
+              var on = c.key === cat;
+              return '<button type="button" data-wip-act="set-category" data-project="' + escapeHtml(name) + '" data-id="' + c.key + '" class="text-xs font-semibold px-2.5 py-1 rounded-full border ' +
+                (on ? 'border-brand-500 bg-brand-500 text-white' : 'border-zinc-200 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:border-brand-400 hover:text-brand-600 dark:hover:text-brand-400') + '">' + escapeHtml(c.label) + '</button>';
+            }).join('') +
+          '</div>'
+        : '';
 
-      return '<div class="border-b border-zinc-100 dark:border-zinc-700 last:border-b-0">' +
+      cardHtml[name] = '<div class="border-b border-zinc-100 dark:border-zinc-700 last:border-b-0">' +
         '<div class="flex items-stretch bg-zinc-50 dark:bg-zinc-700/40">' +
           '<button type="button" data-wip-fold="' + escapeHtml(name) + '" aria-expanded="' + !folded + '" class="min-w-0 flex-1 flex items-center gap-2 px-4 py-2.5 text-left hover:bg-zinc-100 dark:hover:bg-zinc-700/70">' +
             svgIcon('chevronDown', 'w-3.5 h-3.5 shrink-0 text-zinc-400 transition-transform' + (folded ? ' -rotate-90' : '')) +
@@ -11229,10 +11269,24 @@
             '<span class="shrink-0 text-xs text-zinc-500 dark:text-zinc-400">' + list.length + ' open' +
               (due ? ' · ' + (own ? 'Project due ' : 'Due ') + escapeHtml(formatShortDate(due)) : '') + '</span>' +
           '</button>' +
+          catBtn +
           detailsBtn +
         '</div>' +
+        catPicker +
         (folded ? '' : (name ? wipProjectDetailsHtml(name) : '') + '<div class="divide-y divide-zinc-100 dark:divide-zinc-700/50">' + rows + '</div>') +
       '</div>';
+    });
+
+    // Grouped by the project's WIP category, in Suits' order; empty groups are skipped, and
+    // projects nobody has categorised yet sit in "Not sorted" at the bottom so nothing vanishes.
+    var cards = WIP_CATEGORIES.concat([{ key: '', label: 'Not sorted' }]).map(function (g) {
+      var inGroup = names.filter(function (n) { return (n ? projectWipCategory(n) : '') === g.key; });
+      if (!inGroup.length) return '';
+      return '<div class="px-4 pt-3 pb-1.5 flex items-center gap-2 border-t-4 border-t-zinc-100 dark:border-t-zinc-900/60 first:border-t-0">' +
+          '<span class="text-xs font-bold uppercase tracking-wide text-brand-700 dark:text-brand-300">' + escapeHtml(g.label) + '</span>' +
+          '<span class="text-xs font-semibold text-zinc-400 dark:text-zinc-500">' + inGroup.length + '</span>' +
+        '</div>' +
+        '<div class="border-t border-zinc-100 dark:border-zinc-700">' + inGroup.map(function (n) { return cardHtml[n]; }).join('') + '</div>';
     }).join('');
 
     // Collapse all / Expand all: flips to Expand all once every project is folded.
@@ -11251,6 +11305,13 @@
       if (kind === 'save') { wipSaveEdit(proj); return; }
       if (kind === 'cancel') { wipEdit = null; wipDraft = {}; renderWipView(); return; }
       if (kind === 'remove-link') { removeProjectKeyLink(proj, aid); return; }
+      if (kind === 'pick-category') { wipCategoryPicking = wipCategoryPicking === proj ? null : proj; renderWipView(); return; }
+      if (kind === 'set-category') {
+        wipCategoryPicking = null;
+        if ((aid || '') !== projectWipCategory(proj)) setProjectWipCategory(proj, aid || '');
+        renderWipView();
+        return;
+      }
       if (kind === 'remove-status') {
         openConfirm('Remove this status?', 'It will be removed for everyone.', function () {
           var task = tasks.find(function (x) { return x.id === proj; });
@@ -11417,6 +11478,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-05p', date: '2026-10-05', items: [
+      { type: 'new', title: 'WIP Meeting grouped by category', text: 'Projects in WIP Meeting are now grouped as Active Jobs, Content Marketing, Pitches, Hot leads, Cold leads and Closing reports. Click "Set category" on a project to place it; projects without one wait under Not sorted at the bottom. Anyone can change a category, and changes show in Activity.' }
+    ] },
     { id: '2026-10-05o', date: '2026-10-05', items: [
       { type: 'improved', title: 'Status on each deliverable in WIP Meeting', text: 'In WIP Meeting\'s By project view, status now sits on each task instead of on the whole project, like the Status column in the WIP sheet. Click "+ Status" on a task to add one, click the status to edit it, or "+ Update" to add a newer one. Status changes show in Activity.' },
       { type: 'improved', title: 'Easier to close Needs a decision', text: 'Click the "items need a decision" row again to close the list.' }
@@ -12700,7 +12764,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T09:52:07Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T09:59:04Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
