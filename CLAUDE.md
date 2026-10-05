@@ -286,6 +286,14 @@ to bottom:
        before clicking.
 3. **Drive picker integration** — lazy-loads the Google Picker API (`ensureGapiLoaded`) so users
    can attach a Drive folder to a task/project without guessing folder names.
+   - **`PICKER_API_KEY` is HTTP-referrer restricted in Google Cloud, and the site's address must
+     be on its list.** After the October 2026 move to `mediashock-apac.github.io`, "Browse Drive"
+     showed Google's "The API developer key is invalid" popup: the key still only allowed the old
+     `deane-ms.github.io` origin (confirmed by calling the Drive API with each origin as
+     `Referer` — the new one got "Requests from referer … are blocked"). Fix is in Google Cloud
+     Console → APIs & Services → Credentials → that key → Website restrictions: add
+     `https://mediashock-apac.github.io/*`. Sign-in itself is unaffected (it uses the Firebase key
+     and Firebase's authorized domains). Any future address change needs the same step.
    - **Project and Google Drive Link are one field, not two.** They used to be separate inputs
      that a single Drive pick filled in together, and Project was `readonly` — the only way to
      set it was to browse Drive, so a project with no Drive folder couldn't be named at all.
