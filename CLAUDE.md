@@ -554,7 +554,7 @@ to bottom:
      - **Expandable checklist rows** (built later, asked for from a TeamGantt screenshot). A task
        with a checklist gets an arrow in its label (`ganttExpandToggleHtml`, `data-gantt-expand`);
        opening it adds one indented row per item (`GANTT_ITEM_ROW_HEIGHT` 34px) on both the
-       Timeline and the WIP timeline. Each row: tick when done, name, `· assignee · date` (or
+       Timeline and the WIP timeline. Each row: tick when done, name, assignee's avatar, date (or
        TBD / No date) in the label, and a slightly larger diamond on its due date. Items are
        sorted by due date, undated last (`ganttChecklistItems`), so diamonds step down left to
        right. While open, the task's own bar drops its small diamonds — the rows carry them.
@@ -3042,6 +3042,8 @@ A month row sits above the day numbers (one cell per month in the window, full n
 6+ columns, short otherwise) — a 4-week window always crosses a month boundary and bare day
 numbers stop being unambiguous. Deliberately omitted: the frozen Progress
 column, stacked-deadline badge and today line (today is the left edge by definition).
+
+**People show as avatars, not written names, on both timelines** (`ganttAvatarHtml`: Google photo or coloured initials, full name in the hover tooltip) — the task line is avatar + task name, and checklist rows show the item assignee's avatar before the date. Asked for directly: the names "just add more text to read".
 
 **The label column matches the Timeline tab's** (asked for directly: "can the timeline
 functionality match between WIP and Timeline page? ... adjustable column width, project name and

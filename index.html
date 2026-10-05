@@ -4748,16 +4748,23 @@
       svgIcon('chevronDown', 'w-3.5 h-3.5 transition-transform' + (open ? '' : ' -rotate-90')) + '</button>';
   }
 
-  // The item row's label text: tick when done, name, then "· assignee · date". The date is in the
+  // A person's photo (or coloured initials) in place of their written name on the timelines --
+  // asked for directly: names "just add more text to read". The full name is in the hover tooltip.
+  function ganttAvatarHtml(name, sizeCls, textCls) {
+    if (!name) return '';
+    return '<span data-tooltip="' + escapeHtml(name) + '" class="tooltip-top inline-flex shrink-0">' + avatarHtml(name, sizeCls + ' shrink-0', textCls) + '</span>';
+  }
+
+  // The item row's label text: tick when done, name, then avatar and date. The date is in the
   // label so it can be read without finding the diamond at all.
   function ganttItemLabelHtml(t, item) {
     var late = ganttItemLate(t, item);
     var dateText = item.due && parseDate(item.due) ? formatShortDate(item.due) : (item.dueTbd ? 'Due TBD' : 'No date');
     return (item.done ? svgIcon('checkTick', 'w-3 h-3 shrink-0 text-emerald-500') : '<span class="w-3 shrink-0"></span>') +
       '<span data-tooltip="' + escapeHtml(item.text || '') + '" class="tooltip-top truncate min-w-0 ' + (item.done ? 'text-zinc-400 dark:text-zinc-500' : 'text-zinc-700 dark:text-zinc-200') + '">' + escapeHtml(item.text || '') + '</span>' +
+      (item.assignee ? ganttAvatarHtml(item.assignee, 'w-4 h-4', 'text-[8px]') : '') +
       '<span class="shrink-0 text-zinc-400 dark:text-zinc-500">' +
-        (item.assignee ? ' · ' + escapeHtml(item.assignee) : '') +
-        ' · <span class="' + (late ? 'text-rose-600 dark:text-rose-400 font-semibold' : '') + '">' + escapeHtml(dateText) + '</span>' +
+        '<span class="' + (late ? 'text-rose-600 dark:text-rose-400 font-semibold' : '') + '">' + escapeHtml(dateText) + '</span>' +
       '</span>';
   }
 
@@ -8658,7 +8665,7 @@
           '<p class="min-w-0 mb-0.5"><span data-tooltip="' + escapeHtml(t.project) + '" class="tooltip-top inline-block max-w-full truncate align-bottom text-sm font-bold text-zinc-800 dark:text-zinc-100">' + escapeHtml(t.project) + '</span></p>' +
           // zinc-500 / dark:zinc-400 -- the WIP timeline's original shade, preferred over white on direct
           // request. (dark:zinc-500 was reported as too dim earlier; zinc-400 is a step lighter.)
-          '<p class="text-xs text-zinc-500 dark:text-zinc-400 truncate">' + escapeHtml(t.assignee) + ' · ' + escapeHtml(t.name) + '</p>' +
+          '<p class="flex items-center gap-1.5 min-w-0 text-xs text-zinc-500 dark:text-zinc-400">' + ganttAvatarHtml(t.assignee, 'w-4 h-4', 'text-[8px]') + '<span class="truncate">' + escapeHtml(t.name) + '</span></p>' +
         '</div>' +
       '</div>';
 
@@ -10772,7 +10779,7 @@
           ganttExpandToggleHtml(t) +
           '<div class="min-w-0">' +
           '<p class="min-w-0 mb-0.5"><span data-tooltip="' + escapeHtml(t.project) + '" class="tooltip-top inline-block max-w-full truncate align-bottom text-sm font-bold text-zinc-800 dark:text-zinc-100">' + escapeHtml(t.project) + '</span></p>' +
-          '<p class="text-xs text-zinc-500 dark:text-zinc-400 truncate">' + escapeHtml(t.assignee) + ' · ' + escapeHtml(t.name) + '</p>' +
+          '<p class="flex items-center gap-1.5 min-w-0 text-xs text-zinc-500 dark:text-zinc-400">' + ganttAvatarHtml(t.assignee, 'w-4 h-4', 'text-[8px]') + '<span class="truncate">' + escapeHtml(t.name) + '</span></p>' +
           '</div>' +
         '</div>' +
         '<div class="relative flex-1 min-w-0" style="min-height:40px;">' + bands +
@@ -10885,6 +10892,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-05f', date: '2026-10-05', items: [
+      { type: 'improved', title: 'Faces instead of names on the timelines', text: 'On the Timeline and WIP Meeting, who owns a task or checklist item now shows as their profile picture. Hover it to see the name.' }
+    ] },
     { id: '2026-10-05e', date: '2026-10-05', items: [
       { type: 'improved', title: 'Flowboard is now Project Manager', text: 'Same tool, new name. Everything you\'ve saved stays as it was.' }
     ] },
@@ -12134,7 +12144,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T05:51:50Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T05:59:41Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
