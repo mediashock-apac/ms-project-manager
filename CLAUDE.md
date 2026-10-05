@@ -2636,6 +2636,15 @@ client-side domain check in `isAllowedEmail` is UX only, not enforcement):
   - The module-level list is `teamPeople`, **not** `people` — `renderPeople()` declares its own
     local `people` meaning something different (who currently has tasks), and the shadowing was
     a trap waiting for the next edit.
+- **`activity` rows open what they're about.** `logActivity(type, summary, target)` stores an
+  optional `taskId` or `chatProject` (task created/updated/moved/commented/archived/restored, chat
+  created). Rows with one are clickable (`openActivityTarget`, hover border + chevron): an active
+  task opens its task window; an archived one switches to Archived searched to its name (archived
+  tasks aren't edited in the task window); a since-deleted one gives a toast. Entries written
+  before this have no target and stay plain — matching by the name in the summary was rejected,
+  since task names repeat across projects and a wrong guess is worse than no link. Deleted-task,
+  leave, department, deadline and import entries deliberately carry no target. No rules change:
+  `activity` create has no field restrictions.
 - **`activity`** — append-only log (`logActivity`), queried as latest **200** by `at desc`, and
   searchable from the main search box (see below). Was 50, which is several days of history at
   five people and about an afternoon at eleven — quietly turning an audit trail into a "recently"

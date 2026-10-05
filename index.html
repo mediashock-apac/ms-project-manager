@@ -1658,14 +1658,20 @@
   var unsubActivity = null;
   var activityLog = [];
 
-  function logActivity(type, summary) {
+  // 	arget (optional) is what the entry is about, so its row in the Activity feed can open it:
+  // {taskId} or {chatProject}. Entries written before this existed have neither and stay plain --
+  // their task can't be recovered reliably from the summary text (names repeat across projects).
+  function logActivity(type, summary, target) {
     var user = auth.currentUser;
-    setDoc(doc(activityCol), {
+    var entry = {
       type: type,
       summary: summary,
       user: user ? (user.displayName || user.email) : "unknown",
       at: new Date().toISOString()
-    }).catch(function (e) { console.error("Failed to log activity", e); });
+    };
+    if (target && typeof target.taskId === 'string' && target.taskId) entry.taskId = target.taskId;
+    if (target && typeof target.chatProject === 'string' && target.chatProject) entry.chatProject = target.chatProject;
+    setDoc(doc(activityCol), entry).catch(function (e) { console.error("Failed to log activity", e); });
   }
 
   /* =========================================================
@@ -2048,7 +2054,7 @@
       // Creating/deleting the chat thread itself still logs -- a project-level event, unlike the
       // individual messages inside it (see renderActivityFeed's HIDDEN_ACTIVITY_TYPES, which
       // hides only the per-message `project_chat` type, not these two).
-      logActivity('project_chat_created', 'Created a group chat for "' + name + '"');
+      logActivity('project_chat_created', 'Created a group chat for "' + name + '"', { chatProject: name });
       selectChatProject(name);
     }).catch(function (err) {
       showToast('Could not create the group chat: ' + err.message, 'error');
@@ -7170,14 +7176,14 @@
       if (isEditing) {
         var changes = describeTaskChanges(oldTask, taskData);
         var changeSummary = changes.slice(0, 3).join(', ') + (changes.length > 3 ? ' (+' + (changes.length - 3) + ' more)' : '');
-        logActivity('task_updated', changes.length ? 'Updated "' + name + '": ' + changeSummary : 'Updated task "' + name + '"');
+        logActivity('task_updated', changes.length ? 'Updated "' + name + '": ' + changeSummary : 'Updated task "' + name + '"', { taskId: id });
         if (oldTask.assignee !== assignee) notifyAssignment({ id: id, name: name, deadline: deadline }, assignee);
         var oldInvolved = oldTask.involved || [];
         taskData.involved.forEach(function (n) {
           if (oldInvolved.indexOf(n) === -1) notifyAssignment({ id: id, name: name, deadline: deadline }, n, true);
         });
       } else {
-        logActivity('task_created', 'Added task "' + name + '"');
+        logActivity('task_created', 'Added task "' + name + '"', { taskId: id });
         notifyAssignment({ id: id, name: name, deadline: deadline }, assignee);
         taskData.involved.forEach(function (n) { notifyAssignment({ id: id, name: name, deadline: deadline }, n, true); });
       }
@@ -7271,7 +7277,7 @@
       taskCommentMentions.close();
       notifyOnComment(text, t);
       var snippet = text.length > 60 ? text.slice(0, 60) + '…' : text;
-      logActivity('task_comment', 'Commented on "' + (t ? t.name : editingTaskId) + '": "' + snippet + '"');
+      logActivity('task_comment', 'Commented on "' + (t ? t.name : editingTaskId) + '": "' + snippet + '"', { taskId: t ? t.id : editingTaskId });
     }).catch(function (err) {
       showToast('Could not add comment: ' + err.message, 'error');
     });
@@ -7312,7 +7318,7 @@
     list = list.slice();
     list.splice(idx, 1);
     updateDoc(doc(tasksCol, editingTaskId), { comments: list }).then(function () {
-      logActivity('task_comment', 'Removed a comment on "' + t.name + '": "' + snippet + '"');
+      logActivity('task_comment', 'Removed a comment on "' + t.name + '": "' + snippet + '"', { taskId: t.id });
     }).catch(function (err) {
       showToast('Could not remove comment: ' + err.message, 'error');
     });
@@ -7394,7 +7400,7 @@
     var patch = Object.assign({ status: newStatus, updatedAt: new Date().toISOString() }, effect.patch);
 
     updateDoc(doc(tasksCol, id), patch).then(function () {
-      logActivity('task_moved', 'Moved "' + t.name + '" from ' + (STATUS_LABELS[t.status] || t.status) + ' to ' + (STATUS_LABELS[newStatus] || newStatus));
+      logActivity('task_moved', 'Moved "' + t.name + '" from ' + (STATUS_LABELS[t.status] || t.status) + ' to ' + (STATUS_LABELS[newStatus] || newStatus), { taskId: t.id });
       if (effect.willFinishProject) celebrateProjectComplete(effect.projectName);
       else if (effect.enteringDone) spawnConfetti();
     }).catch(function (err) {
@@ -7968,7 +7974,7 @@
     batch.delete(doc(tasksCol, id));
     batch.commit().then(function () {
       showToast('Task archived', 'success');
-      logActivity('task_archived', 'Archived "' + t.name + '"');
+      logActivity('task_archived', 'Archived "' + t.name + '"', { taskId: t.id });
     }).catch(function (err) {
       showToast('Could not archive task: ' + err.message, 'error');
     });
@@ -7987,7 +7993,7 @@
     batch.delete(doc(archivedTasksCol, id));
     batch.commit().then(function () {
       showToast('Task restored', 'success');
-      logActivity('task_unarchived', 'Restored "' + t.name + '" from the archive');
+      logActivity('task_unarchived', 'Restored "' + t.name + '" from the archive', { taskId: t.id });
     }).catch(function (err) {
       showToast('Could not restore task: ' + err.message, 'error');
     });
@@ -9754,6 +9760,37 @@
   // -- confirmed directly to keep logging after a brief pass where it was excluded too.
   var HIDDEN_ACTIVITY_TYPES = { project_chat: true };
 
+  // Opening an Activity row. Active task -> its task window. Archived -> the Archived view,
+  // searched to that task (an archived task isn't edited in the task window). Deleted -> a toast.
+  function openActivityTarget(row) {
+    var taskId = row.getAttribute('data-activity-task');
+    var chatName = row.getAttribute('data-activity-chat');
+    if (chatName) { setView('chat'); selectChatProject(chatName); return; }
+    if (!taskId) return;
+    var live = tasks.find(function (x) { return x.id === taskId; });
+    if (live) { openTaskModal(live); return; }
+    withArchivedTasksReady(function () {
+      var arch = archivedTasks.find(function (x) { return x.id === taskId; });
+      if (!arch) { showToast('That task has since been deleted', 'info'); return; }
+      filters.search = arch.name;
+      persistFilters();
+      var input = document.getElementById('filter-search');
+      if (input) input.value = arch.name;
+      setView('archived');
+    });
+  }
+  document.getElementById('activity-feed').addEventListener('click', function (e) {
+    var row = e.target.closest('[data-activity-task], [data-activity-chat]');
+    if (row) openActivityTarget(row);
+  });
+  document.getElementById('activity-feed').addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    var row = e.target.closest('[data-activity-task], [data-activity-chat]');
+    if (!row) return;
+    e.preventDefault();
+    openActivityTarget(row);
+  });
+
   function renderActivityFeed() {
     var container = document.getElementById('activity-feed');
     var visible = activityLog.filter(function (a) { return !HIDDEN_ACTIVITY_TYPES[a.type]; });
@@ -9784,12 +9821,23 @@
       }
       var iconName = ACTIVITY_ICONS[a.type] || 'info';
       var iconClass = ACTIVITY_ICON_CLASS[a.type] || 'bg-zinc-200 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400';
-      html += '<div class="flex items-start gap-3 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card px-3.5 py-2.5">' +
+      // Clickable only when the entry says what it's about (taskId / chatProject, recorded from
+      // the change that added this) AND that thing can still be opened. Older entries and things
+      // with nothing to open (leave, departments, deadlines, imports) stay plain, so nothing looks
+      // like a link that isn't one. A task that has since been deleted is checked on click.
+      var linkAttr = '';
+      if (a.taskId) linkAttr = ' data-activity-task="' + escapeHtml(a.taskId) + '"';
+      else if (a.chatProject) {
+        var cdoc = projectDeadlineDoc(a.chatProject);
+        if (cdoc && Array.isArray(cdoc.chat)) linkAttr = ' data-activity-chat="' + escapeHtml(a.chatProject) + '"';
+      }
+      html += '<div' + linkAttr + ' class="flex items-start gap-3 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card px-3.5 py-2.5' + (linkAttr ? ' cursor-pointer hover:border-brand-300 dark:hover:border-brand-500/50 group' : '') + '"' + (linkAttr ? ' role="button" tabindex="0" title="' + (a.taskId ? 'Open this task' : 'Open this chat') + '"' : '') + '>' +
         '<span class="w-7 h-7 rounded-full flex items-center justify-center shrink-0 ' + iconClass + '">' + svgIcon(iconName, 'w-3.5 h-3.5') + '</span>' +
         '<div class="min-w-0 flex-1">' +
-          '<p class="text-sm font-medium text-zinc-700 dark:text-zinc-200">' + escapeHtml(a.summary) + '</p>' +
+          '<p class="text-sm font-medium text-zinc-700 dark:text-zinc-200' + (linkAttr ? ' group-hover:text-brand-700 dark:group-hover:text-brand-300' : '') + '">' + escapeHtml(a.summary) + '</p>' +
           '<p class="text-xs text-zinc-400 dark:text-zinc-500 mt-0.5">' + escapeHtml(a.user || 'unknown') + ' · ' + formatTimeOnly(a.at) + '</p>' +
         '</div>' +
+        (linkAttr ? svgIcon('chevronDown', 'w-4 h-4 shrink-0 self-center -rotate-90 text-zinc-300 dark:text-zinc-600 group-hover:text-brand-500') : '') +
       '</div>';
     });
     container.innerHTML = html;
@@ -10838,7 +10886,8 @@
   ========================================================= */
   var CHANGELOG = [
     { id: '2026-10-05d', date: '2026-10-05', items: [
-      { type: 'improved', title: 'Slimmer Timeline bars', text: 'Bars on the Timeline and WIP Meeting are thinner, so rows are easier to tell apart and the diamonds, overdue dots and leave stripes stand out.' }
+      { type: 'improved', title: 'Slimmer Timeline bars', text: 'Bars on the Timeline and WIP Meeting are thinner, so rows are easier to tell apart and the diamonds, overdue dots and leave stripes stand out.' },
+      { type: 'new', title: 'Click Activity to open what changed', text: 'Activity rows about a task or a chat now open it. This starts with changes made from today; older rows stay as they are.' }
     ] },
     { id: '2026-10-05c', date: '2026-10-05', items: [
       { type: 'new', title: 'New Updates tab', text: 'This page. The sidebar item lights up whenever something new ships, and settles back once you\'ve had a look.' }
@@ -12082,7 +12131,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T05:07:00Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T05:11:39Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
