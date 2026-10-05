@@ -228,6 +228,10 @@ tutorial should auto update on new features"** — so feature tours are generate
     project list with the ⋯ category menu, status updates and "+ Add entry"; the range picker folded into
     step 1), Chat (@mentions, pasting screenshots and pinning in the text, since a message only exists
     once a chat is open). Something that cannot be pointed at goes into a nearby step's text.
+  - **"Show me" on a New Updates item about a page opens that page and plays its page tour** (asked: "Show me
+    should go to the page itself"). An item counts as "about a page" when its `tourTarget` is that page's
+    sidebar link (`[data-view-btn="x"]`) and `PAGE_TOURS[x]` exists (`data-show-view`). Other items keep their
+    spotlight tour (e.g. Guided tours plays the welcome tour). The automatic what's-new popup is unchanged.
   - **Existing teammates never see page tours for existing pages**, so a new feature on an existing page
     also needs a what's-new tour: briefs got one via `tourTarget` on its CHANGELOG item.
   - Replay: profile menu → "Tour this page". Targets are each view's own containers/controls;
