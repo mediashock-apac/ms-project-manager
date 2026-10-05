@@ -3064,8 +3064,22 @@ Client contact / Key links columns).
   Activity as `project_category`. No rules change.
   - Decided with the user: **set by hand in WIP, anyone can change it**; **Content Marketing sits
     second as listed** — this replaced a name-matched "Mediashock LinkedIn always last" rule
-    shipped an hour earlier; **a lead still needs at least one open task to appear** (WIP has no
-    "add a project with no tasks" — offered and deferred as a bigger change).
+    shipped an hour earlier. "A lead needs at least one open task to appear" was the first
+    answer, and was reversed the same day once the sheet's Cold leads (a client + one line, no
+    tasks, no Drive folder) and Pending closing reports (all work done) were shown — see below.
+- **A categorised project stays on WIP with no open tasks** (`wipProjectsHtml` adds every
+  `projectDocs` entry with a valid `wipCategory`), which is what keeps Closing reports populated
+  after the work is done. **Setting Not sorted is how anything leaves WIP.**
+- **"+ Add entry"** (section header) adds a WIP-only entry: name, one-line note, category pills
+  (`wipAddEntryHtml`, `addWipEntry`). It is just a `projects` doc with `wipCategory` + `wipNote`
+  and no tasks; a name matching an existing project only categorises that project. **It never
+  reaches Board/Timeline/Projects/Chat**, because those list projects from tasks
+  (`allProjectNames`), and the WIP alerts/agenda only read `projectDocs` with a deadline AND
+  tasks. Logged to Activity. When a lead becomes a job, create the real project as usual and set
+  the lead entry to Not sorted.
+- **`wipNote`** — one line under a project's header ("Webinars", "Corporate video"), click to
+  edit (`wipProjectNoteHtml`); a project with no open tasks and no note shows "+ Add note".
+  Header reads no "0 open" for such entries.
 - **Collapse all / Expand all** in the By project section header (`data-wip-fold-all`,
   `wipProjectNamesShown`) folds or opens every project; it reads "Expand all" once all are folded.
 
