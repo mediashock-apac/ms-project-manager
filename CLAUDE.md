@@ -3005,11 +3005,23 @@ shows in both. Because of that, `createProjectChat` no longer resets `links` whe
 and `deleteProjectChat` removes messages only, not links. Decisions made with the user: **anyone on
 the team can add, edit or remove** (so no rules change — `projects` update only guards `chat`);
 **money columns (cost SGD/USD, PO, quotation, invoice) stay in the sheet** — add the sheet as a key
-link; **Lost Jobs stay in the sheet**. Latest 2 updates shown, older behind "Show N older"; an
-empty project shows one muted line of "+ Client contact · + Link · + Add update". One inline
+link; **Lost Jobs stay in the sheet**. One inline
 editor at a time (`wipEdit`), drafts in `wipDraft` and focus restored after each live re-render so
 someone else's save doesn't wipe what you're typing. Enter saves, Escape cancels. Not logged to
 Activity (routine traffic, same reasoning as chat messages).
+- **Shape after the first round of feedback**: a **Status strip** — its own band (brand tint +
+  3px brand left edge), because the first version sat in the same colour as the task rows and was
+  reported as having "no contrast". It shows the latest update only (`WIP_UPDATES_SHOWN` = 1,
+  older behind "Show N earlier"), and **clicking the update text edits it** (no hover-only pencil:
+  WIP runs on a shared screen). "No update yet" when empty.
+- **Client contact and links are behind "Contact & links (N)"**, on request ("no need to be shown
+  at this level, just accessible to Suits"). The button only renders for Suits members and admins
+  (`wipCanSeeDetails`: `myDepartments()` includes `suits`, or `isAdminUser()`). **Display only,
+  not a boundary** — the fields are on the team-readable project doc, and the links are also the
+  chat's Pinned links, visible to anyone who opens that chat. Open state `wipDetailsOpen`,
+  session-only.
+- **Collapse all / Expand all** in the By project section header (`data-wip-fold-all`,
+  `wipProjectNamesShown`) folds or opens every project; it reads "Expand all" once all are folded.
 
 Agenda mode — three sections, and the shape of them is where the design work is:
 
