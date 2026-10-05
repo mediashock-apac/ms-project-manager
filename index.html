@@ -432,6 +432,23 @@
   .app-container { max-width: 78rem; }
   @media (min-width: 1600px) { .app-container { max-width: min(92vw, 150rem); } }
 
+  /* ---------- toolbar filters: quiet at rest, highlighted when set ----------
+     Asked for from a header review. The four dropdowns used to be solid grey boxes even at their
+     defaults ("All priorities", "All projects", "Everyone", "Sort: Focus"), so the board looked
+     like it had four filters on when it had none. Now they are outlined at rest and filled with a
+     brand tint only when actually set, so what is narrowing the board is visible at a glance.
+     !important because the triggers carry Tailwind bg utilities from enhanceSelect/the markup. */
+  #toolbar-row .filter-pill { background: transparent !important; }
+  #toolbar-row .filter-pill:hover:not(:disabled) { background: #f4f4f5 !important; }
+  .dark #toolbar-row .filter-pill:hover:not(:disabled) { background: rgba(63, 63, 70, 0.6) !important; }
+  #toolbar-row .filter-pill.filter-pill-set { background: #fff1ec !important; border-color: #ffc4b0 !important; color: #b93816 !important; font-weight: 600; }
+  .dark #toolbar-row .filter-pill.filter-pill-set { background: rgba(255, 78, 32, 0.14) !important; border-color: rgba(255, 78, 32, 0.4) !important; color: #ff9d7e !important; }
+  /* Toolbar moved up into the header row on wide screens (placeToolbar). */
+  #toolbar-row.toolbar-inline { border-top: 0 !important; padding: 0 !important; flex: 1 1 auto; min-width: 0; }
+  /* Header stats that act as filters (overdue / high priority). */
+  .stat-chip[aria-pressed="true"] { background: #fff1ec; box-shadow: inset 0 0 0 1px #ffc4b0; }
+  .dark .stat-chip[aria-pressed="true"] { background: rgba(255, 78, 32, 0.14); box-shadow: inset 0 0 0 1px rgba(255, 78, 32, 0.4); }
+
   /* ---------- sidebar ---------- */
   /* Width lives in one CSS custom property, toggled by a single class on #sidebar itself --
      collapsing is a single rule to tune here, not a value computed and re-applied from JS on
@@ -442,6 +459,9 @@
   #sidebar.collapsed .sidebar-label { opacity: 0; pointer-events: none; position: absolute; }
   #sidebar.collapsed .view-toggle-btn { justify-content: center; }
   #sidebar.collapsed #sb-collapse-icon { transform: scaleX(-1); }
+  /* Teamspace button on the collapsed rail: icon centred (asked for directly; the hidden label and
+     chevron are position:absolute there, which left the icon hugging the left padding). */
+  #sidebar.collapsed #teamspace-trigger { justify-content: center; padding-left: 0; padding-right: 0; }
   /* The teamspace menu spans its wrapper (left-2 right-2), i.e. the sidebar's width. On the
      collapsed rail that is ~3rem, which cut every name to one letter and squeezed the selected one
      to nothing (reported from a screenshot). Collapsed, it opens beside the rail at a real width
@@ -481,6 +501,7 @@
     #sidebar.collapsed .sidebar-label { opacity: 1; pointer-events: auto; position: static; }
     #sidebar.collapsed .view-toggle-btn { justify-content: flex-start; }
     #sidebar.collapsed #teamspace-menu { left: 0.5rem; right: 0.5rem; top: auto; margin-top: 0.25rem; width: auto; }
+    #sidebar.collapsed #teamspace-trigger { justify-content: flex-start; padding-left: 0.625rem; padding-right: 0.625rem; }
     #sb-collapse-btn { display: none; }
   }
 
@@ -542,7 +563,7 @@
              otherwise read as two separate letters rather than one mark. -->
         <span class="text-white text-xs font-black tracking-tight leading-none select-none" aria-hidden="true">PM</span>
       </div>
-      <h1 class="sidebar-label text-sm font-bold tracking-[-0.01em] text-zinc-900 dark:text-white leading-none truncate">MS Project Manager</h1>
+      <h1 class="sidebar-label text-sm font-bold tracking-[-0.01em] text-zinc-900 dark:text-white leading-none truncate">Project Manager</h1>
     </div>
 
     <!-- Teamspace switcher. Sits between the brand row and the nav, where Notion puts its own
@@ -551,8 +572,8 @@
          same .sidebar-label mechanism every nav item uses. -->
     <div class="px-2 pt-2 shrink-0 relative">
       <button type="button" id="teamspace-trigger" data-tooltip="Teamspace" aria-haspopup="listbox" aria-expanded="false"
-              class="tooltip-right w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 text-sm font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700/60">
-        <svg class="w-4 h-4 shrink-0 text-zinc-400 dark:text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg>
+              class="tooltip-right w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg border border-zinc-300 dark:border-zinc-600 bg-zinc-50 dark:bg-zinc-700/50 text-sm font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700">
+        <svg class="w-4 h-4 shrink-0 text-zinc-500 dark:text-zinc-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg>
         <span id="teamspace-current" class="sidebar-label flex-1 text-left truncate">All teamspaces</span>
         <svg class="sidebar-label w-3.5 h-3.5 shrink-0 text-zinc-400 dark:text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
       </button>
@@ -730,24 +751,29 @@
          sidebar's fixed 64px: close enough to look accidental rather than aligned, and reported
          directly as needing to look neater. -->
     <div class="h-16 px-4 sm:px-6 flex items-center">
-      <div class="flex flex-wrap items-center gap-3 justify-between w-full">
-        <div class="flex items-center gap-3 min-w-0">
+      <div id="header-row-inner" class="flex flex-wrap items-center gap-3 justify-between w-full">
+        <div id="header-title-group" class="flex items-center gap-3 min-w-0">
           <button type="button" id="mobile-menu-btn" class="md:hidden inline-flex items-center justify-center w-9 h-9 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 shrink-0">
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
           </button>
           <h2 id="current-view-title" class="text-base font-bold text-zinc-900 dark:text-white truncate">Board</h2>
-          <div id="stats-bar" class="hidden lg:flex items-center gap-4 pl-3 ml-1 border-l border-zinc-200 dark:border-zinc-700 text-sm">
-            <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-zinc-400"></span><span id="stat-total" class="font-semibold text-zinc-700 dark:text-zinc-200">0</span><span class="text-zinc-500 dark:text-zinc-500">tasks</span></div>
-            <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-rose-500"></span><span id="stat-overdue" class="font-semibold text-zinc-700 dark:text-zinc-200">0</span><span class="text-zinc-500 dark:text-zinc-500">overdue</span></div>
-            <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-amber-500"></span><span id="stat-high" class="font-semibold text-zinc-700 dark:text-zinc-200">0</span><span class="text-zinc-500 dark:text-zinc-500">high priority</span></div>
-            <div class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span><span id="stat-done" class="font-semibold text-zinc-700 dark:text-zinc-200">0</span><span class="text-zinc-500 dark:text-zinc-500">completed</span></div>
+          <!-- Stats: no coloured dots (the amber "high priority" dot clashed with amber = Medium
+               everywhere else, and rose was already the overdue dot). Only a number that needs
+               attention is coloured: overdue in rose when above 0. Overdue and High priority are
+               buttons that filter the board (renderStats / the stat-chip handlers), and any stat
+               at 0 hides, so a calm day looks calm. -->
+          <div id="stats-bar" class="hidden lg:flex items-center gap-1 pl-3 ml-1 border-l border-zinc-200 dark:border-zinc-700 text-sm">
+            <span class="px-1.5 text-zinc-500 dark:text-zinc-400"><span id="stat-total" class="font-semibold text-zinc-700 dark:text-zinc-200">0</span> tasks</span>
+            <button type="button" id="stat-overdue-btn" aria-pressed="false" data-tooltip="Show only overdue tasks" class="stat-chip tooltip-top px-2 py-1 rounded-md text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"><span id="stat-overdue" class="font-semibold text-zinc-700 dark:text-zinc-200">0</span> overdue</button>
+            <button type="button" id="stat-high-btn" aria-pressed="false" data-tooltip="Show only high-priority tasks" class="stat-chip tooltip-top px-2 py-1 rounded-md text-zinc-500 dark:text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700"><span id="stat-high" class="font-semibold text-zinc-700 dark:text-zinc-200">0</span> high priority</button>
+            <span id="stat-done-wrap" class="px-1.5 text-zinc-500 dark:text-zinc-400"><span id="stat-done" class="font-semibold text-zinc-700 dark:text-zinc-200">0</span> completed</span>
           </div>
         </div>
 
-        <div class="flex items-center gap-2 flex-wrap justify-end ml-auto relative">
+        <div id="header-actions" class="flex items-center gap-2 flex-wrap justify-end ml-auto relative">
           <div id="digest-bell-wrap" class="hidden">
             <button id="btn-digest" title="This Week" class="relative inline-flex items-center justify-center w-9 h-9 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition">
-              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 7 2 2 4-4"></path><path d="m3 17 2 2 4-4"></path><line x1="13" y1="8" x2="21" y2="8"></line><line x1="13" y1="18" x2="21" y2="18"></line></svg>
               <span id="digest-badge" class="hidden absolute -top-1 -right-1 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">0</span>
             </button>
           </div>
@@ -826,7 +852,7 @@
            outrank that with order-first to actually render first, not just be numbered lower. -->
       <div class="relative w-full sm:w-64 order-2 sm:order-first">
         <svg class="w-4 h-4 text-zinc-400 dark:text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-        <input id="filter-search" type="text" placeholder="Search tasks, checklists, comments…" class="w-full pl-8 pr-3 py-2 text-sm text-ellipsis rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+        <input id="filter-search" type="text" placeholder="Search…" class="w-full pl-8 pr-3 py-2 text-sm text-ellipsis rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
       </div>
 
       <div id="filters-panel" class="hidden w-full space-y-2 sm:space-y-0 sm:contents order-3">
@@ -852,7 +878,7 @@
            registry so it behaves identically to every other header dropdown without a second
            set of handlers -- see the registration further down near the other filter wiring. -->
       <div id="filter-people-wrap" class="relative w-full sm:w-auto">
-        <button type="button" id="filter-people-trigger" class="w-full sm:w-auto flex items-center justify-between gap-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-white dark:hover:bg-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-2.5" aria-haspopup="true" aria-expanded="false">
+        <button type="button" id="filter-people-trigger" class="filter-pill w-full sm:w-auto flex items-center justify-between gap-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-white dark:hover:bg-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-2.5" aria-haspopup="true" aria-expanded="false">
           <span id="filter-people-label" class="truncate">Everyone</span>
           <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
         </button>
@@ -5488,7 +5514,7 @@
   // copies, so every consumer below overrides `assignees` with its OWN fresh `[]`; sharing this
   // literal instead would let one caller's array mutations quietly corrupt every other caller
   // that ever fell back to this default in the same page load).
-  var DEFAULT_FILTERS = { search: '', priority: '', project: '', assignees: [], sortBy: 'focus' };
+  var DEFAULT_FILTERS = { search: '', priority: '', project: '', assignees: [], sortBy: 'focus', overdueOnly: false };
 
   function loadFilters() {
     try {
@@ -5961,6 +5987,7 @@
       if (filters.priority && t.priority !== filters.priority) return false;
       if (filters.project && t.project !== filters.project) return false;
       if (filters.assignees.length && filters.assignees.indexOf(t.assignee) === -1) return false;
+      if (filters.overdueOnly && !dueUrgency(t).overdue) return false;
       if (q && !taskMatchesSearch(t, q)) return false;
       return true;
     });
@@ -7219,6 +7246,11 @@
     function sync() {
       var opt = select.options[select.selectedIndex];
       trigger.innerHTML = pillOptionHtml(select.value, opt ? opt.textContent : '');
+      // Toolbar filters only: outlined at their default (the first option), brand-tinted once set.
+      if (wrapper.closest('#toolbar-row')) {
+        trigger.classList.add('filter-pill');
+        trigger.classList.toggle('filter-pill-set', !!select.options.length && select.value !== select.options[0].value);
+      }
     }
 
     function items() {
@@ -8585,7 +8617,45 @@
     document.getElementById('stat-overdue').textContent = overdue;
     document.getElementById('stat-high').textContent = high;
     document.getElementById('stat-done').textContent = done;
+    // A zero hides, unless that stat is the filter currently on (so it can still be switched off).
+    var overdueBtn = document.getElementById('stat-overdue-btn');
+    var highBtn = document.getElementById('stat-high-btn');
+    var highOn = filters.priority === 'High';
+    overdueBtn.setAttribute('aria-pressed', filters.overdueOnly ? 'true' : 'false');
+    highBtn.setAttribute('aria-pressed', highOn ? 'true' : 'false');
+    overdueBtn.classList.toggle('hidden', !overdue && !filters.overdueOnly);
+    highBtn.classList.toggle('hidden', !high && !highOn);
+    document.getElementById('stat-done-wrap').classList.toggle('hidden', !done);
+    var overdueNum = document.getElementById('stat-overdue');
+    overdueNum.classList.toggle('text-rose-600', overdue > 0);
+    overdueNum.classList.toggle('dark:text-rose-400', overdue > 0);
+    overdueNum.classList.toggle('text-zinc-700', !overdue);
+    overdueNum.classList.toggle('dark:text-zinc-200', !overdue);
+    overdueBtn.setAttribute('data-tooltip', filters.overdueOnly ? 'Show all tasks again' : 'Show only overdue tasks');
+    highBtn.setAttribute('data-tooltip', highOn ? 'Show all priorities again' : 'Show only high-priority tasks');
+    placeToolbar();
   }
+
+  // The views a stat-chip filter actually narrows. From anywhere else, clicking one goes to the
+  // Board, so the click always visibly does something.
+  var STAT_FILTER_VIEWS = ['board', 'gantt', 'calendar', 'people'];
+  function afterStatFilterChange() {
+    persistFilters();
+    if (STAT_FILTER_VIEWS.indexOf(currentView) === -1) setView('board');
+    renderBoard(); renderCurrentSecondaryView(); renderFilterOptions(); renderStats();
+  }
+  document.getElementById('stat-overdue-btn').addEventListener('click', function () {
+    // Session-only on purpose: loadFilters() never restores it, so a forgotten "overdue only"
+    // can't quietly hide most of the board on tomorrow's visit.
+    filters.overdueOnly = !filters.overdueOnly;
+    afterStatFilterChange();
+  });
+  document.getElementById('stat-high-btn').addEventListener('click', function () {
+    filters.priority = filters.priority === 'High' ? '' : 'High';
+    document.getElementById('filter-priority').value = filters.priority;
+    filterPriorityPill.sync();
+    afterStatFilterChange();
+  });
 
   /* =========================================================
      RENDER: FOCUS OF THE DAY
@@ -10886,12 +10956,14 @@
     filterProjectPill.rebuild();
     renderPeopleFilterList();
 
-    var activeCount = [filters.search, filters.priority, filters.project].filter(Boolean).length + (filters.assignees.length ? 1 : 0);
+    var activeCount = [filters.search, filters.priority, filters.project, filters.overdueOnly].filter(Boolean).length + (filters.assignees.length ? 1 : 0);
     document.getElementById('btn-clear-filters').classList.toggle('hidden', !activeCount);
     var mobileBadge = document.getElementById('mobile-filters-badge');
     mobileBadge.textContent = activeCount;
     mobileBadge.classList.toggle('hidden', !activeCount);
     mobileBadge.classList.toggle('flex', !!activeCount);
+    document.getElementById('filter-people-trigger').classList.toggle('filter-pill-set', filters.assignees.length > 0);
+    placeToolbar();
   }
 
   /* =========================================================
@@ -12155,6 +12227,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-06j', date: '2026-10-06', items: [
+      { type: 'improved', title: 'A cleaner top bar', text: 'On a wide screen, search and filters now sit in the top bar instead of a row of their own, so every page has more room. Filters stay outlined until you set one, then turn orange, so you can always see what is narrowing the board. Click "overdue" or "high priority" at the top to show just those tasks; click again to show everything. This Week has its own checklist icon, the sidebar title now reads Project Manager, and the teamspace button stands out a little more.' }
+    ] },
     { id: '2026-10-06i', date: '2026-10-06', items: [
       { type: 'fixed', title: 'Teamspace menu on the slim sidebar', text: 'With the sidebar collapsed, the teamspace menu now opens beside it at full width, so every team name is readable.' }
     ] },
@@ -12981,14 +13056,15 @@
     if (!input) return;
     var searchable = SEARCHABLE_VIEWS.indexOf(currentView) !== -1;
     input.disabled = !searchable;
-    input.title = searchable ? '' : 'Search doesn\'t apply to ' + (VIEW_LABELS[currentView] || currentView);
-    input.placeholder = !searchable
-      ? 'Search doesn\'t apply here'
-      : (currentView === 'activity' ? 'Search activity…'
-        : currentView === 'chat' ? 'Search chats and messages…'
-        : currentView === 'projects' ? 'Search projects and their tasks…'
-        : currentView === 'people' ? 'Search people, departments, tasks…'
-        : 'Search tasks, checklists, comments…');
+    // Short placeholders (the long ones were cut off with an ellipsis in the box); the full scope
+    // of what each view's search matches lives in the tooltip instead.
+    var scope = currentView === 'activity' ? ['Search activity…', 'Searches the activity log']
+      : currentView === 'chat' ? ['Search chats…', 'Searches chat names and messages']
+      : currentView === 'projects' ? ['Search projects…', 'Searches project names and their tasks']
+      : currentView === 'people' ? ['Search people…', 'Searches people, departments and their tasks']
+      : ['Search…', 'Searches task names, projects, people, checklists and comments'];
+    input.title = searchable ? scope[1] : 'Search doesn\'t apply to ' + (VIEW_LABELS[currentView] || currentView);
+    input.placeholder = searchable ? scope[0] : 'Search doesn\'t apply here';
     input.classList.toggle('opacity-50', !searchable);
     input.classList.toggle('cursor-not-allowed', !searchable);
   }
@@ -13047,6 +13123,39 @@
   // nothing on screen to say so -- see the EVENTS -> WIP section header.
   var TOOLBAR_FULLY_HIDDEN_VIEWS = ['suggestions', 'wip', 'updates'];
 
+  /* On a wide screen the header row is mostly empty between the stats and the bell, and the
+     toolbar row below it is mostly empty on the left -- two full rows for one row of controls
+     (reported from a 4K screenshot). From TOOLBAR_INLINE_MIN up, the toolbar node is moved into
+     the header row between the stats and the actions, giving every page back ~50px. Moved as a
+     node (not CSS-positioned), so every id and listener comes along untouched.
+     Content-aware: if it doesn't fit on one line (a long project name in the Project pill, many
+     stats) it goes straight back to its own row. Called on resize, from setView, and whenever the
+     stats or the filter pills change width. */
+  var TOOLBAR_INLINE_MIN = 1600;
+  function placeToolbar() {
+    var row = document.getElementById('toolbar-row');
+    var inner = document.getElementById('header-row-inner');
+    var actions = document.getElementById('header-actions');
+    var header = row && row.closest('header');
+    if (!row || !inner || !actions || !header) return;
+    var inline = window.innerWidth >= TOOLBAR_INLINE_MIN;
+    if (inline && row.parentElement !== inner) {
+      inner.insertBefore(row, actions);
+      row.classList.add('toolbar-inline');
+    }
+    // Wrapped onto a second line = didn't fit. A hidden row (views with no toolbar) always fits.
+    if (inline && !row.classList.contains('hidden') && inner.offsetHeight > 56) inline = false;
+    if (!inline && row.parentElement === inner) {
+      header.appendChild(row);
+      row.classList.remove('toolbar-inline');
+    }
+  }
+  var placeToolbarTimer = null;
+  window.addEventListener('resize', function () {
+    clearTimeout(placeToolbarTimer);
+    placeToolbarTimer = setTimeout(placeToolbar, 100);
+  });
+
   function syncToolbarLayout() {
     var row = document.getElementById('toolbar-row');
     var fullyHidden = TOOLBAR_FULLY_HIDDEN_VIEWS.indexOf(currentView) !== -1;
@@ -13071,6 +13180,7 @@
       row.classList.toggle('justify-end', !center);
       row.classList.toggle('justify-center', center);
     }
+    placeToolbar();
   }
 
   document.querySelectorAll('.view-toggle-btn').forEach(function (btn) {
@@ -13248,7 +13358,7 @@
     filterPriorityPill.sync();
     document.getElementById('filter-project').value = '';
     filterProjectPill.sync();
-    renderBoard(); renderCurrentSecondaryView(); renderFilterOptions();
+    renderBoard(); renderCurrentSecondaryView(); renderFilterOptions(); renderStats();
   });
 
   /* =========================================================
@@ -14057,7 +14167,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T16:58:04Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T17:03:54Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

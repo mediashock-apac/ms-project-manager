@@ -2627,6 +2627,32 @@ Asked directly: "how can I categorize these items or make this side bar better?"
   which on the rail cut every name to one letter (reported from a screenshot). The mobile drawer
   resets it, since `collapsed` is ignored there.
 
+### Top bar (header review, 2026-10-06)
+
+Asked "what can be improved here?" against a 4K screenshot, then "build all seven".
+
+- **Toolbar joins the header row on wide screens** (`placeToolbar`, from `TOOLBAR_INLINE_MIN` 1600px). The
+  `#toolbar-row` node is *moved* into `#header-row-inner` before `#header-actions` (ids and listeners
+  travel with it) and gets `.toolbar-inline`. Content-aware: if `#header-row-inner` wraps
+  (`offsetHeight > 56`) it goes straight back to its own row. Called on resize (debounced), from
+  `syncToolbarLayout`, `renderStats` and `renderFilterOptions`. Below 1600px nothing changes.
+- **Stats have no coloured dots.** The amber "high priority" dot clashed with amber = Medium
+  everywhere else. Only the overdue number is coloured (rose, when above 0). Any stat at 0 hides.
+- **"overdue" and "high priority" are filter buttons** (`.stat-chip`, `aria-pressed`). High sets
+  `filters.priority`; overdue toggles `filters.overdueOnly`, which is **session-only** (`loadFilters`
+  never restores it), counts toward Clear filters, and is applied in `applyFilters`. From a view
+  that doesn't filter tasks, a click goes to the Board.
+- **Filters are outlined at rest, brand-tinted when set** (`.filter-pill`/`.filter-pill-set`, set by
+  `enhanceSelect`'s `sync()` for toolbar triggers only; "set" = not the first option). The People
+  trigger is toggled in `renderFilterOptions`. Before, four solid grey boxes looked like four filters on.
+- **This Week uses a checklist icon**, not the calendar glyph the Calendar page already uses.
+- **Sidebar title is "Project Manager"** (was "MS Project Manager", which reads as Microsoft Project);
+  `manifest.json` `short_name` too.
+- **Search placeholders are short** ("Search…", "Search people…"); the full scope of each view's
+  search is in the input's tooltip (`syncSearchAvailability`).
+- **Teamspace button**: light fill and a firmer border so it lifts off the sidebar; icon centred on
+  the collapsed rail (`#sidebar.collapsed #teamspace-trigger`).
+
 ### No mock/sample data
 
 There is deliberately **no sample or demo content anywhere in this app.** A `seedDemoData()`
