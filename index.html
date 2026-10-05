@@ -1103,8 +1103,13 @@
         </div>
       </div>
       <div id="wip-alerts" class="mb-4"></div>
-      <div id="wip-away-strip" class="mb-4"></div>
-      <div id="wip-projects"></div>
+      <!-- By project: projects on the left, the Away card in a narrow column on the right (stacks
+           below on narrow screens). Asked for directly, from a wide screen where the project rows
+           left most of their width empty. The column sticks while the project list scrolls. -->
+      <div id="wip-projects-wrap" class="grid grid-cols-1 min-[1400px]:grid-cols-[minmax(0,1fr)_19rem] gap-4 items-start">
+        <div id="wip-projects" class="min-w-0"></div>
+        <div id="wip-away-side" class="min-w-0 min-[1400px]:sticky min-[1400px]:top-0"></div>
+      </div>
       <div id="wip-agenda-body">
       <!-- min-w-0 on both columns: a grid track defaults to min-width:auto, so without it a long
            project name ("Bosch Building Technologies -- AIDC Infrastructure & Security" is a real
@@ -10957,8 +10962,8 @@
      screen (a task shows in every teamspace of the people on it). Asked for directly: "WIP should
      list everyone's leave." At this team's size the list stays short.
   --------------------------------------------------------- */
-  // Every leave period overlapping the window, soonest first. Shared by the Agenda's Away card and
-  // By project's one-line Away strip, so the two can't list different people.
+  // Every leave period overlapping the window, soonest first. The same Away card shows in Agenda
+  // (beside the day list) and in By project (a narrow sticky column beside the projects).
   function wipAwayRows(today, horizon) {
     var rows = [];
     teamPeople.forEach(function (person) {
@@ -10970,29 +10975,6 @@
       });
     });
     return rows.sort(function (a, b) { return a.start < b.start ? -1 : a.start > b.start ? 1 : a.name.localeCompare(b.name); });
-  }
-
-  // By project: who is away, as ONE wrapping line above the projects (asked for: "people away on
-  // leave should also be listed in WIP (By project)"). A line, not the Agenda's full card, for the
-  // same reason Needs a decision shrinks to one line here -- the projects are the meeting. Uses the
-  // 1/2/4-week window, the only thing those buttons do in this mode. "Everyone's in" is stated
-  // rather than the line vanishing, same as the Agenda card.
-  function wipAwayStripHtml(today, horizon) {
-    var rows = wipAwayRows(today, horizon);
-    var label = '<span class="shrink-0 text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Away · next ' + wipRangeDays + ' days</span>';
-    var body = rows.length
-      ? rows.map(function (r) {
-          var now = r.start <= today && r.end >= today;
-          var dates = formatShortDate(r.start) + (r.end !== r.start ? ' – ' + formatShortDate(r.end) : '');
-          return '<span class="inline-flex items-center gap-1.5 text-sm"' + (r.note ? ' title="' + escapeHtml(r.note) + '"' : '') + '>' +
-            avatarHtml(r.name, 'w-5 h-5 shrink-0', 'text-[9px]') +
-            '<span class="font-semibold text-zinc-800 dark:text-zinc-100">' + escapeHtml(r.name) + '</span>' +
-            '<span class="text-xs ' + (now ? 'font-semibold text-amber-700 dark:text-amber-300' : 'text-zinc-500 dark:text-zinc-400') + '">' + escapeHtml(now ? 'away now, back after ' + formatShortDate(r.end) : dates) + '</span>' +
-          '</span>';
-        }).join('')
-      : '<span class="text-sm text-zinc-400 dark:text-zinc-500">Everyone\'s in.</span>';
-    return '<div class="flex items-center gap-x-5 gap-y-2 flex-wrap px-4 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800">' +
-      label + body + '</div>';
   }
 
   function wipAwayHtml(today, horizon) {
@@ -11790,10 +11772,8 @@
     // Needs a decision stays on top in both modes -- it's short, and it's the list that is meant to
     // interrupt the walkthrough. Everything else belongs to one mode or the other.
     var byProject = wipMode === 'projects';
-    document.getElementById('wip-projects').classList.toggle('hidden', !byProject);
-    var awayStrip = document.getElementById('wip-away-strip');
-    awayStrip.classList.toggle('hidden', !byProject);
-    if (byProject) awayStrip.innerHTML = wipAwayStripHtml(today, horizon);
+    document.getElementById('wip-projects-wrap').classList.toggle('hidden', !byProject);
+    if (byProject) document.getElementById('wip-away-side').innerHTML = wipAwayHtml(today, horizon);
     document.getElementById('wip-agenda-body').classList.toggle('hidden', byProject);
     if (byProject) {
       // Keep focus in an open editor across the re-render, caret at the end.
@@ -11833,7 +11813,7 @@
   ========================================================= */
   var CHANGELOG = [
     { id: '2026-10-05v', date: '2026-10-05', items: [
-      { type: 'new', title: 'Who\'s away, in the By project view', text: 'WIP Meeting\'s By project view now shows everyone on leave in one line above the projects, with their dates. The 1 / 2 / 4 week buttons set how far ahead it looks.' }
+      { type: 'new', title: 'Who\'s away, in the By project view', text: 'WIP Meeting\'s By project view now lists everyone on leave in an Away panel beside the projects (below them on smaller screens), with their dates. The 1 / 2 / 4 week buttons set how far ahead it looks.' }
     ] },
     { id: '2026-10-05u', date: '2026-10-05', items: [
       { type: 'new', title: 'Deliverables, status and next steps for leads', text: 'Entries in WIP Meeting that have no tasks yet, like a hot or cold lead, can now list their deliverables without an owner or deadline. Each deliverable has its own status and next step, like a row of the WIP sheet. Use "+ Deliverable" under the entry.' },
@@ -13150,7 +13130,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T10:42:31Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T10:44:41Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
