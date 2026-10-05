@@ -442,6 +442,11 @@
   #sidebar.collapsed .sidebar-label { opacity: 0; pointer-events: none; position: absolute; }
   #sidebar.collapsed .view-toggle-btn { justify-content: center; }
   #sidebar.collapsed #sb-collapse-icon { transform: scaleX(-1); }
+  /* The teamspace menu spans its wrapper (left-2 right-2), i.e. the sidebar's width. On the
+     collapsed rail that is ~3rem, which cut every name to one letter and squeezed the selected one
+     to nothing (reported from a screenshot). Collapsed, it opens beside the rail at a real width
+     instead, the way the profile menu already does. Reset for the mobile drawer below. */
+  #sidebar.collapsed #teamspace-menu { left: calc(100% + 0.25rem); right: auto; top: 0.5rem; margin-top: 0; width: 13rem; }
 
   /* Nav item coloring lives here instead of the pile of individually-toggled Tailwind utility
      classes the old horizontal tab row used (bg-white/shadow-card/text-brand-700/etc., toggled
@@ -475,6 +480,7 @@
     #app.sidebar-open #sidebar { transform: translateX(0); }
     #sidebar.collapsed .sidebar-label { opacity: 1; pointer-events: auto; position: static; }
     #sidebar.collapsed .view-toggle-btn { justify-content: flex-start; }
+    #sidebar.collapsed #teamspace-menu { left: 0.5rem; right: 0.5rem; top: auto; margin-top: 0.25rem; width: auto; }
     #sb-collapse-btn { display: none; }
   }
 
@@ -12149,6 +12155,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-06i', date: '2026-10-06', items: [
+      { type: 'fixed', title: 'Teamspace menu on the slim sidebar', text: 'With the sidebar collapsed, the teamspace menu now opens beside it at full width, so every team name is readable.' }
+    ] },
     { id: '2026-10-06h', date: '2026-10-06', items: [
       { type: 'improved', title: 'A tidier sidebar', text: 'Pages are now grouped under Work, Team, Meetings and History. New Updates and Suggestions sit at the bottom by your name, and Export and Import moved into your profile menu. Projects has a folder icon, and Timeline has its own bar-chart icon. When there are unread updates, New Updates turns orange with a count instead of looking like the page you are on.' }
     ] },
@@ -14048,7 +14057,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T16:53:14Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T16:58:04Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

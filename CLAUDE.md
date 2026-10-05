@@ -2622,6 +2622,10 @@ Asked directly: "how can I categorize these items or make this side bar better?"
   exactly like `.view-toggle-btn.active` ("is that the page I'm on?"). Still prominent, as
   originally asked, via orange label text, the pulsing count and the ringing megaphone; just not
   a background.
+- **On the collapsed rail, the teamspace menu opens BESIDE the rail at 13rem** (`#sidebar.collapsed
+  #teamspace-menu` in the styles). It spans its wrapper (`left-2 right-2`), i.e. the sidebar's width,
+  which on the rail cut every name to one letter (reported from a screenshot). The mobile drawer
+  resets it, since `collapsed` is ignored there.
 
 ### No mock/sample data
 
