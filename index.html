@@ -10913,6 +10913,7 @@
      no clicks. Fold/expand state is session-only.
   --------------------------------------------------------- */
   var wipMode = 'projects';       // opens on By project for everyone; deliberately not persisted
+  var wipAlertsOpen = false;      // By project mode: Needs a decision collapsed to one line until clicked
   var wipProjectFolded = {};
   var wipStepsExpanded = {};
   var WIP_STEPS_SHOWN = 3;
@@ -11008,6 +11009,11 @@
       renderWipView();
     }
   });
+  document.getElementById('wip-alerts').addEventListener('click', function (e) {
+    if (!e.target.closest('[data-wip-alerts-toggle]')) return;
+    wipAlertsOpen = !wipAlertsOpen;
+    renderWipView();
+  });
   document.querySelectorAll('[data-wip-mode]').forEach(function (btn) {
     btn.addEventListener('click', function () { wipMode = btn.getAttribute('data-wip-mode'); renderWipView(); });
   });
@@ -11040,13 +11046,31 @@
       ' · next ' + wipRangeDays + ' days';
 
     var alerts = wipAlerts(open, today, horizon, scopedProjects);
+    // By project mode: Needs a decision shrinks to ONE line at the top ("4 items need a decision",
+    // with a count per kind), opened on click. Asked for directly: most of its items belong to a
+    // project and come up again in the walkthrough, so in full it duplicated them and pushed the
+    // projects down -- but moving it to the bottom risked it being skipped. Agenda mode keeps the
+    // full list, since there it IS the first item on the agenda. Open state is session-only.
+    if (wipMode === 'projects' && !wipAlertsOpen) {
+      var kinds = {};
+      alerts.forEach(function (a) { kinds[a.kind] = (kinds[a.kind] || 0) + 1; });
+      document.getElementById('wip-alerts').innerHTML = alerts.length
+        ? '<button type="button" data-wip-alerts-toggle class="w-full flex items-center gap-2 flex-wrap px-4 py-2.5 rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 text-left hover:border-amber-300 dark:hover:border-amber-500/50">' +
+            svgIcon('chevronDown', 'w-3.5 h-3.5 shrink-0 -rotate-90 text-amber-600 dark:text-amber-400') +
+            '<span class="text-sm font-semibold text-amber-800 dark:text-amber-200">' + alerts.length + ' item' + (alerts.length === 1 ? '' : 's') + ' need' + (alerts.length === 1 ? 's' : '') + ' a decision</span>' +
+            '<span class="text-xs text-amber-700/80 dark:text-amber-300/80">' + Object.keys(kinds).map(function (k) { return k + ' ' + kinds[k]; }).join(' · ') + '</span>' +
+          '</button>'
+        : '<p class="px-4 py-2 text-sm text-zinc-400 dark:text-zinc-500">Nothing needs a decision right now.</p>';
+    } else {
+    var hideBtn = wipMode === 'projects' ? '<button type="button" data-wip-alerts-toggle class="ml-auto text-xs font-semibold text-zinc-400 hover:text-brand-600 dark:hover:text-brand-400">Hide</button>' : '';
     document.getElementById('wip-alerts').innerHTML = alerts.length
       ? wipSectionHtml('Needs a decision', alerts.length,
-          '<div class="divide-y divide-zinc-100 dark:divide-zinc-700">' + alerts.map(wipAlertRowHtml).join('') + '</div>')
+          '<div class="divide-y divide-zinc-100 dark:divide-zinc-700">' + alerts.map(wipAlertRowHtml).join('') + '</div>', hideBtn)
       // Rendered rather than hidden when empty: "nothing is at risk" is itself a result the
       // meeting wants stated, and a section that silently vanishes reads as a loading bug.
       : wipSectionHtml('Needs a decision', 0,
-          wipEmptyHtml('Nothing overdue, clashing with leave, or stuck in review.'));
+          wipEmptyHtml('Nothing overdue, clashing with leave, or stuck in review.'), hideBtn);
+    }
 
     // Needs a decision stays on top in both modes -- it's short, and it's the list that is meant to
     // interrupt the walkthrough. Everything else belongs to one mode or the other.
@@ -11083,6 +11107,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-05k', date: '2026-10-05', items: [
+      { type: 'improved', title: 'Shorter top of WIP Meeting', text: 'In the By project view, Needs a decision is now one line at the top saying how many items there are. Click it to see them.' }
+    ] },
     { id: '2026-10-05j', date: '2026-10-05', items: [
       { type: 'improved', title: 'WIP Meeting is the same for everyone', text: 'WIP Meeting now shows every team\'s projects, whichever team you\'ve picked in the sidebar, so everyone in the meeting sees the same screen.' }
     ] },
@@ -12348,7 +12375,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T06:49:56Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T06:53:15Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

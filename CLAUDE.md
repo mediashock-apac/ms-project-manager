@@ -2989,8 +2989,12 @@ everyone"). Each project (open work in the teamspace, ordered by soonest open de
 last) lists its open tasks by deadline with owner, status and due/overdue, and under each task its
 open checklist steps (the sheet's "Next steps") with owner and date, capped at `WIP_STEPS_SHOWN` (3)
 with "+N more". Projects can be folded (`wipProjectFolded`, session-only, start open). Done tasks are
-hidden. **Needs a decision stays on top in both modes**; the day list, Away and the timeline are the
-**Agenda** mode. Status history and the sheet's commercial Notes column are not built yet — they
+hidden. **Needs a decision stays on top in both modes, but in By project it is shrunk to one line**
+("4 items need a decision · Overdue 2 · Behind 1 …", amber, click to open, "Hide" to close;
+`wipAlertsOpen`, session-only). Chosen over leaving it in full (it duplicated items the project
+walkthrough covers anyway and pushed the projects down) and over moving it to the bottom (easy to
+skip; crunch and leave-clash items appear nowhere else). Agenda mode keeps the full list, since
+there it is the first agenda item. The day list, Away and the timeline are the **Agenda** mode. Status history and the sheet's commercial Notes column are not built yet — they
 wait on whether notes are confidential and who writes status updates.
 
 Agenda mode — three sections, and the shape of them is where the design work is:
