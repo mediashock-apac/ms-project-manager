@@ -2684,13 +2684,14 @@ version 1 first but I want to be able to revert cleanly if it is not for me."
   any task in the project) that's ticked shows green, a past date whose step isn't ticked shows LATE in
   rose, a past date with no matching step is just grey. Shipped first as "past = green", which made an
   overdue step look done.
-- **Dates do NOT flow into checklists for now (`BRIEF_STEPS_ENABLED = false`).** Asked: "should key dates
-  placed in briefs flow into checklists? I don't want information to be duplicated or go stale". A two-way
-  linked sync was proposed and declined as too complicated and too sticky to revert. Agreed plan instead:
-  keep the brief's Key dates as Suits' timeline only, because everyone currently writes their own task
-  checklists. Later, once Suits are used to briefs and take over creating checklist steps, flip the switch
-  to bring the copy option back (probably Suits-only). The code below stays in place for that.
-- **(Behind `BRIEF_STEPS_ENABLED`.) Key dates become checklist steps** on a chosen task in the project, matched by step name, so saving
+- **Dates into checklists: Suits and admins only, unticked by default** (`briefStepsAllowed()`). Asked: "should
+  key dates placed in briefs flow into checklists? I don't want information to be duplicated or go stale".
+  A two-way linked sync was proposed and declined as too complicated and too sticky to revert. It was then
+  hidden entirely (everyone writes their own checklists), which raised "I'm also worried it may get lost
+  or forgotten if we hide it". Settled on: visible to Suits only, off unless ticked, so nothing is
+  duplicated by default; plus a Google Calendar reminder (about 6 Nov 2026) to review it with Suits and
+  decide whether it becomes standard. `BRIEF_STEPS_ENABLED = false` hides it from everyone.
+- **(Suits only, when ticked.) Key dates become checklist steps** on a chosen task in the project, matched by step name, so saving
   again updates the date and person instead of duplicating. Steps are never deleted. **If that task is
   open in the task window, the steps go into its checklist instead of the database**, so the task's own
   Save can't write the older list back over them.
@@ -2711,7 +2712,8 @@ version 1 first but I want to be able to revert cleanly if it is not for me."
 1. **Switch it off:** set `BRIEFS_ENABLED = false` in the "CREATIVE BRIEFS" section of `index.html`, bump
    the build version as usual, and ship. Every button disappears and nothing else changes. Verified with
    the switch off: no buttons anywhere, no errors.
-2. **Remove it entirely:** `git revert`, newest first, "Creative briefs: dates stay in the brief for now",
+2. **Remove it entirely:** `git revert`, newest first, "Creative briefs: checklist option for Suits only",
+   then "Creative briefs: dates stay in the brief for now",
    then "Creative briefs: key-date status from the checklist", then
    the commit titled "Creative briefs". It was shipped on its own
    on purpose: the section, three call sites each commented "see CREATIVE BRIEFS", one activity icon, the
