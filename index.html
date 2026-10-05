@@ -5302,6 +5302,9 @@
     users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>',
     arrowRight: '<line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline>',
     message: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>',
+    // Speech bubble with a plus: "add an update" (WIP's empty task-status slot). A bare plus there
+    // read as nothing in particular next to the due date.
+    messagePlus: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path><line x1="12" y1="7" x2="12" y2="13"></line><line x1="9" y1="10" x2="15" y2="10"></line>',
     grip: '<circle cx="9" cy="6" r="1"></circle><circle cx="9" cy="12" r="1"></circle><circle cx="9" cy="18" r="1"></circle><circle cx="15" cy="6" r="1"></circle><circle cx="15" cy="12" r="1"></circle><circle cx="15" cy="18" r="1"></circle>',
     copy: '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>',
     user: '<circle cx="12" cy="8" r="4"></circle><path d="M4 20c0-4 4-6 8-6s8 2 8 6"></path>',
@@ -11401,7 +11404,7 @@
   function wipTaskStatusHtml(t) { return wipStatusBandHtml(t.id, taskStatusList(t)); }
   function wipAddStatusIconHtml(key) {
     return '<button type="button" data-wip-act="add-status" data-project="' + escapeHtml(key) + '" data-tooltip="Add status" aria-label="Add status" class="tooltip-top p-0.5 rounded text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-zinc-100 dark:hover:bg-zinc-700">' +
-      svgIcon('plus', 'w-4 h-4') + '</button>';
+      svgIcon('messagePlus', 'w-4 h-4') + '</button>';
   }
 
   // Info block under a project's header: owner (Pitches / leads / Closing reports only), notes,
@@ -11968,6 +11971,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-05za', date: '2026-10-05', items: [
+      { type: 'improved', title: 'Clearer "Add status" button', text: 'In WIP Meeting, the button for adding a status to a task is now a speech bubble with a plus, instead of a plain +.' }
+    ] },
     { id: '2026-10-05z', date: '2026-10-05', items: [
       { type: 'improved', title: 'See what a teammate just changed', text: 'When someone else edits or moves a task while you have the board open, that task briefly glows orange on the Board and in WIP Meeting, so you can spot what changed.' },
       { type: 'improved', title: 'A "Saved" tick in WIP Meeting', text: 'Statuses, notes, next steps, deliverables, contacts and links in WIP Meeting save on their own. A small green "Saved" now appears beside them so you know it worked.' },
@@ -13303,7 +13309,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T14:57:52Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T15:03:34Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

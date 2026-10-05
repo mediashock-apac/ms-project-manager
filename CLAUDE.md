@@ -3055,7 +3055,7 @@ Client contact / Key links columns).
     — the contrast asked for after the first version blended into the rows), older lines behind
     "Show N earlier" (`WIP_UPDATES_SHOWN` = 1), "+ Update" for a newer line. **Clicking the text
     edits it** (no hover-only pencil: WIP runs on a shared screen).
-  - A task with none shows a small grey "+" icon (`wipAddStatusIconHtml`, tooltip "Add status") at
+  - A task with none shows a small grey speech-bubble-with-plus icon (`wipAddStatusIconHtml`, `ICONS.messagePlus`, tooltip "Add status"; a bare "+" was reported as not intuitive) at
     the end of its line, in a fixed `w-6` slot kept even when empty so the due-date column stays
     aligned. It was the words "+ Status" on every row and was reported as messy — a column of
     identical words is the loudest thing on screen for what is only an empty slot. Text
