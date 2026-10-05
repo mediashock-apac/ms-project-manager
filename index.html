@@ -1972,6 +1972,63 @@
       logActivity('project_category', key ? 'Moved ' + name + ' to ' + wipCategoryLabel(key) : 'Cleared the category of ' + name);
     }).catch(function (err) { showToast('Could not save the category: ' + err.message, 'error'); });
   }
+  // CLIENT COLOURS -- the "[Client]" part of a project name is highlighted, same client = same
+  // colour (asked for directly: "these are client names"). Only the bracket is tinted, never the
+  // whole row, so the colour can only mean "which client".
+  // Colours are handed out in the order clients first appeared on the board (earliest task
+  // createdAt), not by hashing the name: with ~6 clients a hash into 10 hues almost always gives
+  // two clients the same colour, which would make the one thing this signal says wrong. A new
+  // client takes the next free colour and existing ones keep theirs. Past CLIENT_PALETTE.length
+  // clients, colours repeat. A client only in archived work isn't in the map; it falls back to
+  // a name hash.
+  var CLIENT_PALETTE = [
+    'bg-sky-100 text-sky-800 dark:bg-sky-500/20 dark:text-sky-200',
+    'bg-fuchsia-100 text-fuchsia-800 dark:bg-fuchsia-500/20 dark:text-fuchsia-200',
+    'bg-teal-100 text-teal-800 dark:bg-teal-500/20 dark:text-teal-200',
+    'bg-indigo-100 text-indigo-800 dark:bg-indigo-500/25 dark:text-indigo-200',
+    'bg-lime-100 text-lime-800 dark:bg-lime-500/20 dark:text-lime-200',
+    'bg-pink-100 text-pink-800 dark:bg-pink-500/20 dark:text-pink-200',
+    'bg-cyan-100 text-cyan-800 dark:bg-cyan-500/20 dark:text-cyan-200',
+    'bg-yellow-100 text-yellow-800 dark:bg-yellow-500/20 dark:text-yellow-200',
+    'bg-violet-100 text-violet-800 dark:bg-violet-500/25 dark:text-violet-200',
+    'bg-blue-100 text-blue-800 dark:bg-blue-500/25 dark:text-blue-200'
+  ];
+  var CLIENT_BRACKET_RE = /\[([^\]]+)\]/g;
+  function clientKey(client) { return String(client || '').replace(/\s+/g, '').toLowerCase(); }
+  var clientColorCache = { src: null, map: {} };
+  function clientColorClass(client) {
+    if (clientColorCache.src !== tasks) {
+      var first = {};
+      tasks.forEach(function (t) {
+        var m = /\[([^\]]+)\]/.exec(t.project || '');
+        if (!m) return;
+        var k = clientKey(m[1]), at = t.createdAt || t.startDate || '9999';
+        if (!(k in first) || at < first[k]) first[k] = at;
+      });
+      var map = {};
+      Object.keys(first).sort(function (a, b) {
+        return first[a] !== first[b] ? (first[a] < first[b] ? -1 : 1) : a.localeCompare(b);
+      }).forEach(function (k, i) { map[k] = CLIENT_PALETTE[i % CLIENT_PALETTE.length]; });
+      clientColorCache = { src: tasks, map: map };
+    }
+    var key = clientKey(client);
+    if (clientColorCache.map[key]) return clientColorCache.map[key];
+    var h = 0;
+    for (var i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+    return CLIENT_PALETTE[h % CLIENT_PALETTE.length];
+  }
+  // Escaped project name with each "[Client]" wrapped in its colour. Use in place of escapeHtml(name).
+  function projectNameHtml(name) {
+    var s = String(name || ''), out = '', last = 0, m;
+    CLIENT_BRACKET_RE.lastIndex = 0;
+    while ((m = CLIENT_BRACKET_RE.exec(s))) {
+      out += escapeHtml(s.slice(last, m.index)) +
+        '<span class="px-1 rounded ' + clientColorClass(m[1]) + '">' + escapeHtml(m[0]) + '</span>';
+      last = m.index + m[0].length;
+    }
+    return out + escapeHtml(s.slice(last));
+  }
+
   function setProjectClientContact(name, value) {
     return ensureProjectDoc(name).then(function (id) {
       return updateDoc(doc(projectsCol, id), { clientContact: value || null });
@@ -8788,7 +8845,7 @@
         '<div class="min-w-0">' +
           // text-sm, not text-xs -- reported directly ("make the project title slightly bigger
           // so it is easier to identify and discern") against a screenshot of this exact badge.
-          '<p class="min-w-0 mb-0.5"><span data-tooltip="' + escapeHtml(t.project) + '" class="tooltip-top inline-block max-w-full truncate align-bottom text-sm font-bold text-zinc-800 dark:text-zinc-100">' + escapeHtml(t.project) + '</span></p>' +
+          '<p class="min-w-0 mb-0.5"><span data-tooltip="' + escapeHtml(t.project) + '" class="tooltip-top inline-block max-w-full truncate align-bottom text-sm font-bold text-zinc-800 dark:text-zinc-100">' + projectNameHtml(t.project) + '</span></p>' +
           // zinc-500 / dark:zinc-400 -- the WIP timeline's original shade, preferred over white on direct
           // request. (dark:zinc-500 was reported as too dim earlier; zinc-400 is a step lighter.)
           '<p class="flex items-center gap-1.5 min-w-0 text-xs text-zinc-500 dark:text-zinc-400">' + ganttAvatarHtml(t.assignee, 'w-4 h-4', 'text-[8px]') + '<span class="truncate">' + escapeHtml(t.name) + '</span></p>' +
@@ -10747,7 +10804,7 @@
         // a WIP meeting exists to protect.
         return '<div class="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-brand-50 dark:bg-brand-500/10 border border-brand-200 dark:border-brand-500/25">' +
           '<span class="shrink-0 text-[10px] font-bold uppercase tracking-wide text-brand-700 dark:text-brand-300">Project due</span>' +
-          '<span class="min-w-0 text-sm font-bold text-zinc-800 dark:text-zinc-100 break-words">' + escapeHtml(name) + '</span>' +
+          '<span class="min-w-0 text-sm font-bold text-zinc-800 dark:text-zinc-100 break-words">' + projectNameHtml(name) + '</span>' +
         '</div>';
       }).join('');
 
@@ -10772,7 +10829,7 @@
             '</span>' +
             // Still hidden on phones: a wrapped folder name costs two or three lines at that
             // width, and the phone read is "what is due", not "where the files live".
-            '<span class="hidden sm:block text-xs text-zinc-400 dark:text-zinc-500 break-words">' + escapeHtml(t.project) + '</span>' +
+            '<span class="hidden sm:block text-xs text-zinc-400 dark:text-zinc-500 break-words">' + projectNameHtml(t.project) + '</span>' +
           '</span>' +
         '</button>';
       }).join('');
@@ -10956,7 +11013,7 @@
         '<div class="shrink-0 px-3 py-1.5 min-w-0 border-r border-zinc-100 dark:border-zinc-700 flex items-center gap-2" style="width:' + LABEL_W + ';">' +
           ganttExpandToggleHtml(t) +
           '<div class="min-w-0">' +
-          '<p class="min-w-0 mb-0.5"><span data-tooltip="' + escapeHtml(t.project) + '" class="tooltip-top inline-block max-w-full truncate align-bottom text-sm font-bold text-zinc-800 dark:text-zinc-100">' + escapeHtml(t.project) + '</span></p>' +
+          '<p class="min-w-0 mb-0.5"><span data-tooltip="' + escapeHtml(t.project) + '" class="tooltip-top inline-block max-w-full truncate align-bottom text-sm font-bold text-zinc-800 dark:text-zinc-100">' + projectNameHtml(t.project) + '</span></p>' +
           '<p class="text-xs text-zinc-500 dark:text-zinc-400 truncate">' + escapeHtml(t.assignee) + ' · ' + escapeHtml(t.name) + '</p>' +
           '</div>' +
         '</div>' +
@@ -11265,7 +11322,7 @@
         '<div class="flex items-stretch bg-zinc-50 dark:bg-zinc-700/40">' +
           '<button type="button" data-wip-fold="' + escapeHtml(name) + '" aria-expanded="' + !folded + '" class="min-w-0 flex-1 flex items-center gap-2 px-4 py-2.5 text-left hover:bg-zinc-100 dark:hover:bg-zinc-700/70">' +
             svgIcon('chevronDown', 'w-3.5 h-3.5 shrink-0 text-zinc-400 transition-transform' + (folded ? ' -rotate-90' : '')) +
-            '<span class="min-w-0 flex-1 text-sm font-bold text-zinc-800 dark:text-zinc-100 break-words">' + escapeHtml(name || 'No project') + '</span>' +
+            '<span class="min-w-0 flex-1 text-sm font-bold text-zinc-800 dark:text-zinc-100 break-words">' + (name ? projectNameHtml(name) : 'No project') + '</span>' +
             '<span class="shrink-0 text-xs text-zinc-500 dark:text-zinc-400">' + list.length + ' open' +
               (due ? ' · ' + (own ? 'Project due ' : 'Due ') + escapeHtml(formatShortDate(due)) : '') + '</span>' +
           '</button>' +
@@ -11478,6 +11535,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-05q', date: '2026-10-05', items: [
+      { type: 'new', title: 'Client names in colour', text: 'The client name in square brackets in a project name, like [Google] or [Bosch], is now highlighted in WIP Meeting and on the Timeline. The same client always has the same colour, so you can spot all of one client\'s work at a glance.' }
+    ] },
     { id: '2026-10-05p', date: '2026-10-05', items: [
       { type: 'new', title: 'WIP Meeting grouped by category', text: 'Projects in WIP Meeting are now grouped as Active Jobs, Content Marketing, Pitches, Hot leads, Cold leads and Closing reports. Click "Set category" on a project to place it; projects without one wait under Not sorted at the bottom. Anyone can change a category, and changes show in Activity.' }
     ] },
@@ -12764,7 +12824,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T09:59:04Z";
+  var CURRENT_BUILD_VERSION = "2026-10-05T10:03:00Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

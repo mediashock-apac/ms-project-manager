@@ -2556,8 +2556,17 @@ client-side domain check in `isAllowedEmail` is UX only, not enforcement):
         directly what the colours meant, then agreed to remove them: 8 hashed hues across far
         more projects than that meant two rows matching did NOT mean the same project (three
         different projects showed in near-identical pink), and the pills competed with the bars'
-        priority/status colours next to them. Colouring by `[Client]` was considered and rejected —
-        most projects are `[Google]`, so nearly every row would match. Chat avatars keep their
+        priority/status colours next to them. Colouring by `[Client]` was considered and rejected at
+        the time — most projects are `[Google]`, so nearly every row would match. **Later asked for
+        directly and built** ("highlight them in different colours and same text means same colour.
+        These are client names"): `projectNameHtml(name)` tints only the `[Client]` part, never the
+        row, on WIP (By project headers, agenda rows, WIP timeline labels) and the Timeline label.
+        That fixes what was wrong before — same colour now really does mean same client. Colours
+        are assigned by the order clients first appeared (earliest active-task `createdAt`), not by
+        hashing, because a hash of ~6 clients into 10 hues almost always collides; client keys
+        ignore case and spaces ("Little Paddington" = "LittlePaddington"). `CLIENT_PALETTE` avoids
+        rose/amber/emerald/purple/orange, which already mean overdue/decision/done/review/brand.
+        Not yet on Board, Projects, Chat, Calendar or Focus. Chat avatars keep their
         hashed colour (`PROJECT_AVATAR_PALETTE`): a filled circle needs some colour, and nobody
         reads meaning into it. History of the earlier two designs, kept for the reasoning:
       - `projectColor(t.project)` **also went through two designs.** The first gave each row a
