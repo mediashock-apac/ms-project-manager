@@ -3574,8 +3574,10 @@ their week into a cell before the Monday meeting. Asked: "Is there a way to inte
   back into People.**
 - **Filling it in is one tap per project.** `openWeeklyEditor` lists your open projects from the
   board (tasks you own or are involved in, plus checklist steps assigned to you, via
-  `weeklyBoardProjects`), each with five statuses: On track, Waiting on client, Waiting on us
-  (added on request), Needs help, Done. A note is optional; picking Needs help focuses it.
+  `weeklyBoardProjects`), each with six statuses: On track, Waiting on client, Waiting on us
+  (added on request), On hold (added on request: paused, nobody needs to act), Needs help, Done.
+  Six is the cap: more slows every row every week. Other candidates were already covered (Blocked =
+  Needs help, In review = a Waiting, Behind = derived from dates). A note is optional; picking Needs help focuses it.
   "Same as last week", "Mark the rest On track", "I'm on leave this week" and one line for things
   not on the board (admin, new biz). Unanswered projects are simply left out.
 - **Each project row shows what to reference** (asked: "it's hard to reference the latest status"):
@@ -3585,7 +3587,7 @@ their week into a cell before the Monday meeting. Asked: "Is there a way to inte
 - **Reading it:** Needs help from everyone first, then one card per person grouped by department
   (like the sheet's blocks; **Admin always last**, after people with no department, and someone in
   Suits + Admin sits with Suits: `weeklyGroupDept`/`weeklyDeptRank`), rows always in the order needs help, waiting on us, waiting on
-  client, on track, done, with the next date in a fixed right column. NEW marks a row that
+  client, on track, on hold, done, with the next date in a fixed right column. NEW marks a row that
   differs from that person's previous week (nothing is marked if there was no previous update).
   A person with no update shows "Not in yet" plus what's due for them this week from the board;
   someone on leave shows "Away this week" and doesn't count as waiting. The two chips look deliberately
