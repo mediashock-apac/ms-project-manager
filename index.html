@@ -12431,7 +12431,7 @@
   function wipStatusEditorHtml(taskId, date, text) {
     return '<div class="flex items-center gap-1.5 flex-wrap">' +
       '<input type="date" data-wip-field="date" class="' + wipInputCls('[color-scheme:light] dark:[color-scheme:dark]') + '" value="' + escapeHtml(date) + '">' +
-      '<input data-wip-field="text" data-wip-autofocus placeholder="Where this is at, or what\'s next" class="' + wipInputCls('flex-1 min-w-[12rem]') + '" value="' + escapeHtml(text) + '">' +
+      '<input data-wip-field="text" data-wip-autofocus placeholder="Where this is at, or what\'s next" class="' + wipInputCls('flex-1 min-w-[12rem] max-w-md') + '" value="' + escapeHtml(text) + '">' +
       wipEditorButtons(taskId) + '</div>';
   }
 
@@ -12490,7 +12490,12 @@
     var parts = [];
 
     if (ownerCat) {
-      if (wipIsEditing(name, 'owner')) {
+      if (wipIsEditing(name, 'owner') && wipDraft.ownerOther) {
+        // Someone with no Mediashock sign-in (a freelancer, a partner): type the name.
+        parts.push('<span class="flex items-center gap-1.5 flex-wrap"><span class="text-xs font-semibold text-zinc-500 dark:text-zinc-400">Owner</span>' +
+          '<input data-wip-field="ownerName" data-wip-autofocus placeholder="Their name" maxlength="60" class="' + wipInputCls('w-48') + '" value="' + escapeHtml(wipDraft.ownerName || '') + '">' +
+          wipEditorButtons(name) + '</span>');
+      } else if (wipIsEditing(name, 'owner')) {
         var current = pdoc.wipOwner || '';
         var people = teamRoster();
         if (current && people.indexOf(current) === -1) people.unshift(current);
@@ -12500,6 +12505,7 @@
             return '<button type="button" data-wip-act="set-owner" data-project="' + en + '" data-owner="' + escapeHtml(p) + '" class="text-xs font-semibold px-2.5 py-1 rounded-full border ' +
               (on ? 'border-brand-500 bg-brand-500 text-white' : 'border-zinc-200 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:border-brand-400 hover:text-brand-600 dark:hover:text-brand-400') + '">' + escapeHtml(p || 'No owner') + '</button>';
           }).join('') +
+          '<button type="button" data-wip-act="owner-other" data-project="' + en + '" class="text-xs font-semibold px-2.5 py-1 rounded-full border border-dashed border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400 hover:border-brand-400 hover:text-brand-600 dark:hover:text-brand-400">+ Someone else…</button>' +
           '<button type="button" data-wip-act="cancel" class="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200">Cancel</button></span>');
       } else if (pdoc.wipOwner) {
         parts.push('<span class="text-xs text-zinc-500 dark:text-zinc-400">Owner: <button type="button" data-wip-act="pick-owner" data-project="' + en + '" title="Change owner" class="font-semibold text-zinc-700 dark:text-zinc-200 hover:text-brand-600 dark:hover:text-brand-400">' + escapeHtml(pdoc.wipOwner) + '</button></span>');
@@ -12538,7 +12544,7 @@
     var key = 'd:' + d.id, ek = escapeHtml(key), eid = escapeHtml(d.id);
     var status = statusSorted(d.status);
     var title = wipIsEditing(name, 'deliv', d.id)
-      ? '<span class="min-w-0 flex-1 flex items-center gap-1.5 flex-wrap"><input data-wip-field="delivText" data-wip-autofocus class="' + wipInputCls('flex-1 min-w-[12rem]') + '" value="' + escapeHtml(wipDraft.delivText != null ? wipDraft.delivText : d.text) + '">' + wipEditorButtons(name) + '</span>'
+      ? '<span class="min-w-0 flex-1 flex items-center gap-1.5 flex-wrap"><input data-wip-field="delivText" data-wip-autofocus class="' + wipInputCls('flex-1 min-w-[12rem] max-w-md') + '" value="' + escapeHtml(wipDraft.delivText != null ? wipDraft.delivText : d.text) + '">' + wipEditorButtons(name) + '</span>'
       : '<button type="button" data-wip-act="edit-deliv" data-project="' + escapeHtml(name) + '" data-id="' + eid + '" title="Click to rename" class="min-w-0 flex-1 text-left text-sm font-medium text-zinc-800 dark:text-zinc-100 break-words hover:text-brand-700 dark:hover:text-brand-400">' + escapeHtml(d.text) + '</button>';
     var adds = '<span class="shrink-0 flex items-center gap-3">' +
       (!status.length && !wipIsEditing(key, 'tstatus', '__new') ? wipAddStatusIconHtml(key) : '') +
@@ -12546,9 +12552,10 @@
       '<button type="button" data-wip-act="remove-deliv" data-id="' + eid + '" title="Remove deliverable" class="opacity-0 group-hover/dl:opacity-100 text-zinc-400 hover:text-rose-500">&times;</button>' +
     '</span>';
     var next = wipIsEditing(key, 'dnext')
-      ? '<div class="flex items-center gap-1.5 flex-wrap"><span class="text-xs font-semibold text-zinc-500 dark:text-zinc-400">Next:</span><input data-wip-field="next" data-wip-autofocus placeholder="What happens next" class="' + wipInputCls('flex-1 min-w-[12rem]') + '" value="' + escapeHtml(wipDraft.next != null ? wipDraft.next : (d.next || '')) + '">' + wipEditorButtons(key) + '</div>'
+      ? '<div class="flex items-center gap-1.5 flex-wrap"><span class="text-xs font-semibold text-zinc-500 dark:text-zinc-400">Next:</span><input data-wip-field="next" data-wip-autofocus placeholder="What happens next" class="' + wipInputCls('flex-1 min-w-[12rem] max-w-md') + '" value="' + escapeHtml(wipDraft.next != null ? wipDraft.next : (d.next || '')) + '">' + wipEditorButtons(key) +
+        (d.next ? '<button type="button" data-wip-act="remove-dnext" data-project="' + ek + '" class="text-xs text-zinc-400 hover:text-rose-600 dark:hover:text-rose-400">Remove</button>' : '') + '</div>'
       : d.next
-        ? '<div class="flex items-start gap-2 text-xs"><span class="shrink-0 font-semibold text-zinc-500 dark:text-zinc-400">Next:</span><button type="button" data-wip-act="edit-dnext" data-project="' + ek + '" title="Click to edit" class="min-w-0 text-left text-zinc-700 dark:text-zinc-200 break-words hover:text-brand-700 dark:hover:text-brand-300">' + escapeHtml(d.next) + '</button></div>'
+        ? '<div class="flex items-start gap-2 text-xs"><span class="shrink-0 font-semibold text-zinc-500 dark:text-zinc-400">Next:</span><button type="button" data-wip-act="edit-dnext" data-project="' + ek + '" title="Edit next step" class="group/nx min-w-0 text-left text-zinc-700 dark:text-zinc-200 break-words hover:text-brand-700 dark:hover:text-brand-300">' + escapeHtml(d.next) + svgIcon('pencil', 'inline-block w-3 h-3 ml-1.5 -mt-0.5 text-zinc-400 group-hover/nx:text-brand-500') + '</button></div>'
         : '';
     return '<div class="px-4 py-2.5 flex flex-col gap-1.5">' +
       '<div class="group/dl flex items-center gap-3">' + title + adds + '</div>' +
@@ -12558,7 +12565,7 @@
   function wipNewDeliverableHtml(name) {
     if (!wipIsEditing(name, 'deliv', '__new')) return '';
     return '<div class="px-4 py-2.5 flex items-center gap-1.5 flex-wrap">' +
-      '<input data-wip-field="delivText" data-wip-autofocus placeholder="Deliverable, e.g. Corporate video" class="' + wipInputCls('flex-1 min-w-[12rem]') + '" value="' + escapeHtml(wipDraft.delivText || '') + '">' +
+      '<input data-wip-field="delivText" data-wip-autofocus placeholder="Deliverable, e.g. Corporate video" class="' + wipInputCls('flex-1 min-w-[12rem] max-w-md') + '" value="' + escapeHtml(wipDraft.delivText || '') + '">' +
       wipEditorButtons(name) + '</div>';
   }
 
@@ -12604,7 +12611,7 @@
     return '<div class="px-4 py-3 flex flex-col gap-2 bg-brand-50/70 dark:bg-brand-500/10 border-b border-zinc-100 dark:border-zinc-700">' +
       '<div class="flex items-center gap-1.5 flex-wrap">' +
         '<input data-wip-field="entryName" data-wip-autofocus placeholder="Client or project, e.g. BW Group" class="' + wipInputCls('w-56') + '" value="' + escapeHtml(wipDraft.entryName || '') + '">' +
-        '<input data-wip-field="entryNote" placeholder="First deliverable (optional), e.g. Corporate video" class="' + wipInputCls('flex-1 min-w-[12rem]') + '" value="' + escapeHtml(wipDraft.entryNote || '') + '">' +
+        '<input data-wip-field="entryNote" placeholder="First deliverable (optional), e.g. Corporate video" class="' + wipInputCls('flex-1 min-w-[12rem] max-w-md') + '" value="' + escapeHtml(wipDraft.entryNote || '') + '">' +
       '</div>' +
       '<div class="flex items-center gap-1.5 flex-wrap">' + pills + '<span class="flex-1"></span>' + wipEditorButtons('') + '</div>' +
     '</div>';
@@ -12623,6 +12630,10 @@
       if (!url) { showToast('Add a link address', 'info'); return; }
       if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
       p = addProjectKeyLink(name, (d.label || '').trim() || url.replace(/^https?:\/\//i, ''), url);
+    } else if (e.kind === 'owner') {
+      var typedOwner = (d.ownerName || '').trim();
+      if (!typedOwner) { showToast('Type the owner\'s name', 'info'); return; }
+      p = setProjectWipOwner(name, typedOwner.slice(0, 60));
     } else if (e.kind === 'note') {
       p = setProjectWipNote(name, (d.note != null ? d.note : ((projectDeadlineDoc(name) || {}).wipNote || '')).trim());
     } else if (e.kind === 'entry') {
@@ -12884,6 +12895,13 @@
         openConfirm('Remove this deliverable?', 'Its status and next step go with it, for everyone.', function () { removeWipDeliverable(aid); }, { confirmText: 'Remove', cancelText: 'Cancel' });
         return;
       }
+      if (kind === 'remove-dnext') {
+        // Same write as saving an empty next step; this just makes deleting discoverable.
+        wipEdit = null; wipDraft = {};
+        updateWipDeliverable(proj.slice(2), function (x) { x.next = ''; return x; }, 'next step');
+        renderWipView();
+        return;
+      }
       if (kind === 'set-owner') {
         var ownerName = act.getAttribute('data-owner') || '';
         wipEdit = null; wipDraft = {};
@@ -12891,6 +12909,7 @@
         renderWipView();
         return;
       }
+      if (kind === 'owner-other') { wipDraft = { ownerOther: true }; wipEdit = { project: proj, kind: 'owner' }; renderWipView(); return; }
       if (kind === 'pick-owner') { wipDraft = {}; wipEdit = wipIsEditing(proj, 'owner') ? null : { project: proj, kind: 'owner' }; renderWipView(); return; }
       if (kind === 'add-deliv') { wipDraft = {}; wipEdit = { project: proj, kind: 'deliv', id: '__new' }; renderWipView(); return; }
       if (kind === 'edit-deliv') { wipDraft = {}; wipEdit = { project: proj, kind: 'deliv', id: aid }; renderWipView(); return; }
@@ -13060,6 +13079,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-06v', date: '2026-10-06', items: [
+      { type: 'improved', title: 'Tidier WIP editing', text: "In WIP Meeting, a deliverable's next step now shows a small pencil so you can see it can be edited: click it to change it, or Remove to delete it. Edit boxes are also shorter, so Save and Cancel sit right beside what you are typing. And a lead or closing report can now be owned by someone without a Mediashock account: pick \"+ Someone else…\" and type their name." }
+    ] },
     { id: '2026-10-06u', date: '2026-10-06', items: [
       { type: 'improved', title: 'Calendar shows everyone first', text: 'The Calendar now opens on Everyone. Choose Mine to see only your own dates, and it will remember.' }
     ] },
@@ -15050,7 +15072,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-05T19:08:04Z";
+  var CURRENT_BUILD_VERSION = "2026-10-06T03:07:09Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
