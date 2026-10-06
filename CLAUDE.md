@@ -2646,7 +2646,11 @@ Asked directly: "how can I categorize these items or make this side bar better?"
 - **Unread New Updates no longer tints the row.** The tinted, glowing, light-sweep row looked
   exactly like `.view-toggle-btn.active` ("is that the page I'm on?"). Still prominent, as
   originally asked, via orange label text, the pulsing count and the ringing megaphone; just not
-  a background.
+  a background. **Made flashier on request ("New Updates can be flashier")** without breaking
+  that rule: a Poppy→indigo→cyan conic-gradient border that travels round the row (`::before`,
+  masked to a 1.5px ring, angle animated via `@property --updates-angle`), a light sweep across the
+  label (`background-clip: text`), and a gradient count badge. Still no fill. All off under
+  reduced motion.
 - **On the collapsed rail, the teamspace menu opens BESIDE the rail at 13rem** (`#sidebar.collapsed
   #teamspace-menu` in the styles). It spans its wrapper (`left-2 right-2`), i.e. the sidebar's width,
   which on the rail cut every name to one letter (reported from a screenshot). The mobile drawer
