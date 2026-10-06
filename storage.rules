@@ -25,9 +25,16 @@ service firebase.storage {
     // read rule here actually work in a browser rather than just producing broken image icons.
     match /chat-images/{projectId}/{fileName} {
       allow read: if isMediashock();
-      allow write: if isMediashock()
+      allow create: if isMediashock()
         && request.resource.size < 8 * 1024 * 1024
         && request.resource.contentType.matches('image/.*');
+      // Delete is separate from create because `request.resource` is null on a delete, so the
+      // size/type checks above would deny every delete. Lets a deleted chat message or chat take
+      // its image with it (deleteChatImageFiles in index.html) instead of leaving it here forever.
+      // Any signed-in teammate rather than only the uploader: Storage can't see who posted the
+      // message, and deleting a whole chat (admin-only in the app) removes other people's images.
+      // Overwriting a file (update) is no longer allowed; uploads always use a fresh name.
+      allow delete: if isMediashock();
     }
   }
 }

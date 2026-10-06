@@ -662,6 +662,17 @@
   .m-footer { flex-shrink: 0; padding: 8px 10px calc(8px + env(safe-area-inset-bottom)); margin-bottom: var(--m-kb); background: var(--m-bar);
     -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); border-top: .5px solid var(--m-line); }
   .m-compose { display: flex; align-items: flex-end; gap: 8px; }
+  .m-footer { position: relative; }
+  .m-attach { width: 40px; height: 40px; border-radius: 20px; display: flex; align-items: center; justify-content: center; color: var(--m-brand); flex-shrink: 0; }
+  .m-attach svg { width: 25px; height: 25px; }
+  .m-attach:active { background: var(--m-fill); }
+  .m-pending { opacity: .65; font-style: italic; display: flex; align-items: center; gap: 6px; }
+  .m-pending-icon { width: 16px; height: 16px; }
+  .m-mention { position: absolute; left: 10px; right: 10px; bottom: calc(100% + 6px); z-index: 3; background: var(--m-card); border-radius: 14px; padding: 4px 0;
+    box-shadow: 0 10px 30px rgba(0,0,0,.2), 0 0 0 .5px var(--m-line); max-height: 260px; overflow-y: auto; }
+  .m-mention .mention-option { padding: 10px 14px !important; gap: 10px !important; font-size: 15px !important; }
+  .m-mention .mention-option > :first-child { width: 28px !important; height: 28px !important; font-size: 11px !important; }
+  .m-mention .mention-option > span:last-child { color: var(--m-text) !important; }
   .m-compose textarea { flex: 1; min-width: 0; resize: none; max-height: 132px; height: 40px; border-radius: 20px; border: .5px solid var(--m-line); background: var(--m-card);
     padding: 9px 15px; font-size: 16px; line-height: 1.35; color: var(--m-text); outline: 0; }
   .m-send { width: 40px; height: 40px; border-radius: 20px; background: var(--m-brand); color: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: opacity .15s, transform .15s; }
@@ -1979,7 +1990,7 @@
     onSnapshot, writeBatch, query, orderBy, limit, where, arrayUnion, connectFirestoreEmulator
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
   import {
-    getStorage, ref as storageRef, uploadBytes, getDownloadURL, connectStorageEmulator
+    getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject, connectStorageEmulator
   } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-storage.js";
 
   /* =========================================================
@@ -2798,8 +2809,12 @@
   function deleteProjectChat(name) {
     var pdoc = projectDeadlineDoc(name);
     if (!pdoc) return;
+    var removedMsgs = Array.isArray(pdoc.chat) ? pdoc.chat.slice() : [];
     // Messages only. links stays: it is also the project's Key links on WIP (see PROJECT UPDATES).
     updateDoc(doc(projectsCol, pdoc.id), { chat: deleteField() }).then(function () {
+      var gone = {};
+      removedMsgs.forEach(function (m) { if (m && m.id) gone[m.id] = true; });
+      deleteChatImageFiles(removedMsgs.map(function (m) { return m && m.imageUrl; }), gone);
       showToast('Deleted the group chat for ' + name, 'info');
       logActivity('project_chat_deleted', 'Deleted the group chat for "' + name + '"');
       if (currentChatProjectName === name) {
@@ -4392,7 +4407,9 @@
     // Activity"). Creating/deleting the chat thread itself still logs (see createProjectChat/
     // deleteProjectChat) since that's a project-level event closer to a deadline change than to
     // the message traffic inside it.
-    updateDoc(doc(projectsCol, pdoc.id), { chat: chat }).catch(function (err) {
+    updateDoc(doc(projectsCol, pdoc.id), { chat: chat }).then(function () {
+      if (removed.imageUrl) { var gone = {}; gone[removed.id] = true; deleteChatImageFiles([removed.imageUrl], gone); }
+    }).catch(function (err) {
       showToast('Could not remove message: ' + err.message, 'error');
     });
   }
@@ -4439,27 +4456,75 @@
   // image host was considered and rejected (these can be client-confidential screenshots).
   var CHAT_IMAGE_MAX_BYTES = 8 * 1024 * 1024; // matches storage.rules' own cap -- keep in sync
 
+  // Phone photos are 3-5 MB; shrunk to at most CHAT_IMAGE_MAX_SIDE on the long edge and re-encoded
+  // as JPEG (~200-400 KB) before upload, which keeps Storage and download use (and so any Blaze
+  // cost) tiny. Small images (screenshots under ~600 KB that already fit) go up untouched so text
+  // stays crisp. Anything the browser can't decode (e.g. HEIC on desktop Chrome) goes up as-is.
+  // createImageBitmap honours the photo's EXIF rotation by default, so portraits stay upright.
+  var CHAT_IMAGE_MAX_SIDE = 1600;
+  function shrinkChatImage(file) {
+    if (!file || !/^image\/(jpeg|png|webp|heic|heif)$/i.test(file.type) || typeof createImageBitmap !== 'function') return Promise.resolve(file);
+    return createImageBitmap(file).then(function (bmp) {
+      var scale = Math.min(1, CHAT_IMAGE_MAX_SIDE / Math.max(bmp.width, bmp.height));
+      if (scale === 1 && file.size <= 600 * 1024) { if (bmp.close) bmp.close(); return file; }
+      var canvas = document.createElement('canvas');
+      canvas.width = Math.round(bmp.width * scale);
+      canvas.height = Math.round(bmp.height * scale);
+      var ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';   // JPEG has no transparency; a transparent PNG would turn black
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+      if (bmp.close) bmp.close();
+      return new Promise(function (resolve) {
+        canvas.toBlob(function (blob) {
+          resolve(blob && blob.size < file.size ? new File([blob], 'photo.jpg', { type: 'image/jpeg' }) : file);
+        }, 'image/jpeg', 0.82);
+      });
+    }).catch(function () { return file; });
+  }
+  // Shared by the desktop paste and the phone's photo button: shrink, check, upload, return the URL.
+  function uploadChatImage(projectDocId, file) {
+    return shrinkChatImage(file).then(function (f) {
+      if (f.size > CHAT_IMAGE_MAX_BYTES) throw new Error('Image is too large (max 8MB)');
+      // The extension only affects the stored filename (never read back) -- storage.rules checks
+      // the real upload's contentType, not this. '+' stripped so "svg+xml" can't smuggle a second
+      // path segment into the filename.
+      var ext = (f.type.split('/')[1] || 'png').split('+')[0];
+      var path = 'chat-images/' + projectDocId + '/' + uid() + '.' + ext;
+      return uploadBytes(storageRef(storage, path), f);
+    }).then(function (snap) { return getDownloadURL(snap.ref); });
+  }
+  // A deleted message or chat used to leave its image in Storage forever. Deletes the files behind
+  // `urls`, except any still used by a message that isn't being removed: a forwarded image reuses
+  // the original's URL, so deleting the original must not break the copy in another chat.
+  // `removedIds` (message id -> true) are excluded explicitly, so this doesn't depend on whether
+  // the projects snapshot has caught up with the removal yet. Needs the `allow delete` in
+  // storage.rules deployed; until then it fails quietly and the file simply stays, as before.
+  function deleteChatImageFiles(urls, removedIds) {
+    var used = {};
+    projectDocs.forEach(function (p) {
+      (Array.isArray(p.chat) ? p.chat : []).forEach(function (m) {
+        if (m && m.imageUrl && !removedIds[m.id]) used[m.imageUrl] = true;
+      });
+    });
+    var seen = {};
+    (urls || []).forEach(function (url) {
+      if (!url || used[url] || seen[url]) return;
+      seen[url] = true;
+      deleteObject(storageRef(storage, url)).catch(function (e) { console.warn('Could not delete chat image', e && e.code); });
+    });
+  }
+
   function uploadAndSendChatImage(file) {
     if (!currentChatProjectName || !file) return;
     var pdoc = projectDeadlineDoc(currentChatProjectName);
     if (!pdoc) return;
     if (file.type.indexOf('image/') !== 0) return;
-    if (file.size > CHAT_IMAGE_MAX_BYTES) {
-      showToast('Image is too large (max 8MB)', 'error');
-      return;
-    }
     var input = document.getElementById('project-chat-input');
     var caption = input.value.trim();
     var replyTarget = chatReplyTarget;
-    // The extension only affects the stored filename (never read back) -- storage.rules checks
-    // the real upload's contentType, not this. '+' stripped so "svg+xml" can't smuggle a second
-    // path segment into the filename.
-    var ext = (file.type.split('/')[1] || 'png').split('+')[0];
-    var path = 'chat-images/' + pdoc.id + '/' + uid() + '.' + ext;
     showToast('Uploading image…', 'info');
-    uploadBytes(storageRef(storage, path), file).then(function (snap) {
-      return getDownloadURL(snap.ref);
-    }).then(function (url) {
+    uploadChatImage(pdoc.id, file).then(function (url) {
       var user = auth.currentUser;
       var newMessage = { id: uid(), text: caption, imageUrl: url, date: new Date().toISOString(), author: user ? (user.displayName || user.email) : null };
       if (replyTarget) newMessage.replyTo = replyTarget.id;
@@ -13970,6 +14035,10 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-06zc', date: '2026-10-06', items: [
+      { type: 'new', title: 'Photos and @mentions in phone chat', text: "On your phone, tap the photo button next to the message box to share a picture in a group chat, and type @ to tag a teammate in a chat or comment. Tap a photo to see it full screen." },
+      { type: 'improved', title: 'Smaller image uploads', text: "Photos and big screenshots are resized before they're sent, so they upload faster and take up less space. Deleting a chat message or a chat now deletes its images too." }
+    ] },
     { id: '2026-10-06zb', date: '2026-10-06', items: [
       { type: 'new', title: 'A proper phone app', text: "On a phone, Project Manager now opens as its own app, with Home, Tasks, Calendar, Chat and More along the bottom. It's built for checking things on the go: tick off steps, move a task's status, post an update or comment, chat, write your Monday update and add a quick task. Bigger edits stay on a computer. Tip: add it to your home screen for the full-screen feel." }
     ] },
@@ -15516,6 +15585,7 @@
   var mRefreshQueued = false;
   var mImgCache = {};
   var mShowDone = {};
+  var mChatPending = {};
 
   var M_ICONS = {
     home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/>',
@@ -15544,7 +15614,8 @@
     plane: '<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>',
     link: '<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>',
     edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
-    mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>'
+    mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
+    image: '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/>'
   };
   function mIcon(name, cls) {
     return '<svg class="' + (cls || '') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (M_ICONS[name] || '') + '</svg>';
@@ -15648,6 +15719,7 @@
     mRoot.addEventListener('click', mOnClick);
     mRoot.addEventListener('submit', mOnSubmit);
     mRoot.addEventListener('input', mOnInput);
+    mRoot.addEventListener('change', mOnChange);
     if (window.visualViewport) {
       var vv = window.visualViewport;
       var kb = function () {
@@ -16102,9 +16174,12 @@
     }).join('')) + '</div>';
   }
   function mOpenChat(name) {
-    mPush({
+    var s = mPush({
       key: 'chat:' + name, title: name, backLabel: 'Chats',
-      footer: '<form class="m-compose" data-m-form="chat" data-project="' + escapeHtml(name) + '"><textarea rows="1" placeholder="Message" aria-label="Message"></textarea>' +
+      footer: '<div class="m-mention hidden"></div>' +
+        '<form class="m-compose" data-m-form="chat" data-project="' + escapeHtml(name) + '">' +
+        '<label class="m-attach" aria-label="Send a photo">' + mIcon('image') + '<input type="file" accept="image/*" data-m-photo hidden></label>' +
+        '<textarea rows="1" placeholder="Message" aria-label="Message"></textarea>' +
         '<button type="submit" class="m-send" aria-label="Send" disabled>' + mIcon('send') + '</button></form>',
       render: function () { return mChatThreadHtml(name); },
       after: function (s) {
@@ -16114,6 +16189,18 @@
         markChatNotificationsRead(name);
       }
     });
+    mWireMentions(s);
+  }
+  // @ in a phone composer suggests teammates, same as desktop (wireMentionAutocomplete), with
+  // the menu sitting above the composer and phone-sized rows (.m-mention in the CSS).
+  function mWireMentions(s) {
+    var ta = s.el.querySelector('.m-footer textarea');
+    var menu = s.el.querySelector('.m-mention');
+    if (ta && menu) s.mention = wireMentionAutocomplete(ta, menu);
+  }
+  function mCloseMentions() {
+    var top = mStack[mStack.length - 1];
+    if (top && top.mention) top.mention.close();
   }
   function mChatThreadHtml(name) {
     var chat = (projectDeadlineDoc(name) || {}).chat || [];
@@ -16125,7 +16212,9 @@
         '<button type="button" class="m-pill-btn" data-m-project="' + escapeHtml(name) + '">' + mIcon('layers') + 'Project</button>' +
         (folder ? '<a class="m-pill-btn" href="' + escapeHtml(folder) + '" target="_blank" rel="noopener">' + mIcon('folder') + 'Folder</a>' : '') +
       '</div></div>';
-    if (!chat.length) return head + '<div class="m-empty"><b>No messages yet</b>Say hello to the team.</div>';
+    var pending = '';
+    for (var pi = 0; pi < (mChatPending[name] || 0); pi++) pending += '<div class="m-msg m-mine"><div class="m-msg-col"><div class="m-bubble m-pending">' + mIcon('image', 'm-pending-icon') + 'Sending photo…</div></div></div>';
+    if (!chat.length) return head + (pending ? '<div class="m-msgs">' + pending + '</div>' : '<div class="m-empty"><b>No messages yet</b>Say hello to the team.</div>');
     var out = '<div class="m-msgs">';
     var lastDay = '';
     var prevAuthor = null;
@@ -16152,7 +16241,7 @@
           '<div class="m-msg-time">' + escapeHtml(mTime(m.date)) + (m.editedAt ? ' · edited' : '') + '</div>' +
         '</div></div>';
     });
-    return head + out + '</div>';
+    return head + out + pending + '</div>';
   }
   // Images in chat are behind storage.rules, so they're fetched with the ID token (see
   // loadProtectedChatImage). Cached per URL for the session so a live re-render doesn't refetch.
@@ -16186,6 +16275,7 @@
       var ta = form.querySelector('textarea');
       ta.value = '';
       mAutosize(ta);
+      mCloseMentions();
       notifyOnProjectChat(text, name, false);
       mHaptic();
     }).catch(function (err) {
@@ -16198,13 +16288,14 @@
   function mOpenTask(id) {
     var top = mStack[mStack.length - 1];
     if (top && top.key === 'task:' + id) return;
-    mPush({
+    var s = mPush({
       key: 'task:' + id, title: 'Task', backLabel: 'Back',
       actions: '<button type="button" class="m-icon-btn" data-m-act="task-more" data-task="' + id + '" aria-label="More">' + mIcon('dots') + '</button>',
-      footer: '<form class="m-compose" data-m-form="comment" data-task="' + id + '"><textarea rows="1" placeholder="Add a comment" aria-label="Add a comment"></textarea>' +
+      footer: '<div class="m-mention hidden"></div><form class="m-compose" data-m-form="comment" data-task="' + id + '"><textarea rows="1" placeholder="Add a comment" aria-label="Add a comment"></textarea>' +
         '<button type="submit" class="m-send" aria-label="Send" disabled>' + mIcon('send') + '</button></form>',
       render: function () { return mTaskHtml(id); }
     });
+    mWireMentions(s);
   }
   function mTaskHtml(id) {
     var t = tasks.find(function (x) { return x.id === id; });
@@ -16302,6 +16393,7 @@
       var ta = form.querySelector('textarea');
       ta.value = '';
       mAutosize(ta);
+      mCloseMentions();
       ta.blur();
       notifyOnComment(text, t);
       logActivity('task_comment', 'Commented on "' + t.name + '": "' + (text.length > 60 ? text.slice(0, 60) + '…' : text) + '"', { taskId: t.id });
@@ -16676,6 +16768,42 @@
     if (el.id === 'm-task-search') { mTaskQuery = el.value; mRenderTab('tasks'); return; }
     if (el.matches && el.matches('.m-compose textarea')) mAutosize(el);
   }
+  function mOnChange(e) {
+    var input = e.target;
+    if (!input.matches || !input.matches('[data-m-photo]')) return;
+    var file = input.files && input.files[0];
+    var form = input.closest('form');
+    input.value = '';
+    if (file && form) mSendChatPhoto(form.getAttribute('data-project'), file, form);
+  }
+  // A photo from the phone: shown at once as "Sending photo...", shrunk and uploaded
+  // (uploadChatImage), then posted like any chat image, with whatever is typed as its caption.
+  function mSendChatPhoto(name, file, form) {
+    var pd = projectDeadlineDoc(name);
+    if (!pd || !file) return;
+    if (file.type && file.type.indexOf('image/') !== 0) { showToast('That file is not a photo', 'error'); return; }
+    var ta = form.querySelector('textarea');
+    var caption = ta ? ta.value.trim() : '';
+    var s = mStack[mStack.length - 1];
+    if (s) s.forceBottom = true;
+    mChatPending[name] = (mChatPending[name] || 0) + 1;
+    mRefresh();
+    uploadChatImage(pd.id, file).then(function (url) {
+      var msg = { id: uid(), text: caption, imageUrl: url, date: new Date().toISOString(), author: mMe() };
+      return updateDoc(doc(projectsCol, pd.id), { chat: arrayUnion(msg) });
+    }).then(function () {
+      if (ta && caption && ta.value.trim() === caption) { ta.value = ''; mAutosize(ta); }
+      notifyOnProjectChat(caption, name, true);
+      mHaptic();
+    }).catch(function (err) {
+      showToast('Could not send the photo: ' + err.message, 'error');
+    }).then(function () {
+      mChatPending[name] = Math.max(0, (mChatPending[name] || 1) - 1);
+      var top = mStack[mStack.length - 1];
+      if (top) top.forceBottom = true;
+      mRefresh();
+    });
+  }
   function mOnSubmit(e) {
     var form = e.target.closest('[data-m-form]');
     if (!form) return;
@@ -16700,6 +16828,13 @@
   }
   function mOnClick(e) {
     var el;
+    if ((el = e.target.closest('img.m-chat-img[src]'))) {
+      var lightbox = document.getElementById('chat-image-lightbox');
+      document.getElementById('chat-image-lightbox-img').src = el.src;
+      lightbox.hidden = false;
+      lightbox.classList.add('flex');
+      return;
+    }
     if ((el = e.target.closest('[data-m-tab]'))) { mSetTab(el.getAttribute('data-m-tab')); return; }
     if ((el = e.target.closest('[data-weekly-write]'))) { openWeeklyEditor(); return; }
     if ((el = e.target.closest('[data-m-act]'))) { mAct(el.getAttribute('data-m-act'), el); return; }
@@ -17323,7 +17458,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-06T15:08:27Z";
+  var CURRENT_BUILD_VERSION = "2026-10-06T15:38:38Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

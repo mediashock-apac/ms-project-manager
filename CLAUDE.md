@@ -2200,14 +2200,25 @@ to bottom:
          `forwardChatMessage` copies `imageUrl` onto the new message the same way it already
          copies `text`; it's the same file, still covered by the same `storage.rules` read check
          for whoever's now looking at it in the target project's chat.
-       - **Known gap, not yet solved: deleting a message or an entire chat does not delete its
-         image(s) from Storage.** `removeChatMessage`/`deleteProjectChat` only ever touch the
-         Firestore `chat` array; an orphaned file under `chat-images/{projectId}/` just sits in
-         the bucket afterward, and nothing prunes it. Low-stakes at this team's actual volume
-         (a handful of KB-to-few-MB screenshots is nowhere near Blaze's free-tier storage
-         allotment), but worth a real cleanup pass — e.g. a Storage delete alongside each of
-         those two functions' existing Firestore writes — if this ever gets used heavily enough
-         for it to matter.
+       - **Deleting a message or a whole chat now deletes its image files** (`deleteChatImageFiles`,
+         called after `removeChatMessage`/`deleteProjectChat` succeed). It was a known gap until
+         phone photo sharing made volume more likely. **A file still used by any other message is
+         kept**: a forwarded image reuses the original's URL, so deleting the original must not
+         break the copy in another chat. The messages being removed are excluded by id rather than
+         waiting for the projects snapshot, so it doesn't race the snapshot. Needs `allow delete` in
+         `storage.rules` deployed (create and delete are separate rules because `request.resource`
+         is null on a delete, so the old size/type `write` rule denied every delete); until that
+         deploy, the delete fails quietly and the file just stays. Files orphaned before this
+         shipped are not cleaned up.
+       - **Images are shrunk before upload** (`shrinkChatImage`, used by `uploadChatImage`, which
+         both the desktop paste and the phone's photo button go through): longest side at most
+         1600px, re-encoded as JPEG at 0.82 on a white background. Measured: a 2.5 MB photo went up
+         as 328 KB. Images already under ~600 KB that fit are left untouched so screenshot text
+         stays crisp; anything the browser can't decode (HEIC on desktop Chrome) goes up as-is.
+         Asked "will attaching photos incur costs?": the answer was effectively no at this volume
+         (a few cents a month at most if the bucket sits outside Google's US free-tier regions),
+         and shrinking is what keeps it there. Also recommended: a budget alert in Google Cloud
+         Billing (owner's step, not code).
        - **Not verified against a live upload** — this environment has no Firebase CLI/emulator
          and, as of writing, the project hadn't yet been upgraded to Blaze, so the actual
          upload → download-URL → authenticated-fetch → blob-URL round trip has only been
@@ -2657,8 +2668,10 @@ sideways inside the page, and the task window was the full desktop form.
     an Email button), Projects and project pages (folder, chat, notes, tasks), Notifications, What's
     new, Dark mode, Use desktop layout, Sign out.
 - **The only edits on a phone** (decided from the ask): tick a checklist step, move a task's
-  status, post a status update (a sheet; same `addTaskStatus` as WIP), comment, send a chat message,
-  write the Monday update (the desktop editor, full screen), quick-add a task (name, project, owner,
+  status, post a status update (a sheet; same `addTaskStatus` as WIP), comment, send a chat message
+  or a photo (the photo button beside the box; shrunk and uploaded like a desktop paste, shown as
+  "Sending photo…" meanwhile, tap a photo for the full-screen viewer), @mention in chat and comments
+  (the desktop's `wireMentionAutocomplete` with phone-sized rows, `.m-mention`), write the Monday update (the desktop editor, full screen), quick-add a task (name, project, owner,
   deadline, priority; created exactly like the desktop's new-task save). **Everything else stays on
   desktop**; a task's "..." > **Open full editor** opens the desktop task window as the escape hatch.
 - **`openTaskModal` routes to the phone task screen** while `mActive()` (a task) or to quick add (no
