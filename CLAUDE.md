@@ -2632,6 +2632,9 @@ needs revisiting.
 
 Asked directly: "how can I categorize these items or make this side bar better?", then "build all".
 
+- **Each group title has a line under it** (asked: "Can a line divider be under the title so it is
+  clear?"): `border-b` on the `.sidebar-label` heading itself, so it disappears with the label on
+  the collapsed rail.
 - **Every group is named; the labels replace the dividers.** Work (Board, Timeline, Calendar,
   Projects) · Team (People, Chat) · Meetings (WIP Meeting; was "Events", too vague) · History
   (Activity, Archived). Before, only Events had a label, so nothing said why Activity sat beside
@@ -3564,7 +3567,7 @@ Replaces the "MMM Pulse-board" Google Sheet's monthly person x week tabs, where 
 their week into a cell before the Monday meeting. Asked: "Is there a way to integrate this?", then
 "as painless as possible to fill ... organised and easy to read and go through".
 
-- **Its own page under Meetings** (`view-weekly`, sidebar "Monday Meeting"), NOT a mode on People.
+- **Its own page under Meetings, listed first above WIP** (`view-weekly`, sidebar "Monday Meeting"), NOT a mode on People.
   It was built as a Workload | This week switch on People first and moved before shipping: "I like
   how People page works and looks now. Will it affect the usability...?" A switch would add a
   control to a page people like and make its toolbar appear and disappear by mode. **Don't fold it
@@ -3575,12 +3578,21 @@ their week into a cell before the Monday meeting. Asked: "Is there a way to inte
   (added on request), Needs help, Done. A note is optional; picking Needs help focuses it.
   "Same as last week", "Mark the rest On track", "I'm on leave this week" and one line for things
   not on the board (admin, new biz). Unanswered projects are simply left out.
+- **Each project row shows what to reference** (asked: "it's hard to reference the latest status"):
+  "Latest:" = the newest WIP status line on any of the project's open tasks (`weeklyLatestStatus`,
+  with date and first name) plus "Use this" to copy it into the note; "Coming up:" = your next
+  three dated tasks/steps there. Muted, and only when there's something to show.
 - **Reading it:** Needs help from everyone first, then one card per person grouped by department
-  (like the sheet's blocks), rows always in the order needs help, waiting on us, waiting on
+  (like the sheet's blocks; **Admin always last**, after people with no department, and someone in
+  Suits + Admin sits with Suits: `weeklyGroupDept`/`weeklyDeptRank`), rows always in the order needs help, waiting on us, waiting on
   client, on track, done, with the next date in a fixed right column. NEW marks a row that
   differs from that person's previous week (nothing is marked if there was no previous update).
   A person with no update shows "Not in yet" plus what's due for them this week from the board;
-  someone on leave shows "Away this week" and doesn't count as waiting. Below `sm` the status
+  someone on leave shows "Away this week" and doesn't count as waiting. The two chips look deliberately
+  different (reported as "almost the same" when both were amber): Away is amber, the app-wide
+  "not available" colour; Not in yet is a dashed neutral outline with a clock. That due list shows
+  everything (a "+N more" cap shipped first; asked: "just show all?"); a task and its own step with
+  the same name and date are listed once. Below `sm` the status
   label takes its own line so the text keeps the card's width.
 - **Present mode was built and removed before shipping** ("Present mode is not necessary").
 - **Company-wide, ignores the teamspace switcher**, same reasoning as WIP: one shared meeting.

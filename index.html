@@ -616,7 +616,7 @@
          menu -- 13 rows down to 11. Labels carry .sidebar-label, so the icon-only rail hides them
          (that rule positions them absolute, costing no height). -->
     <nav id="sidebar-nav" class="flex-1 overflow-y-auto py-2 px-2 flex flex-col gap-0.5">
-      <p class="sidebar-label px-2.5 pt-1 pb-1 text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Work</p>
+      <p class="sidebar-label px-2.5 pt-1 pb-1.5 mb-1 border-b border-zinc-200 dark:border-zinc-700 text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Work</p>
       <button data-view-btn="board" data-tooltip="Board" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
         <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line></svg>
         <span class="sidebar-label truncate">Board</span>
@@ -633,7 +633,7 @@
         <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
         <span class="sidebar-label truncate">Projects</span>
       </button>
-      <p class="sidebar-label px-2.5 pt-3 pb-1 text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Team</p>
+      <p class="sidebar-label px-2.5 pt-3 pb-1.5 mb-1 border-b border-zinc-200 dark:border-zinc-700 text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Team</p>
       <button data-view-btn="people" data-tooltip="People" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
         <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
         <span class="sidebar-label truncate">People</span>
@@ -656,21 +656,21 @@
            panel's own section headers use rather than a new treatment, and it carries
            .sidebar-label so it disappears with the dividers when the rail collapses to icons
            (that rule positions it absolute, so it costs no height and no flex gap either). -->
-      <p class="sidebar-label px-2.5 pt-3 pb-1 text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Meetings</p>
-      <!-- A presentation screen on a stand: deliberately not `users` (People has it), not
-           `calendar` (Calendar has it) and not `message` (Suggestions has it). -->
-      <button data-view-btn="wip" data-tooltip="WIP Meeting" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
-        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="12" rx="2"></rect><line x1="12" y1="15" x2="12" y2="19"></line><line x1="8" y1="19" x2="16" y2="19"></line></svg>
-        <span class="sidebar-label truncate">WIP Meeting</span>
-      </button>
+      <p class="sidebar-label px-2.5 pt-3 pb-1.5 mb-1 border-b border-zinc-200 dark:border-zinc-700 text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Meetings</p>
       <!-- Monday Meeting: everyone's weekly update (replaces the MMM Pulse-board sheet). A
            clipboard with ticks -- not WIP's screen, People's users or Calendar's grid. -->
       <button data-view-btn="weekly" data-tooltip="Monday Meeting" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
         <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"></rect><path d="M9 2h6v4H9z"></path><path d="m9 12 2 2 4-4"></path><path d="M9 17h6"></path></svg>
         <span class="sidebar-label truncate">Monday Meeting</span>
       </button>
+      <!-- A presentation screen on a stand: deliberately not `users` (People has it), not
+           `calendar` (Calendar has it) and not `message` (Suggestions has it). -->
+      <button data-view-btn="wip" data-tooltip="WIP Meeting" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
+        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="12" rx="2"></rect><line x1="12" y1="15" x2="12" y2="19"></line><line x1="8" y1="19" x2="16" y2="19"></line></svg>
+        <span class="sidebar-label truncate">WIP Meeting</span>
+      </button>
 
-      <p class="sidebar-label px-2.5 pt-3 pb-1 text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">History</p>
+      <p class="sidebar-label px-2.5 pt-3 pb-1.5 mb-1 border-b border-zinc-200 dark:border-zinc-700 text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">History</p>
       <button data-view-btn="activity" data-tooltip="Activity" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
         <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
         <span class="sidebar-label truncate">Activity</span>
@@ -10683,14 +10683,16 @@
       });
       if (!owns && !involved && !steps.length) return;
       var p = t.project || 'No project';
-      var g = by[p] || (by[p] = { project: p, dates: [], dueThisWeek: [] });
+      var g = by[p] || (by[p] = { project: p, dates: [], dueThisWeek: [], items: [] });
       if (t.deadline && owns) {
         g.dates.push(t.deadline);
+        g.items.push({ date: t.deadline, text: t.name });
         if (t.deadline >= key && t.deadline <= weekEnd) g.dueThisWeek.push({ date: t.deadline, text: t.name });
       }
       steps.forEach(function (it) {
         if (!it.due) return;
         g.dates.push(it.due);
+        g.items.push({ date: it.due, text: it.text });
         if (it.due >= key && it.due <= weekEnd) g.dueThisWeek.push({ date: it.due, text: it.text });
       });
     });
@@ -10699,8 +10701,25 @@
       g.next = g.dates.filter(function (d) { return d >= today; }).sort()[0] || null;
       g.late = g.dates.filter(function (d) { return d < today; }).sort()[0] || null;
       g.dueThisWeek.sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+      // "Coming up": the person's next few dated items there, one per name.
+      var upSeen = {};
+      g.upcoming = g.items.filter(function (x) { return x.date >= today; }).sort(function (a, b) { return a.date < b.date ? -1 : 1; })
+        .filter(function (x) { var k = String(x.text || '').trim().toLowerCase(); if (upSeen[k]) return false; upSeen[k] = true; return true; }).slice(0, 3);
+      g.latest = weeklyLatestStatus(g.project);
       return g;
     }).sort(function (a, b) { return (a.next || '9999') < (b.next || '9999') ? -1 : (a.next || '9999') > (b.next || '9999') ? 1 : a.project.localeCompare(b.project); });
+  }
+
+  // The newest status line anyone wrote on the project's open tasks (the WIP status band), so
+  // whoever fills in their update can see where things last stood. Asked: "Filling in like
+  // this, it's hard to reference the latest status".
+  function weeklyLatestStatus(project) {
+    var all = [];
+    activeTasks().forEach(function (t) {
+      if ((t.project || 'No project') !== project || t.status === 'Done') return;
+      (t.statusUpdates || []).forEach(function (u) { if (u && u.text) all.push(u); });
+    });
+    return statusSorted(all)[0] || null;
   }
 
   function weeklyAwayDuring(name, key) {
@@ -10723,13 +10742,22 @@
     }).map(function (p) { return p.name; });
     var seenName = {};
     list = list.filter(function (n) { if (seenName[n]) return false; seenName[n] = true; return true; });
-    // Grouped by department like the sheet's SUIT block, then by name.
-    function deptRank(n) {
-      var d = personDepartments(n)[0];
-      var i = DEPARTMENTS.findIndex(function (x) { return x.key === d; });
-      return i === -1 ? DEPARTMENTS.length : i;
-    }
-    return list.sort(function (a, b) { return (deptRank(a) - deptRank(b)) || a.localeCompare(b); });
+    // Grouped by department like the sheet's SUIT block (see weeklyDeptRank), then by name.
+    return list.sort(function (a, b) { return (weeklyDeptRank(a) - weeklyDeptRank(b)) || a.localeCompare(b); });
+  }
+
+  // The group a person is read out in: their first department that isn't Admin, so someone in
+  // Suits + Admin sits with Suits. Admin always goes last, after people with no department
+  // (asked for: "Admin should go last").
+  function weeklyGroupDept(n) {
+    var ds = personDepartments(n);
+    return ds.find(function (d) { return d !== 'admin'; }) || ds[0] || '';
+  }
+  function weeklyDeptRank(n) {
+    var d = weeklyGroupDept(n);
+    if (d === 'admin') return DEPARTMENTS.length + 1;
+    var i = DEPARTMENTS.findIndex(function (x) { return x.key === d; });
+    return i === -1 ? DEPARTMENTS.length : i;
   }
 
   function weeklyRowsSorted(rows) {
@@ -10815,9 +10843,20 @@
       var away = weeklyAwayDuring(name, key);
       right = away
         ? '<span class="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/30">Away this week</span>'
-        : '<span class="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/30">Not in yet</span>';
+        // Not amber: amber is "away" everywhere in this app, and the two chips read as the same thing
+        // (reported). A dashed neutral outline says "this slot is still empty" without a second
+        // warning colour; rose is taken by overdue/High.
+        : '<span class="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full border border-dashed border-zinc-400 text-zinc-600 dark:border-zinc-500 dark:text-zinc-300">' + weeklyIcon('client', 'w-3 h-3') + 'Not in yet</span>';
       var due = [];
-      board.forEach(function (g) { g.dueThisWeek.forEach(function (d) { due.push({ date: d.date, text: d.text, project: g.project }); }); });
+      // A task and its own checklist step often share a name and date ("Kickoff discussion");
+      // list that once.
+      var dueSeen = {};
+      board.forEach(function (g) { g.dueThisWeek.forEach(function (d) {
+        var k = d.date + '|' + g.project + '|' + String(d.text || '').trim().toLowerCase();
+        if (dueSeen[k]) return;
+        dueSeen[k] = true;
+        due.push({ date: d.date, text: d.text, project: g.project });
+      }); });
       due.sort(function (a, b) { return a.date < b.date ? -1 : 1; });
       var isMe = name === me && key === weeklyCurrentKey();
       body = '<div class="px-4 py-3 flex flex-col gap-2">' +
@@ -10826,9 +10865,9 @@
             '<button type="button" data-weekly-write class="text-sm font-bold px-3.5 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white">Write my update</button></div>' : '') +
         (due.length
           ? '<p class="text-xs text-zinc-500 dark:text-zinc-400">From the board, due this week:</p>' +
-            due.slice(0, 5).map(function (d) {
+            due.map(function (d) {
               return '<div class="grid grid-cols-[3.5rem_minmax(0,1fr)] gap-3 items-baseline text-sm"><span class="text-xs text-zinc-500 dark:text-zinc-400">' + escapeHtml(formatShortDate(d.date)) + '</span><span class="text-zinc-600 dark:text-zinc-300 min-w-0 break-words"><span class="font-semibold text-zinc-800 dark:text-zinc-100">' + projectNameHtml(d.project) + '</span> – ' + escapeHtml(d.text) + '</span></div>';
-            }).join('') + (due.length > 5 ? '<p class="text-xs text-zinc-400">+' + (due.length - 5) + ' more</p>' : '')
+            }).join('')
           : (isMe ? '' : '<p class="text-sm text-zinc-400 dark:text-zinc-500">Nothing on the board due this week.</p>')) +
       '</div>';
     }
@@ -10881,7 +10920,7 @@
     // One heading per department, like the sheet's blocks.
     var groups = [];
     people.forEach(function (n) {
-      var d = personDepartments(n)[0] || '';
+      var d = weeklyGroupDept(n);
       var g = groups.length && groups[groups.length - 1].dept === d ? groups[groups.length - 1] : null;
       if (!g) { g = { dept: d, names: [] }; groups.push(g); }
       g.names.push(n);
@@ -10907,7 +10946,7 @@
     var byProject = {};
     function add(project, info) {
       if (byProject[project]) return byProject[project];
-      var r = { project: project, status: null, note: '', next: info ? info.next : null, late: info ? info.late : null, steps: info ? info.dueThisWeek.length : 0, last: null };
+      var r = { project: project, status: null, note: '', late: info ? info.late : null, upcoming: info ? info.upcoming : [], latest: info ? info.latest : weeklyLatestStatus(project), last: null };
       byProject[project] = r; rows.push(r);
       return r;
     }
@@ -10944,11 +10983,19 @@
     var body = '';
     if (!d.leave) {
       body += d.rows.map(function (r, i) {
-        var when = r.next ? 'Next: ' + formatShortDate(r.next) : r.late ? 'Late since ' + formatShortDate(r.late) : '';
-        var sub = [when, r.steps ? r.steps + (r.steps === 1 ? ' step' : ' steps') + ' due this week' : ''].filter(Boolean).join(' · ');
+        var sub = r.late ? 'Late since ' + formatShortDate(r.late) : '';
+        // Reference lines, muted, only when there is something to show: the newest status line on
+        // the project (with "Use this" to copy it into the note) and what's coming up for you there.
+        var refs = '';
+        if (r.latest) refs += '<p class="min-w-0 break-words"><span class="font-semibold text-zinc-600 dark:text-zinc-300">Latest:</span> ' + escapeHtml(r.latest.text) +
+          ' <span class="text-zinc-400 dark:text-zinc-500">· ' + escapeHtml(formatShortDate(r.latest.date)) + (r.latest.author ? ' · ' + escapeHtml(String(r.latest.author).split(' ')[0]) : '') + '</span>' +
+          (r.note === r.latest.text ? '' : ' <button type="button" data-weekly-use="' + i + '" class="font-bold text-brand-600 dark:text-brand-400 hover:underline">Use this</button>') + '</p>';
+        if (r.upcoming && r.upcoming.length) refs += '<p class="min-w-0 break-words"><span class="font-semibold text-zinc-600 dark:text-zinc-300">Coming up:</span> ' +
+          r.upcoming.map(function (x) { return escapeHtml(x.text) + ' <span class="text-zinc-400 dark:text-zinc-500">' + escapeHtml(formatShortDate(x.date)) + '</span>'; }).join('<span class="text-zinc-300 dark:text-zinc-600"> · </span>') + '</p>';
         return '<div class="px-5 py-3.5 border-b border-zinc-100 dark:border-zinc-700/60 flex flex-col gap-2.5">' +
           '<div class="flex items-baseline gap-2.5 flex-wrap"><span class="text-[15px] font-bold text-zinc-900 dark:text-white break-words min-w-0">' + projectNameHtml(r.project) + '</span>' +
-            (sub ? '<span class="text-xs text-zinc-500 dark:text-zinc-400">' + escapeHtml(sub) + '</span>' : '') + '</div>' +
+            (sub ? '<span class="text-xs font-semibold text-rose-600 dark:text-rose-400">' + escapeHtml(sub) + '</span>' : '') + '</div>' +
+          (refs ? '<div class="flex flex-col gap-0.5 text-xs text-zinc-500 dark:text-zinc-400">' + refs + '</div>' : '') +
           (r.last && !r.status
             ? '<div class="flex flex-wrap items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400"><span class="min-w-0 break-words">Last week: <b class="text-zinc-700 dark:text-zinc-200">' + escapeHtml(WEEKLY_STATUS[r.last.status] ? WEEKLY_STATUS[r.last.status].label : '') + '</b>' + (r.last.note ? ' – ' + escapeHtml(r.last.note) : '') + '</span>' +
               '<button type="button" data-weekly-same="' + i + '" class="font-bold text-brand-600 dark:text-brand-400 hover:underline">Same as last week</button></div>'
@@ -11039,6 +11086,11 @@
         weeklyKeepNotes();
         var row = weeklyDraft.rows[+t.getAttribute('data-weekly-same')];
         if (row && row.last) { row.status = row.last.status; row.note = row.last.note || ''; }
+        renderWeeklyEditor();
+      } else if (t.hasAttribute('data-weekly-use')) {
+        weeklyKeepNotes();
+        var ur = weeklyDraft.rows[+t.getAttribute('data-weekly-use')];
+        if (ur && ur.latest) ur.note = ur.latest.text;
         renderWeeklyEditor();
       } else if (t.hasAttribute('data-weekly-rest')) {
         weeklyKeepNotes();
@@ -13677,6 +13729,10 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-06y', date: '2026-10-06', items: [
+      { type: 'improved', title: 'Easier weekly updates', text: "When you fill in your Monday update, each project now shows its latest status and what's coming up for you. Tap Use this to copy the latest status into your note. A card whose update isn't in yet now lists everything due that week, and Admin is listed last." },
+      { type: 'improved', title: 'Clearer sidebar', text: "Each group in the sidebar now has a line under its title, and Monday Meeting sits first under Meetings." }
+    ] },
     { id: '2026-10-06x', date: '2026-10-06', items: [
       { type: 'new', title: 'Weekly updates for the Monday meeting', text: "The Monday meeting sheet now lives in the app, under Meetings in the sidebar. Tap Write my update, pick a status for each of your projects (they're already listed) and add a note only if it helps. On Monday, Needs help comes first, then everyone's card in the same order. You'll get a reminder on Friday afternoon, and again on Monday morning if yours isn't in.", tourTarget: '[data-view-btn="weekly"]' }
     ] },
@@ -15684,7 +15740,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-06T04:14:55Z";
+  var CURRENT_BUILD_VERSION = "2026-10-06T04:27:18Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
