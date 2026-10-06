@@ -2653,6 +2653,10 @@ Asked directly: "how can I categorize these items or make this side bar better?"
   `#updates-nav-btn` so it beats `.view-toggle-btn:hover` later in the sheet. On the collapsed rail
   the count moves to the bar's corner so it doesn't cover the megaphone. A moving gradient outline
   plus label shine shipped first and was replaced the same day.
+  **The bar moves** ("I prefer motion though"): the gradient drifts (`--uf`, an `@property`) and a
+  light streak sweeps across every 3.6s, both as background layers so no `overflow:hidden` clips the
+  corner count. Its own reduced-motion rule, since the shared block can't beat the id selector.
+  **The owner prefers motion over a static treatment for attention cues.**
 - **On the collapsed rail, the teamspace menu opens BESIDE the rail at 13rem** (`#sidebar.collapsed
   #teamspace-menu` in the styles). It spans its wrapper (`left-2 right-2`), i.e. the sidebar's width,
   which on the rail cut every name to one letter (reported from a screenshot). The mobile drawer

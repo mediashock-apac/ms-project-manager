@@ -279,9 +279,24 @@
      Full-strength gradient reads as an announcement, not "you are here", and isn't solid Poppy,
      which is what primary buttons (Add Task) use. The id raises specificity over
      .view-toggle-btn:hover, which comes later in this sheet and would otherwise repaint it. */
+  /* Motion, asked for ("I prefer motion though"): the gradient drifts back and forth and a light
+     streak sweeps across every few seconds. Both are background layers, not a pseudo-element, so
+     the button needs no overflow:hidden (which would clip the corner count on the collapsed rail). */
   #updates-nav-btn.updates-unread:not(.active),
   #updates-nav-btn.updates-unread:not(.active):hover {
-    background: linear-gradient(90deg, #ff4e20, #6366f1); color: #fff; font-weight: 600;
+    background-image: linear-gradient(110deg, transparent 42%, rgba(255,255,255,0.38) 50%, transparent 58%),
+                      linear-gradient(90deg, #ff4e20, #6366f1, #ff4e20);
+    background-size: 250% 100%, 200% 100%;
+    background-repeat: no-repeat;
+    color: #fff; font-weight: 600;
+    animation: updates-shine 3.6s ease-in-out infinite, updates-flow 6s ease-in-out infinite;
+  }
+  @keyframes updates-shine { 0%, 45% { background-position: 150% 0, var(--uf, 0%) 0; } 100% { background-position: -60% 0, var(--uf, 0%) 0; } }
+  @keyframes updates-flow { 0%, 100% { --uf: 0%; } 50% { --uf: 100%; } }
+  @property --uf { syntax: '<percentage>'; initial-value: 0%; inherits: false; }
+  /* The shared reduced-motion block below can't beat this id selector, so it gets its own. */
+  @media (prefers-reduced-motion: reduce) {
+    #updates-nav-btn.updates-unread:not(.active) { animation: none; background-position: 150% 0, 0% 0; }
   }
   #updates-nav-btn.updates-unread:not(.active):hover { filter: brightness(1.06); }
   @keyframes updates-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255,78,32,0.45); } 50% { box-shadow: 0 0 0 5px rgba(255,78,32,0); } }
@@ -13090,7 +13105,7 @@
   ========================================================= */
   var CHANGELOG = [
     { id: '2026-10-06w', date: '2026-10-06', items: [
-      { type: 'improved', title: 'Harder to miss New Updates', text: 'When there is something new, the New Updates item in the sidebar turns into a bold orange-to-purple bar, until you open it.' }
+      { type: 'improved', title: 'Harder to miss New Updates', text: 'When there is something new, the New Updates item in the sidebar turns into a bold orange-to-purple bar with colours that drift and a shine that sweeps across it, until you open it.' }
     ] },
     { id: '2026-10-06v', date: '2026-10-06', items: [
       { type: 'improved', title: 'Tidier WIP editing', text: "In WIP Meeting, a deliverable's next step now shows a small pencil so you can see it can be edited: click it to change it, or Remove to delete it. Edit boxes are also shorter, so Save and Cancel sit right beside what you are typing. And a lead or closing report can now be owned by someone without a Mediashock account: pick \"+ Someone else…\" and type their name." }
@@ -15085,7 +15100,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-06T03:41:43Z";
+  var CURRENT_BUILD_VERSION = "2026-10-06T03:43:57Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
