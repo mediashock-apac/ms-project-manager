@@ -2,7 +2,11 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Project Manager">
 <title>MediaShock APAC — Project Manager</title>
 <link rel="icon" type="image/png" href="favicon.png?v=2">
 <link rel="apple-touch-icon" href="favicon.png?v=2">
@@ -537,6 +541,207 @@
      per-row overflow:hidden cell both clip an absolutely-positioned pseudo-element that pokes
      outside them, even though its containing block is the hovered element itself -- overflow
      clips descendants regardless of what establishes their positioning context). */
+
+  /* ===== MOBILE APP (#m-app) -- a phone layout of its own; see "MOBILE APP" in the script.
+     Plain CSS with an m- prefix rather than Tailwind utilities: native touches (blurred bars,
+     pushed screens, bottom sheets, safe areas) need control the utilities don't give, and plain
+     rules don't depend on the CDN's late-injected stylesheet order. ===== */
+  #m-app { display: none; }
+  html.m-mode #app { display: none !important; }
+  html.m-mode #m-app { display: block; }
+  html.m-mode #app.hidden ~ #m-app { display: none; }
+  html.m-mode, html.m-mode body { height: 100%; overflow: hidden; overscroll-behavior: none; }
+  #m-app {
+    --m-bg: #f2f2f5; --m-card: #ffffff; --m-text: #18181b; --m-sub: #71717a; --m-faint: #a1a1aa;
+    --m-line: rgba(24, 24, 27, 0.09); --m-fill: #e7e7ea; --m-bar: rgba(242, 242, 245, 0.94);
+    --m-brand: #ff4e20; --m-brand-soft: #fff0ea; --m-tab-h: 56px; --m-kb: 0px;
+    position: fixed; inset: 0; background: var(--m-bg); color: var(--m-text); font-size: 15px;
+    -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none;
+    -webkit-text-size-adjust: 100%;
+  }
+  .dark #m-app {
+    --m-bg: #09090b; --m-card: #1c1c1f; --m-text: #f4f4f5; --m-sub: #a1a1aa; --m-faint: #71717a;
+    --m-line: rgba(255, 255, 255, 0.09); --m-fill: #2a2a2e; --m-bar: rgba(9, 9, 11, 0.92);
+    --m-brand-soft: rgba(255, 78, 32, 0.15);
+  }
+  #m-app button { -webkit-tap-highlight-color: transparent; }
+  #m-app input, #m-app textarea, #m-app .m-text { -webkit-user-select: text; user-select: text; }
+  #m-app a { color: inherit; }
+  .m-panes { position: fixed; inset: 0; transition: transform .38s cubic-bezier(.32,.72,0,1), filter .38s; }
+  .m-pane { position: absolute; inset: 0; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain;
+    padding-bottom: calc(var(--m-tab-h) + env(safe-area-inset-bottom) + 28px); }
+  .m-pane:not(.m-on) { visibility: hidden; pointer-events: none; }
+  .m-behind { transform: translateX(-26%); filter: brightness(.94); }
+  .dark .m-behind { filter: brightness(.7); }
+  .m-bar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; min-height: 44px;
+    padding: env(safe-area-inset-top) 6px 0 6px; background: var(--m-bar);
+    -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px);
+    border-bottom: .5px solid transparent; transition: border-color .2s; }
+  .m-bar-side { width: 96px; display: flex; align-items: center; flex-shrink: 0; }
+  .m-bar-side.m-right { justify-content: flex-end; }
+  .m-bar-title { flex: 1; min-width: 0; text-align: center; font-weight: 600; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; opacity: 0; transition: opacity .2s; }
+  .m-scrolled .m-bar { border-bottom-color: var(--m-line); }
+  .m-scrolled .m-bar-title, .m-screen .m-bar-title { opacity: 1; }
+  .m-screen .m-bar { position: relative; border-bottom-color: var(--m-line); }
+  .m-icon-btn { position: relative; width: 42px; height: 42px; display: flex; align-items: center; justify-content: center; border-radius: 21px; color: var(--m-brand); }
+  .m-icon-btn svg { width: 24px; height: 24px; }
+  .m-icon-btn:active { background: var(--m-fill); }
+  .m-back { display: flex; align-items: center; height: 42px; padding: 0 8px 0 2px; color: var(--m-brand); font-size: 17px; border-radius: 10px; }
+  .m-back svg { width: 26px; height: 26px; }
+  .m-back:active { opacity: .5; }
+  .m-eyebrow { padding: 6px 20px 0; font-size: 13px; font-weight: 700; color: var(--m-sub); text-transform: uppercase; letter-spacing: .04em; }
+  .m-large { padding: 0 20px 4px; font-size: 32px; line-height: 1.12; font-weight: 800; letter-spacing: -.02em; }
+  .m-title { padding: 4px 20px 0; font-size: 24px; line-height: 1.2; font-weight: 800; letter-spacing: -.01em; word-break: break-word; }
+  .m-lede { padding: 4px 20px 0; font-size: 14px; color: var(--m-sub); }
+  .m-section { margin: 22px 16px 0; }
+  .m-section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 0 6px 8px; font-size: 13px; font-weight: 700; color: var(--m-sub); text-transform: uppercase; letter-spacing: .04em; }
+  .m-section-head button { text-transform: none; letter-spacing: 0; font-size: 14px; font-weight: 600; color: var(--m-brand); }
+  .m-group { background: var(--m-card); border-radius: 14px; overflow: hidden; }
+  .m-row { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 11px 14px; min-height: 52px; position: relative; }
+  .m-group > .m-row + .m-row::before, .m-group > .m-kv + .m-kv::before, .m-group > .m-row + .m-kv::before, .m-group > .m-kv + .m-row::before {
+    content: ''; position: absolute; top: 0; left: 14px; right: 0; border-top: .5px solid var(--m-line); }
+  .m-group > .m-kv { position: relative; }
+  button.m-row:active, .m-tap:active { background: var(--m-fill); }
+  .m-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .m-row-title { font-size: 15px; font-weight: 600; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+  .m-row-sub { font-size: 13px; color: var(--m-sub); line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .m-row-note { font-size: 13px; color: var(--m-sub); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+  .m-row-right { display: flex; flex-direction: column; align-items: flex-end; gap: 3px; flex-shrink: 0; font-size: 13px; color: var(--m-sub); text-align: right; }
+  .m-chev { width: 16px; height: 16px; color: var(--m-faint); flex-shrink: 0; }
+  .m-prio { width: 4px; align-self: stretch; border-radius: 4px; flex-shrink: 0; margin: 2px 0; }
+  .m-due-late { color: #e11d48; font-weight: 700; }
+  .m-due-today { color: var(--m-brand); font-weight: 700; }
+  .m-kv { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; font-size: 15px; min-height: 46px; }
+  .m-kv > span:first-child { color: var(--m-sub); flex-shrink: 0; }
+  .m-kv > span:last-child { text-align: right; min-width: 0; font-weight: 600; display: flex; align-items: center; justify-content: flex-end; gap: 6px; flex-wrap: wrap; }
+  .m-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 16px 16px 0; }
+  .m-tile { background: var(--m-card); border-radius: 14px; padding: 12px 12px 11px; text-align: left; }
+  .m-tile b { display: block; font-size: 28px; font-weight: 800; line-height: 1.05; }
+  .m-tile span { font-size: 12.5px; color: var(--m-sub); font-weight: 600; }
+  .m-tile.m-hot b { color: #e11d48; }
+  .m-tile:active { transform: scale(.97); }
+  .m-seg { display: flex; background: var(--m-fill); border-radius: 10px; padding: 2px; margin: 12px 16px 0; }
+  .m-seg button { flex: 1; min-width: 0; height: 32px; border-radius: 8px; font-size: 13.5px; font-weight: 600; color: var(--m-sub); white-space: nowrap; }
+  .m-seg button.m-on { background: var(--m-card); color: var(--m-text); box-shadow: 0 1px 3px rgba(0,0,0,.14); }
+  .m-seg.m-status button.m-on[data-status="Done"] { color: #059669; }
+  .m-seg.m-status button.m-on[data-status="Review"] { color: #7c3aed; }
+  .m-seg.m-status button.m-on[data-status="In Progress"] { color: var(--m-brand); }
+  .m-search { display: flex; align-items: center; gap: 6px; margin: 10px 16px 0; background: var(--m-fill); border-radius: 10px; height: 38px; padding: 0 10px; color: var(--m-sub); }
+  .m-search svg { width: 17px; height: 17px; flex-shrink: 0; }
+  .m-search input { flex: 1; min-width: 0; background: transparent; border: 0; outline: 0; font-size: 16px; color: var(--m-text); }
+  .m-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: var(--m-fill); color: var(--m-sub); white-space: nowrap; }
+  .m-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 20px 0; }
+  .m-pill-btn { display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: 18px; background: var(--m-card); color: var(--m-brand); font-size: 14px; font-weight: 700; }
+  .m-pill-btn svg { width: 17px; height: 17px; }
+  .m-pill-btn:active { background: var(--m-fill); }
+  .m-actions { display: flex; flex-wrap: wrap; gap: 8px; padding: 14px 16px 0; }
+  .m-empty { text-align: center; color: var(--m-sub); padding: 26px 20px; font-size: 14px; line-height: 1.45; }
+  .m-empty b { display: block; color: var(--m-text); font-size: 16px; margin-bottom: 2px; }
+  .m-tabbar { position: fixed; left: 0; right: 0; bottom: 0; z-index: 20; display: flex; height: calc(var(--m-tab-h) + env(safe-area-inset-bottom)); padding-bottom: env(safe-area-inset-bottom);
+    background: var(--m-bar); -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); border-top: .5px solid var(--m-line);
+    transition: transform .38s cubic-bezier(.32,.72,0,1); }
+  .m-tabbar.m-behind { filter: none; }
+  .m-tabbar button { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 10.5px; font-weight: 600; color: var(--m-faint); position: relative; }
+  .m-tabbar button svg { width: 25px; height: 25px; transition: transform .2s; }
+  .m-tabbar button:active svg { transform: scale(.88); }
+  .m-tabbar button.m-on { color: var(--m-brand); }
+  .m-badge { position: absolute; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: #e11d48; color: #fff; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 0 2px var(--m-bg); }
+  .m-tabbar .m-badge { top: 4px; left: calc(50% + 5px); }
+  .m-icon-btn .m-badge { top: 3px; right: 1px; }
+  .m-count { min-width: 22px; height: 22px; padding: 0 6px; border-radius: 11px; background: var(--m-brand); color: #fff; font-size: 12px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+  .m-screen { position: fixed; inset: 0; z-index: 40; background: var(--m-bg); display: flex; flex-direction: column; transform: translateX(100%);
+    transition: transform .38s cubic-bezier(.32,.72,0,1), filter .38s; box-shadow: -10px 0 30px rgba(0,0,0,.1); }
+  .m-screen.m-in { transform: translateX(0); }
+  .m-screen.m-in.m-behind { transform: translateX(-26%); }
+  .m-screen.m-drag, .m-drag-under { transition: none !important; }
+  .m-screen-body { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch; overscroll-behavior-y: contain; padding-bottom: calc(env(safe-area-inset-bottom) + 28px); }
+  .m-has-footer .m-screen-body { padding-bottom: 16px; }
+  .m-footer { flex-shrink: 0; padding: 8px 10px calc(8px + env(safe-area-inset-bottom)); margin-bottom: var(--m-kb); background: var(--m-bar);
+    -webkit-backdrop-filter: saturate(180%) blur(20px); backdrop-filter: saturate(180%) blur(20px); border-top: .5px solid var(--m-line); }
+  .m-compose { display: flex; align-items: flex-end; gap: 8px; }
+  .m-compose textarea { flex: 1; min-width: 0; resize: none; max-height: 132px; height: 40px; border-radius: 20px; border: .5px solid var(--m-line); background: var(--m-card);
+    padding: 9px 15px; font-size: 16px; line-height: 1.35; color: var(--m-text); outline: 0; }
+  .m-send { width: 40px; height: 40px; border-radius: 20px; background: var(--m-brand); color: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: opacity .15s, transform .15s; }
+  .m-send svg { width: 19px; height: 19px; }
+  .m-send:disabled { opacity: .35; }
+  .m-send:not(:disabled):active { transform: scale(.9); }
+  .m-sheet-bg { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,.38); opacity: 0; transition: opacity .3s; }
+  .m-sheet-bg.m-in { opacity: 1; }
+  .m-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 61; background: var(--m-card); border-radius: 18px 18px 0 0; padding: 8px 16px calc(16px + env(safe-area-inset-bottom));
+    transform: translateY(105%); transition: transform .38s cubic-bezier(.32,.72,0,1); max-height: calc(100% - env(safe-area-inset-top) - 24px); overflow-y: auto; margin-bottom: var(--m-kb); }
+  .m-sheet.m-in { transform: translateY(0); }
+  .m-sheet.m-drag { transition: none; }
+  .m-grab { width: 38px; height: 5px; border-radius: 3px; background: var(--m-fill); margin: 0 auto 12px; }
+  .m-sheet-title { font-size: 17px; font-weight: 700; text-align: center; margin-bottom: 14px; }
+  .m-field { display: block; margin-bottom: 12px; }
+  .m-field > span { display: block; font-size: 13px; font-weight: 600; color: var(--m-sub); margin: 0 0 6px 4px; }
+  .m-input { display: block; width: 100%; height: 46px; border-radius: 12px; background: var(--m-fill); border: 0; padding: 0 14px; font-size: 16px; color: var(--m-text); outline: 0; -webkit-appearance: none; appearance: none; }
+  textarea.m-input { height: auto; min-height: 96px; padding: 12px 14px; resize: none; line-height: 1.4; }
+  select.m-input { background-image: none; }
+  .m-btn { display: flex; align-items: center; justify-content: center; gap: 8px; height: 50px; border-radius: 14px; font-size: 16px; font-weight: 700; width: 100%; background: var(--m-brand); color: #fff; }
+  .m-btn:active { filter: brightness(.92); }
+  .m-btn:disabled { opacity: .45; }
+  .m-btn-plain { background: var(--m-fill); color: var(--m-text); }
+  .m-btn-danger { background: var(--m-card); color: #e11d48; }
+  .m-check { width: 26px; height: 26px; border-radius: 13px; border: 2px solid var(--m-faint); flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: #fff; transition: background .15s, border-color .15s, transform .15s; }
+  .m-check svg { width: 15px; height: 15px; opacity: 0; transition: opacity .15s; }
+  .m-check.m-done { background: #10b981; border-color: #10b981; }
+  .m-check.m-done svg { opacity: 1; }
+  .m-check:active { transform: scale(.85); }
+  .m-struck .m-row-title { text-decoration: line-through; color: var(--m-sub); }
+  .m-msgs { padding: 10px 12px 14px; display: flex; flex-direction: column; gap: 3px; }
+  .m-day { align-self: center; font-size: 12px; font-weight: 600; color: var(--m-sub); background: var(--m-fill); padding: 3px 10px; border-radius: 10px; margin: 12px 0 6px; }
+  .m-msg { display: flex; gap: 8px; max-width: 86%; align-items: flex-end; align-self: flex-start; }
+  .m-msg.m-mine { align-self: flex-end; flex-direction: row-reverse; }
+  .m-msg-col { min-width: 0; display: flex; flex-direction: column; }
+  .m-mine .m-msg-col { align-items: flex-end; }
+  .m-bubble { background: var(--m-card); border-radius: 18px; padding: 8px 12px; font-size: 15px; line-height: 1.4; overflow-wrap: anywhere; white-space: pre-wrap; -webkit-user-select: text; user-select: text; }
+  .m-mine .m-bubble { background: #ffe4da; color: #18181b; }
+  .dark .m-mine .m-bubble { background: rgba(255, 78, 32, 0.24); color: #fff; }
+  .m-msg-author { font-size: 12px; font-weight: 700; color: var(--m-sub); margin: 6px 0 2px 12px; }
+  .m-msg-time { font-size: 11px; color: var(--m-faint); margin: 2px 10px 4px; }
+  .m-chat-img { display: block; max-width: 230px; max-height: 280px; min-width: 120px; min-height: 90px; border-radius: 12px; background: var(--m-fill); object-fit: cover; margin: 2px 0 4px; }
+  .m-chat-img[src] { min-width: 0; min-height: 0; }
+  .m-quote { border-left: 3px solid var(--m-brand); padding: 1px 8px; margin: 0 0 5px; font-size: 13px; color: var(--m-sub); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: normal; }
+  .m-reacts { display: flex; gap: 4px; flex-wrap: wrap; margin: 3px 4px 0; }
+  .m-reacts span { font-size: 12px; background: var(--m-card); border-radius: 10px; padding: 1px 7px; box-shadow: 0 0 0 .5px var(--m-line); }
+  .m-comment { display: flex; gap: 10px; padding: 12px 14px; position: relative; }
+  .m-comment + .m-comment::before { content: ''; position: absolute; top: 0; left: 14px; right: 0; border-top: .5px solid var(--m-line); }
+  .m-comment-text { font-size: 15px; line-height: 1.45; overflow-wrap: anywhere; white-space: pre-wrap; margin-top: 2px; -webkit-user-select: text; user-select: text; }
+  .m-strip { display: grid; grid-template-columns: 36px repeat(7, 1fr) 36px; align-items: center; margin: 12px 8px 0; }
+  .m-strip-day { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 0; border-radius: 12px; font-size: 11.5px; font-weight: 600; color: var(--m-sub); }
+  .m-strip-day b { font-size: 17px; font-weight: 700; color: var(--m-text); width: 34px; height: 34px; border-radius: 17px; display: flex; align-items: center; justify-content: center; }
+  .m-strip-day.m-today b { background: var(--m-brand); color: #fff; }
+  .m-strip-day i { width: 5px; height: 5px; border-radius: 3px; background: transparent; }
+  .m-strip-day.m-has i { background: var(--m-faint); }
+  .m-strip-day:active { background: var(--m-fill); }
+  .m-cal-head { position: sticky; top: calc(44px + env(safe-area-inset-top)); z-index: 2; display: flex; align-items: baseline; gap: 8px; padding: 14px 22px 8px; background: var(--m-bg); font-size: 15px; font-weight: 700; }
+  .m-cal-head span { font-size: 13px; color: var(--m-sub); font-weight: 600; }
+  .m-cal-head.m-is-today { color: var(--m-brand); }
+  .m-kind { width: 4px; align-self: stretch; border-radius: 4px; flex-shrink: 0; margin: 2px 0; }
+  .m-late { display: inline-block; font-size: 10.5px; font-weight: 800; padding: 1px 6px; border-radius: 5px; background: #e11d48; color: #fff; vertical-align: 1px; white-space: nowrap; }
+  .m-profile { display: flex; align-items: center; gap: 14px; padding: 14px; }
+  .m-switch { width: 51px; height: 31px; border-radius: 16px; background: var(--m-fill); position: relative; flex-shrink: 0; transition: background .2s; }
+  .m-switch::after { content: ''; position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 14px; background: #fff; box-shadow: 0 2px 4px rgba(0,0,0,.2); transition: transform .2s; }
+  .m-switch.m-on { background: #34c759; }
+  .m-switch.m-on::after { transform: translateX(20px); }
+  .m-row-icon { width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #fff; flex-shrink: 0; }
+  .m-row-icon svg { width: 18px; height: 18px; }
+  .m-progress { height: 6px; border-radius: 3px; background: var(--m-fill); overflow: hidden; }
+  .m-progress > i { display: block; height: 100%; background: var(--m-brand); border-radius: 3px; }
+  .m-weekly section { border-radius: 14px !important; }
+  .m-fade-in { animation: m-fade .25s ease both; }
+  @keyframes m-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  @media (prefers-reduced-motion: reduce) {
+    #m-app .m-screen, #m-app .m-sheet, #m-app .m-panes, #m-app .m-tabbar, #m-app .m-sheet-bg { transition: none; }
+    #m-app .m-fade-in { animation: none; }
+  }
+  /* The desktop's own overlays, when they open on a phone: full screen rather than a card. */
+  html.m-mode #weekly-modal, html.m-mode #task-modal { padding: 0 !important; }
+  html.m-mode #weekly-modal > div, html.m-mode #task-modal > div { max-width: none; max-height: none; height: 100%; border-radius: 0;
+    padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+  html.m-mode #toast-container { left: 12px; right: 12px; bottom: calc(66px + env(safe-area-inset-bottom)); align-items: center; }
+  html.m-mode #update-banner { bottom: calc(66px + env(safe-area-inset-bottom)); }
 </style>
 </head>
 <body class="bg-zinc-50 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 min-h-screen">
@@ -1388,6 +1593,11 @@
 
   </div>
 </div>
+
+<!-- ============ MOBILE APP ============ -->
+<!-- Phones get their own layout, drawn by the MOBILE APP section of the script. Must stay the
+     next sibling of #app: the CSS hides it whenever #app is hidden (signed out). -->
+<div id="m-app"></div>
 
 <!-- ============ TASK MODAL ============ -->
 <div id="task-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-2 sm:p-4 modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="task-modal-title">
@@ -2250,20 +2460,32 @@
   // WIP spot that prints a project name must go through this -- the Agenda step line and the
   // decision rows were missed on the first pass and reported ("why do some not get highlighted").
   // Project names run words together ("MarketingAgencyPartner2027_Q4"), so a wrapping line had
-  // nowhere to break and cut a word in half. <wbr> marks the natural joins (after _ - / and at
-  // camelCase and letter/number boundaries); it does nothing where the line is truncated.
+  // nowhere to break and cut a word in half. A zero-width space marks the natural joins (after
+  // _ - / and at camelCase and letter/number boundaries). NOT <wbr>: Chromium breaks at a <wbr>
+  // even inside white-space:nowrap, which pushed truncated one-line labels onto extra lines
+  // (measured: a 3-line "truncate" label). A zero-width space respects nowrap. It would ride
+  // along on copy, so the copy handler below and every project-name save strip it (stripZwsp).
+  var ZWSP = '\u200B';
+  function stripZwsp(s) { return String(s || '').replace(/\u200B/g, ''); }
   function softBreakHtml(text) {
     return escapeHtml(text)
-      .replace(/([_\/-])(?=[^\s_\/-])/g, '$1<wbr>')
-      .replace(/([a-z])(?=[A-Z])/g, '$1<wbr>')
-      .replace(/([A-Za-z])(?=\d)/g, '$1<wbr>');
+      .replace(/([_\/-])(?=[^\s_\/-])/g, '$1' + ZWSP)
+      .replace(/([a-z])(?=[A-Z])/g, '$1' + ZWSP)
+      .replace(/([A-Za-z])(?=\d)/g, '$1' + ZWSP);
   }
+  document.addEventListener('copy', function (e) {
+    var sel = window.getSelection ? String(window.getSelection()) : '';
+    if (sel.indexOf(ZWSP) === -1 || !e.clipboardData) return;
+    e.clipboardData.setData('text/plain', stripZwsp(sel));
+    e.preventDefault();
+  });
   function projectNameHtml(name) {
     var s = String(name || ''), out = '', last = 0, m;
     CLIENT_BRACKET_RE.lastIndex = 0;
     while ((m = CLIENT_BRACKET_RE.exec(s))) {
-      out += softBreakHtml(s.slice(last, m.index)) +
-        '<span class="px-1 rounded whitespace-nowrap ' + clientColorClass(m[1]) + '">' + escapeHtml(m[0]) + '</span>';
+      // Break points either side of the tag too: names run "271231[Client]Campaign" with no spaces.
+      out += softBreakHtml(s.slice(last, m.index)) + ZWSP +
+        '<span class="px-1 rounded whitespace-nowrap ' + clientColorClass(m[1]) + '">' + escapeHtml(m[0]) + '</span>' + ZWSP;
       last = m.index + m[0].length;
     }
     return out + softBreakHtml(s.slice(last));
@@ -2340,6 +2562,7 @@
   // (allProjectNames), not from projectDocs. A name that matches an existing project simply puts
   // that project in the category instead of making a second one.
   function addWipEntry(name, key, firstDeliverable) {
+    name = stripZwsp(name).trim();
     var patch = { wipCategory: key };
     if (firstDeliverable) patch.wipDeliverables = arrayUnion({ id: uid(), text: firstDeliverable, status: [], next: '' });
     return ensureProjectDoc(name).then(function (id) {
@@ -6402,6 +6625,9 @@
   }
 
   function openTaskModal(task) {
+    // Phones get their own task screen (see MOBILE APP); "Full editor" there sets mFullEditor.
+    if (mActive() && !mFullEditor) { if (task) mOpenTask(task.id); else mOpenQuickAdd(); return; }
+    mFullEditor = false;
     clearFieldErrors();
     editingTaskId = task ? task.id : null;
     document.getElementById('task-modal-title').textContent = task ? 'Edit Task' : 'Add Task';
@@ -8395,7 +8621,7 @@
     var driveEl = document.getElementById('task-drive');
 
     var name = sentenceCase(nameEl.value.trim());
-    var project = projectEl.value.trim();
+    var project = stripZwsp(projectEl.value).trim();
     // Not assigneeEl.value: the picker's "+ Someone else..." row keeps the real name in the
     // adjacent text input, and currentAssigneeValue() is what knows which of the two is live.
     var assignee = currentAssigneeValue();
@@ -13741,6 +13967,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-06zb', date: '2026-10-06', items: [
+      { type: 'new', title: 'A proper phone app', text: "On a phone, Project Manager now opens as its own app, with Home, Tasks, Calendar, Chat and More along the bottom. It's built for checking things on the go: tick off steps, move a task's status, post an update or comment, chat, write your Monday update and add a quick task. Bigger edits stay on a computer. Tip: add it to your home screen for the full-screen feel." }
+    ] },
     { id: '2026-10-06za', date: '2026-10-06', items: [
       { type: 'fixed', title: 'Long project names wrap neatly', text: "On the Calendar and WIP Meeting, long project names now break between words instead of mid-word, and the LATE label stays in one piece." }
     ] },
@@ -14332,6 +14561,7 @@
   var pageTourTimer = null;
   function maybeStartPageTour(view) {
     clearTimeout(pageTourTimer);
+    if (mActive()) return;
     var tour = pageTour(view);
     if (!tour || tourState || !auth.currentUser || !myPersonDoc()) return;
     if (toursSeenList().indexOf(tour.id) !== -1) return;
@@ -14398,6 +14628,7 @@
   // retried on a short timer while something is in the way. Waits for our own roster row, so a
   // tour already seen on another device isn't replayed before toursSeen has arrived.
   function maybeStartTour() {
+    if (mActive()) return;   // the tours point at the desktop layout, which a phone doesn't show
     if (tourState || tourCheckTimer) return;
     if (!auth.currentUser || !myPersonDoc()) return;
     var tour = dueTour();
@@ -15244,6 +15475,1330 @@
   /* =========================================================
      MASTER RENDER
   ========================================================= */
+  /* =========================================================
+     MOBILE APP -- the phone layout. Asked: "The mobile view is horrible. Interfaces overlap each
+     other, scrolling is a pain ... I don't need it to function 100% the same way as desktop. It
+     should only be editable in key and simple areas and the main objective of it is to get
+     information on the go ... like a polished native mobile app instead of a web app."
+
+     Below 768px the desktop shell (#app) is hidden and #m-app is drawn from the same live data:
+     a tab bar (Home, Tasks, Calendar, Chat, More), screens that slide in from the right (back
+     button, left-edge swipe, or the phone's own back gesture via history), and bottom sheets.
+     The only edits on a phone: tick a checklist step, move a task's status, post a status update
+     or a comment, send a chat message, write the Monday update, quick-add a task. Everything
+     else is the desktop's job; a task's "..." > Full editor opens the desktop task window.
+
+     Company-wide like WIP: no teamspace switcher and none of the desktop's saved toolbar filters
+     (mWithPlain), since a phone has nowhere to show them and a hidden filter silently hiding
+     tasks is the one thing a read-on-the-go view can't afford.
+
+     Plain CSS (.m-*) for the shell; see the MOBILE APP block in <style>.
+     TO TURN IT OFF: MOBILE_APP_ENABLED = false. Per person: More > Use desktop layout, and the
+     profile menu's "Use mobile layout" to come back.
+  ========================================================= */
+  var MOBILE_APP_ENABLED = true;
+  var M_DESKTOP_KEY = 'flowboard_mobile_desktop';
+  var mMedia = window.matchMedia ? window.matchMedia('(max-width: 767px)') : null;
+  var mRoot = document.getElementById('m-app');
+  var mBuilt = false;
+  var mTab = 'home';
+  var mStack = [];
+  var mSheetOpen = null;
+  var mTaskScope = 'mine';
+  var mTaskQuery = '';
+  var mCalScope = 'mine';
+  var mCalStart = null;
+  var mWeekKey = null;
+  var mFullEditor = false;
+  var mRefreshQueued = false;
+  var mImgCache = {};
+  var mShowDone = {};
+
+  var M_ICONS = {
+    home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/>',
+    tasks: '<rect x="3" y="3" width="18" height="18" rx="5"/><path d="m8 12 3 3 5-6"/>',
+    calendar: '<rect x="3" y="4.5" width="18" height="16.5" rx="3.5"/><path d="M3 9.5h18M8 2.5v4M16 2.5v4"/>',
+    chat: '<path d="M21 11.5a8.5 8.5 0 0 1-12.6 7.4L3 20.5l1.6-5.1A8.5 8.5 0 1 1 21 11.5z"/>',
+    more: '<rect x="3.5" y="3.5" width="7" height="7" rx="2"/><rect x="13.5" y="3.5" width="7" height="7" rx="2"/><rect x="3.5" y="13.5" width="7" height="7" rx="2"/><rect x="13.5" y="13.5" width="7" height="7" rx="2"/>',
+    bell: '<path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>',
+    back: '<path d="m15 18-6-6 6-6"/>',
+    chev: '<path d="m9 18 6-6-6-6"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
+    send: '<path d="M12 19V5M5 12l7-7 7 7"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+    users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
+    clipboard: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/>',
+    layers: '<path d="m12 2 10 5-10 5L2 7z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/>',
+    moon: '<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>',
+    monitor: '<rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/>',
+    logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/>',
+    megaphone: '<path d="m3 11 18-5v12L3 13z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
+    dots: '<circle cx="5" cy="12" r="1.3" fill="currentColor"/><circle cx="12" cy="12" r="1.3" fill="currentColor"/><circle cx="19" cy="12" r="1.3" fill="currentColor"/>',
+    external: '<path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>',
+    clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    plane: '<path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/>',
+    link: '<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>',
+    edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+    mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>'
+  };
+  function mIcon(name, cls) {
+    return '<svg class="' + (cls || '') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (M_ICONS[name] || '') + '</svg>';
+  }
+
+  function mPrefersDesktop() { try { return localStorage.getItem(M_DESKTOP_KEY) === '1'; } catch (e) { return false; } }
+  function mActive() { return MOBILE_APP_ENABLED && !!mMedia && mMedia.matches && !mPrefersDesktop(); }
+  function mMe() { return myDisplayName(); }
+  function mToday() { return toDateInputValue(todayMidnight()); }
+  function mFirst(name) { return String(name || '').split(' ')[0]; }
+  function mHaptic() { try { if (navigator.vibrate) navigator.vibrate(8); } catch (e) { /* ignore */ } }
+  function mOpenTasks() { return activeTasks().filter(function (t) { return t.status !== 'Done'; }); }
+  function mIsMine(t, me) { return t.assignee === me || (Array.isArray(t.involved) && t.involved.indexOf(me) !== -1); }
+  function mByDeadline(a, b) {
+    var x = a.deadline || '9999', y = b.deadline || '9999';
+    if (x !== y) return x < y ? -1 : 1;
+    return (PRIORITY_WEIGHT[b.priority] || 0) - (PRIORITY_WEIGHT[a.priority] || 0);
+  }
+  // The phone shows the whole company, not whatever the desktop's saved toolbar filters,
+  // teamspace or calendar scope happen to be -- there is nowhere on a phone to show them.
+  function mWithPlain(fn) {
+    var f = filters, ts = currentTeamspace, cs = calendarScope;
+    filters = { search: '', priority: '', project: '', assignees: [], sortBy: 'focus', overdueOnly: false };
+    currentTeamspace = 'all';
+    calendarScope = mCalScope;
+    try { return fn(); } finally { filters = f; currentTeamspace = ts; calendarScope = cs; }
+  }
+  function mDue(dateStr, t) {
+    var n = daysUntil(dateStr);
+    if (n === null || n === undefined) return { text: '', cls: '' };
+    var late = t ? dueUrgency(t).overdue : n < 0;
+    var text = n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : n === -1 ? 'Yesterday'
+      : n < 0 ? (late ? (-n) + 'd late' : formatShortDate(dateStr))
+      : n < 7 ? parseDate(dateStr).toLocaleDateString('en-US', { weekday: 'short' }) : formatShortDate(dateStr);
+    return { text: text, cls: late ? 'm-due-late' : n === 0 ? 'm-due-today' : '' };
+  }
+  function mDayLabel(ds) {
+    var n = daysUntil(ds);
+    if (n === 0) return 'Today';
+    if (n === -1) return 'Yesterday';
+    if (n === 1) return 'Tomorrow';
+    return parseDate(ds).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' });
+  }
+  function mAgo(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    var mins = Math.round((Date.now() - d.getTime()) / 60000);
+    if (mins < 1) return 'Just now';
+    if (mins < 60) return mins + 'm ago';
+    if (mins < 60 * 24) return Math.round(mins / 60) + 'h ago';
+    return mDayLabel(toDateInputValue(d));
+  }
+  function mTime(iso) {
+    var d = new Date(iso);
+    return isNaN(d.getTime()) ? '' : d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  }
+  var M_PRIO_COLOR = { High: '#f43f5e', Medium: '#f59e0b', Low: '#38bdf8' };
+  function mPrioColor(t) {
+    if (t.status === 'Done') return '#10b981';
+    if (isReadyForReview(t)) return '#a855f7';
+    return M_PRIO_COLOR[t.priority] || '#a1a1aa';
+  }
+  function mStatusLabel(s) { return s === 'In Progress' ? 'In progress' : s === 'Done' ? 'Done' : (s || ''); }
+
+  /* ---------- shell ---------- */
+  function mBellHtml() {
+    return '<button type="button" class="m-icon-btn" data-m-go="notifications" aria-label="Notifications">' + mIcon('bell') +
+      '<span class="m-badge" data-m-bell style="display:none"></span></button>';
+  }
+  function mPaneHtml(key, title, actions, top) {
+    return '<section class="m-pane' + (key === mTab ? ' m-on' : '') + '" data-m-pane="' + key + '">' +
+      '<header class="m-bar"><div class="m-bar-side"></div><div class="m-bar-title">' + title + '</div>' +
+        '<div class="m-bar-side m-right">' + (actions || '') + mBellHtml() + '</div></header>' +
+      (top || '') + '<div id="m-' + key + '"></div></section>';
+  }
+  function mBuild() {
+    mBuilt = true;
+    var addBtn = '<button type="button" class="m-icon-btn" data-m-act="quick-add" aria-label="New task">' + mIcon('plus') + '</button>';
+    var tabs = [['home', 'Home'], ['tasks', 'Tasks'], ['calendar', 'Calendar'], ['chat', 'Chat'], ['more', 'More']];
+    mRoot.innerHTML =
+      '<div class="m-panes" id="m-panes">' +
+        mPaneHtml('home', 'Today', addBtn, '') +
+        mPaneHtml('tasks', 'Tasks', addBtn,
+          '<h1 class="m-large">Tasks</h1>' +
+          '<div class="m-seg" data-m-seg="task-scope"><button type="button" data-v="mine">Mine</button><button type="button" data-v="all">Everyone</button></div>' +
+          '<label class="m-search">' + mIcon('search') + '<input id="m-task-search" type="search" placeholder="Search tasks" autocomplete="off"></label>') +
+        mPaneHtml('calendar', 'Calendar', '',
+          '<h1 class="m-large">Calendar</h1>' +
+          '<div class="m-seg" data-m-seg="cal-scope"><button type="button" data-v="mine">Mine</button><button type="button" data-v="all">Everyone</button></div>' +
+          '<div class="m-strip" id="m-cal-strip"></div>') +
+        mPaneHtml('chat', 'Chats', '', '<h1 class="m-large">Chats</h1>') +
+        mPaneHtml('more', 'More', '', '<h1 class="m-large">More</h1>') +
+      '</div>' +
+      '<nav class="m-tabbar" id="m-tabbar" aria-label="Sections">' + tabs.map(function (t) {
+        return '<button type="button" data-m-tab="' + t[0] + '" class="' + (t[0] === mTab ? 'm-on' : '') + '" aria-label="' + t[1] + '">' + mIcon(t[0]) + '<span>' + t[1] + '</span>' +
+          '<span class="m-badge" data-m-tab-badge="' + t[0] + '" style="display:none"></span></button>';
+      }).join('') + '</nav>';
+    mRoot.querySelectorAll('.m-pane').forEach(function (pane) {
+      pane.addEventListener('scroll', function () { pane.classList.toggle('m-scrolled', pane.scrollTop > 30); }, { passive: true });
+    });
+    mRoot.addEventListener('click', mOnClick);
+    mRoot.addEventListener('submit', mOnSubmit);
+    mRoot.addEventListener('input', mOnInput);
+    if (window.visualViewport) {
+      var vv = window.visualViewport;
+      var kb = function () {
+        var h = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+        mRoot.style.setProperty('--m-kb', h > 80 ? h + 'px' : '0px');
+      };
+      vv.addEventListener('resize', kb);
+      vv.addEventListener('scroll', kb);
+    }
+  }
+
+  function mSyncThemeColor() {
+    var meta = document.getElementById('meta-theme-color');
+    if (meta) meta.setAttribute('content', document.documentElement.classList.contains('dark') ? '#09090b' : '#f2f2f5');
+  }
+
+  // The way back from "Use desktop layout": a profile-menu row, only on a phone-sized screen.
+  function mEnsureUseMobileButton() {
+    var show = MOBILE_APP_ENABLED && !!mMedia && mMedia.matches && mPrefersDesktop();
+    var btn = document.getElementById('btn-use-mobile');
+    var signOutBtn = document.getElementById('btn-sign-out');
+    if (!btn && show && signOutBtn) {
+      btn = document.createElement('button');
+      btn.type = 'button';
+      btn.id = 'btn-use-mobile';
+      btn.className = 'w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-600';
+      btn.innerHTML = mIcon('tasks', 'w-4 h-4') + '<span>Use mobile layout</span>';
+      btn.addEventListener('click', function () {
+        try { localStorage.removeItem(M_DESKTOP_KEY); } catch (e) { /* ignore */ }
+        document.getElementById('user-menu-panel').classList.add('hidden');
+        mApplyMode();
+      });
+      signOutBtn.parentNode.insertBefore(btn, signOutBtn);
+    }
+    if (btn) btn.classList.toggle('hidden', !show);
+  }
+
+  function mApplyMode() {
+    var on = mActive();
+    var was = document.documentElement.classList.contains('m-mode');
+    document.documentElement.classList.toggle('m-mode', on);
+    mEnsureUseMobileButton();
+    if (on) {
+      if (!mBuilt) mBuild();
+      mSyncThemeColor();
+      mRefresh();
+    } else if (was) {
+      var meta = document.getElementById('meta-theme-color');
+      if (meta) meta.setAttribute('content', document.documentElement.classList.contains('dark') ? '#27272a' : '#ffffff');
+      if (auth.currentUser) renderAll();
+    }
+  }
+
+  function mRefresh() {
+    if (!mBuilt || !mActive() || !auth.currentUser || mRefreshQueued) return;
+    mRefreshQueued = true;
+    requestAnimationFrame(function () {
+      mRefreshQueued = false;
+      if (!mActive() || !auth.currentUser) return;
+      mRenderTab(mTab);
+      mStack.forEach(mRenderScreen);
+      mRenderBadges();
+    });
+  }
+
+  var M_TAB_RENDER = {
+    home: function () { return mHomeHtml(); },
+    tasks: function () { return mTasksHtml(); },
+    calendar: function () { return mCalendarHtml(); },
+    chat: function () { return mChatsHtml(); },
+    more: function () { return mMoreHtml(); }
+  };
+  function mRenderTab(key) {
+    var el = document.getElementById('m-' + key);
+    if (!el) return;
+    el.innerHTML = M_TAB_RENDER[key]();
+    mRoot.querySelectorAll('[data-m-seg="task-scope"] button').forEach(function (b) { b.classList.toggle('m-on', b.getAttribute('data-v') === mTaskScope); });
+    mRoot.querySelectorAll('[data-m-seg="cal-scope"] button').forEach(function (b) { b.classList.toggle('m-on', b.getAttribute('data-v') === mCalScope); });
+  }
+  function mSetTab(key) {
+    var pane = mRoot.querySelector('[data-m-pane="' + key + '"]');
+    if (key === mTab) { if (pane) pane.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    mTab = key;
+    mRoot.querySelectorAll('.m-pane').forEach(function (p) { p.classList.toggle('m-on', p === pane); });
+    mRoot.querySelectorAll('[data-m-tab]').forEach(function (b) { b.classList.toggle('m-on', b.getAttribute('data-m-tab') === key); });
+    mRenderTab(key);
+    mRenderBadges();
+  }
+  function mRenderBadges() {
+    var unread = myNotifications.filter(function (n) { return !n.read; }).length;
+    mRoot.querySelectorAll('[data-m-bell]').forEach(function (b) {
+      b.textContent = unread > 9 ? '9+' : String(unread);
+      b.style.display = unread ? '' : 'none';
+    });
+    var counts = {
+      chat: mChatNames().filter(function (n) { return chatUnreadCount(n) > 0; }).length,
+      more: unseenUpdateIds().length
+    };
+    mRoot.querySelectorAll('[data-m-tab-badge]').forEach(function (b) {
+      var n = counts[b.getAttribute('data-m-tab-badge')] || 0;
+      b.textContent = n > 9 ? '9+' : String(n);
+      b.style.display = n ? '' : 'none';
+    });
+  }
+
+  /* ---------- pushed screens and sheets ---------- */
+  function mUnder() { return mStack.length ? mStack[mStack.length - 1].el : document.getElementById('m-panes'); }
+  function mPush(opts) {
+    var under = mUnder();
+    var el = document.createElement('div');
+    el.className = 'm-screen' + (opts.footer ? ' m-has-footer' : '');
+    el.innerHTML =
+      '<header class="m-bar"><div class="m-bar-side"><button type="button" class="m-back" data-m-act="back">' + mIcon('back') + '<span>' + escapeHtml(opts.backLabel || 'Back') + '</span></button></div>' +
+        '<div class="m-bar-title">' + escapeHtml(opts.title || '') + '</div><div class="m-bar-side m-right">' + (opts.actions || '') + '</div></header>' +
+      '<div class="m-screen-body"></div>' + (opts.footer ? '<div class="m-footer">' + opts.footer + '</div>' : '');
+    mRoot.appendChild(el);
+    var s = { el: el, body: el.querySelector('.m-screen-body'), render: opts.render, after: opts.after, key: opts.key, first: true };
+    mStack.push(s);
+    mRenderScreen(s);
+    el.getBoundingClientRect();
+    el.classList.add('m-in');
+    under.classList.add('m-behind');
+    try { history.pushState({ mScreen: mStack.length }, ''); } catch (e) { /* ignore */ }
+    mEdgeSwipe(s);
+    return s;
+  }
+  function mRenderScreen(s) {
+    if (!s.render) return;
+    var b = s.body;
+    s.wasNearBottom = b.scrollHeight - b.scrollTop - b.clientHeight < 140;
+    b.innerHTML = s.render(s);
+    if (s.after) s.after(s);
+    s.first = false;
+  }
+  function mPop() {
+    var s = mStack.pop();
+    if (!s) return;
+    var under = mUnder();
+    under.classList.remove('m-behind');
+    s.el.classList.remove('m-in');
+    setTimeout(function () { s.el.remove(); }, 420);
+    mRefresh();
+  }
+  function mBack() { history.back(); }
+  // Swipe right from the left edge to go back, like a native stack.
+  function mEdgeSwipe(s) {
+    var el = s.el, startX = 0, startY = 0, dx = 0, tracking = false, decided = false, under = null;
+    el.addEventListener('touchstart', function (e) {
+      var t = e.touches[0];
+      if (t.clientX > 28 || mStack[mStack.length - 1] !== s) return;
+      tracking = true; decided = false; dx = 0; startX = t.clientX; startY = t.clientY;
+    }, { passive: true });
+    el.addEventListener('touchmove', function (e) {
+      if (!tracking) return;
+      var t = e.touches[0];
+      dx = Math.max(0, t.clientX - startX);
+      if (!decided) {
+        if (Math.abs(t.clientY - startY) > 10 && Math.abs(t.clientY - startY) > dx) { tracking = false; return; }
+        if (dx < 8) return;
+        decided = true;
+        under = mStack.length > 1 ? mStack[mStack.length - 2].el : document.getElementById('m-panes');
+        el.classList.add('m-drag');
+        under.classList.add('m-drag-under');
+      }
+      el.style.transform = 'translateX(' + dx + 'px)';
+      under.style.transform = 'translateX(' + (-26 + 26 * Math.min(1, dx / el.offsetWidth)) + '%)';
+    }, { passive: true });
+    function end() {
+      if (!tracking) return;
+      tracking = false;
+      if (!decided) return;
+      el.classList.remove('m-drag');
+      under.classList.remove('m-drag-under');
+      el.style.transform = '';
+      under.style.transform = '';
+      if (dx > el.offsetWidth * 0.33) mBack();
+    }
+    el.addEventListener('touchend', end);
+    el.addEventListener('touchcancel', end);
+  }
+
+  function mSheet(html, onMount) {
+    if (mSheetOpen) mCloseSheet();
+    var bg = document.createElement('div');
+    bg.className = 'm-sheet-bg';
+    var sh = document.createElement('div');
+    sh.className = 'm-sheet';
+    sh.setAttribute('role', 'dialog');
+    sh.innerHTML = '<div class="m-grab"></div>' + html;
+    mRoot.appendChild(bg);
+    mRoot.appendChild(sh);
+    bg.getBoundingClientRect();
+    bg.classList.add('m-in');
+    sh.classList.add('m-in');
+    mSheetOpen = { bg: bg, sh: sh };
+    bg.addEventListener('click', mDismissSheet);
+    // Drag the top of the sheet down to close it.
+    var y0 = 0, dy = 0, dragging = false;
+    sh.addEventListener('touchstart', function (e) {
+      var r = sh.getBoundingClientRect();
+      if (e.touches[0].clientY - r.top > 44 || sh.scrollTop > 0) return;
+      dragging = true; dy = 0; y0 = e.touches[0].clientY;
+      sh.classList.add('m-drag');
+    }, { passive: true });
+    sh.addEventListener('touchmove', function (e) {
+      if (!dragging) return;
+      dy = Math.max(0, e.touches[0].clientY - y0);
+      sh.style.transform = 'translateY(' + dy + 'px)';
+    }, { passive: true });
+    sh.addEventListener('touchend', function () {
+      if (!dragging) return;
+      dragging = false;
+      sh.classList.remove('m-drag');
+      sh.style.transform = '';
+      if (dy > 90) mDismissSheet();
+    });
+    try { history.pushState({ mSheet: 1 }, ''); } catch (e) { /* ignore */ }
+    if (onMount) onMount(sh);
+    return sh;
+  }
+  function mCloseSheet() {
+    var s = mSheetOpen;
+    if (!s) return;
+    mSheetOpen = null;
+    if (document.activeElement && s.sh.contains(document.activeElement)) document.activeElement.blur();
+    s.bg.classList.remove('m-in');
+    s.sh.classList.remove('m-in');
+    setTimeout(function () { s.bg.remove(); s.sh.remove(); }, 420);
+  }
+  function mDismissSheet() { if (mSheetOpen) history.back(); }
+  function mActionSheet(title, actions) {
+    mSheet((title ? '<div class="m-sheet-title">' + escapeHtml(title) + '</div>' : '') +
+      '<div style="display:flex;flex-direction:column;gap:8px">' + actions.map(function (a) {
+        return '<button type="button" class="m-btn ' + (a.cls || 'm-btn-plain') + '" data-m-act="' + a.act + '"' + (a.attrs || '') + '>' + escapeHtml(a.label) + '</button>';
+      }).join('') + '<button type="button" class="m-btn m-btn-plain" data-m-act="sheet-close" style="margin-top:4px;background:transparent;color:var(--m-brand)">Cancel</button></div>');
+  }
+
+  /* ---------- rows ---------- */
+  function mTaskRow(t, opts) {
+    opts = opts || {};
+    var due = mDue(t.deadline, t);
+    var sub = projectNameHtml(t.project || 'No project') + (opts.owner && t.assignee ? ' · ' + escapeHtml(mFirst(t.assignee)) : '');
+    return '<button type="button" class="m-row" data-m-task="' + t.id + '">' +
+      '<span class="m-prio" style="background:' + mPrioColor(t) + '"></span>' +
+      '<span class="m-row-main"><span class="m-row-title">' + escapeHtml(t.name) + '</span><span class="m-row-sub">' + sub + '</span></span>' +
+      '<span class="m-row-right">' + (due.text ? '<span class="' + due.cls + '">' + escapeHtml(due.text) + '</span>' : '') +
+        '<span>' + escapeHtml(mStatusLabel(t.status)) + '</span></span>' +
+      mIcon('chev', 'm-chev') + '</button>';
+  }
+  function mStepRow(t, it, inTask) {
+    var who = it.assignee || '';
+    var due = it.done ? { text: it.due ? formatShortDate(it.due) : '', cls: '' } : it.due ? mDue(it.due) : { text: it.dueTbd ? 'TBD' : '', cls: '' };
+    var sub = inTask
+      ? (who ? escapeHtml(who) : '') + (it.link ? (who ? ' · ' : '') + '<a href="' + escapeHtml(it.link) + '" target="_blank" rel="noopener" style="color:var(--m-brand);font-weight:600">' + escapeHtml(linkChipLabel(it.link)) + '</a>' : '')
+      : escapeHtml(t.name) + ' · ' + projectNameHtml(t.project || '');
+    var main = '<span class="m-row-title">' + escapeHtml(it.text) + '</span>' + (sub ? '<span class="m-row-sub">' + sub + '</span>' : '');
+    return '<div class="m-row' + (it.done ? ' m-struck' : '') + '">' +
+      '<button type="button" class="m-check' + (it.done ? ' m-done' : '') + '" data-m-act="step" data-task="' + t.id + '" data-item="' + escapeHtml(it.id || '') + '" aria-label="' + (it.done ? 'Mark not done' : 'Mark done') + '">' + mIcon('check') + '</button>' +
+      (inTask ? '<span class="m-row-main">' + main + '</span>' : '<button type="button" class="m-row-main m-tap" style="text-align:left" data-m-task="' + t.id + '">' + main + '</button>') +
+      (due.text ? '<span class="m-row-right"><span class="' + due.cls + '">' + escapeHtml(due.text) + '</span></span>' : '') +
+    '</div>';
+  }
+  function mSection(title, inner, right) {
+    return '<div class="m-section"><div class="m-section-head"><span>' + title + '</span>' + (right || '') + '</div>' + inner + '</div>';
+  }
+  function mGroup(inner) { return '<div class="m-group">' + inner + '</div>'; }
+  function mEmpty(title, text) { return '<div class="m-group"><div class="m-empty">' + (title ? '<b>' + title + '</b>' : '') + (text || '') + '</div></div>'; }
+
+  /* ---------- Home ---------- */
+  function mMySteps(me, days) {
+    var out = [];
+    activeTasks().forEach(function (t) {
+      if (t.status === 'Done') return;
+      (t.checklist || []).forEach(function (it) {
+        if (!it || it.done || !it.due) return;
+        if ((it.assignee || t.assignee) !== me) return;
+        var n = daysUntil(it.due);
+        if (n === null || n > days) return;
+        out.push({ t: t, it: it, n: n });
+      });
+    });
+    return out.sort(function (a, b) { return a.n - b.n; });
+  }
+  function mAwayRows(days) {
+    var today = mToday();
+    var end = toDateInputValue(addDays(todayMidnight(), days));
+    var rows = [];
+    var seen = {};
+    teamPeople.forEach(function (p) {
+      if (!p.name || seen[p.name]) return;
+      seen[p.name] = true;
+      (Array.isArray(p.leave) ? p.leave : []).forEach(function (l) {
+        if (!l || !l.start || !l.end || l.end < today || l.start > end) return;
+        rows.push({ name: p.name, start: l.start, end: l.end, note: l.note || '', now: l.start <= today });
+      });
+    });
+    return rows.sort(function (a, b) { return a.start < b.start ? -1 : 1; });
+  }
+  function mAwayHtml(rows) {
+    return mGroup(rows.map(function (r) {
+      return '<button type="button" class="m-row" data-m-person="' + escapeHtml(r.name) + '">' + avatarHtml(r.name, 'w-9 h-9', 'text-xs') +
+        '<span class="m-row-main"><span class="m-row-title">' + escapeHtml(r.name) + '</span><span class="m-row-sub">' +
+          (r.now ? 'Back after ' + escapeHtml(formatShortDate(r.end)) : escapeHtml(formatShortDate(r.start)) + ' to ' + escapeHtml(formatShortDate(r.end))) +
+          (r.note ? ' · ' + escapeHtml(r.note) : '') + '</span></span>' +
+        (r.now ? '<span class="m-chip" style="background:#fef3c7;color:#92400e">Away</span>' : '') + '</button>';
+    }).join(''));
+  }
+  function mHomeHtml() {
+    var me = mMe();
+    var now = new Date();
+    var h = now.getHours();
+    var greet = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+    var mine = mOpenTasks().filter(function (t) { return t.assignee === me; });
+    var late = mine.filter(function (t) { return dueUrgency(t).overdue; });
+    var soon = mine.filter(function (t) { var n = daysUntil(t.deadline); return n !== null && n >= 0 && n <= 1 && t.status !== 'Review'; });
+    var later = mine.filter(function (t) { var n = daysUntil(t.deadline); return n !== null && n >= 2 && n <= 7 && t.status !== 'Review'; }).sort(mByDeadline);
+    var weekCount = mine.filter(function (t) { var n = daysUntil(t.deadline); return n !== null && n >= 0 && n <= 7 && t.status !== 'Review'; }).length;
+    var attention = late.concat(soon).sort(mByDeadline);
+    var steps = mMySteps(me, 7);
+
+    var html = '<div class="m-eyebrow">' + escapeHtml(now.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' })) + '</div>' +
+      '<h1 class="m-large">' + greet + ', ' + escapeHtml(mFirst(me)) + '</h1>';
+    html += '<div class="m-tiles">' +
+      '<button type="button" class="m-tile' + (late.length ? ' m-hot' : '') + '" data-m-act="go-mine"><b>' + late.length + '</b><span>Overdue</span></button>' +
+      '<button type="button" class="m-tile" data-m-act="go-mine"><b>' + weekCount + '</b><span>Due this week</span></button>' +
+      '<button type="button" class="m-tile" data-m-act="go-mine"><b>' + mine.length + '</b><span>Open tasks</span></button>' +
+    '</div>';
+
+    if (typeof WEEKLY_ENABLED !== 'undefined' && WEEKLY_ENABLED && me) {
+      var key = weeklyCurrentKey();
+      var entry = weeklyEntryFor(me, key);
+      html += '<div class="m-section">' + mGroup('<div class="m-row">' +
+        '<span class="m-row-icon" style="background:#6366f1">' + mIcon('clipboard') + '</span>' +
+        '<button type="button" class="m-row-main m-tap" style="text-align:left" data-m-go="monday"><span class="m-row-title">Monday update</span><span class="m-row-sub">' +
+          (entry ? 'Sent ' + escapeHtml(weeklyStamp(entry.editedAt || entry.at)) : 'Not in yet · ' + escapeHtml(weeklyLabel(key))) + '</span></button>' +
+        '<button type="button" class="m-pill-btn" style="' + (entry ? 'background:var(--m-fill)' : 'background:var(--m-brand);color:#fff') + '" data-weekly-write>' + (entry ? 'Edit' : 'Write') + '</button>' +
+      '</div>') + '</div>';
+    }
+
+    html += mSection('Needs attention', attention.length
+      ? mGroup(attention.map(function (t) { return mTaskRow(t); }).join(''))
+      : mEmpty("You're all caught up", 'Nothing of yours is overdue or due by tomorrow.'));
+    if (steps.length) html += mSection('Your steps', mGroup(steps.map(function (x) { return mStepRow(x.t, x.it, false); }).join('')));
+    if (later.length) html += mSection('Later this week', mGroup(later.map(function (t) { return mTaskRow(t); }).join('')));
+    var away = mAwayRows(7);
+    if (away.length) html += mSection('Away', mAwayHtml(away));
+    return html;
+  }
+
+  /* ---------- Tasks ---------- */
+  var M_TASK_GROUPS = [['late', 'Overdue'], ['today', 'Today'], ['tomorrow', 'Tomorrow'], ['week', 'Next 7 days'], ['later', 'Later'], ['review', 'In review'], ['none', 'No date']];
+  function mTaskBucket(t) {
+    if (t.status === 'Review') return 'review';
+    var n = daysUntil(t.deadline);
+    if (n === null || n === undefined) return 'none';
+    if (n < 0) return 'late';
+    if (n === 0) return 'today';
+    if (n === 1) return 'tomorrow';
+    return n <= 7 ? 'week' : 'later';
+  }
+  function mTasksHtml() {
+    var me = mMe();
+    var q = mTaskQuery.trim().toLowerCase();
+    var list = mOpenTasks();
+    if (mTaskScope === 'mine') list = list.filter(function (t) { return mIsMine(t, me); });
+    if (q) list = list.filter(function (t) { return taskMatchesSearch(t, q); });
+    if (!list.length) {
+      return '<div class="m-section">' + (q ? mEmpty('No matches', 'Nothing open matches "' + escapeHtml(mTaskQuery.trim()) + '".')
+        : mTaskScope === 'mine' ? mEmpty('Nothing on your plate', 'Tasks you own or are involved in show up here.') : mEmpty('No open tasks', '')) + '</div>';
+    }
+    var by = {};
+    list.forEach(function (t) { var k = mTaskBucket(t); (by[k] = by[k] || []).push(t); });
+    var owner = mTaskScope !== 'mine';
+    return M_TASK_GROUPS.filter(function (g) { return by[g[0]]; }).map(function (g) {
+      var rows = by[g[0]].sort(mByDeadline);
+      return mSection(g[1] + ' · ' + rows.length, mGroup(rows.map(function (t) { return mTaskRow(t, { owner: owner }); }).join('')));
+    }).join('');
+  }
+
+  /* ---------- Calendar ---------- */
+  var M_KIND_COLOR = { deadline: '#ff4e20', step: '#6366f1', brief: '#0891b2', project: '#8b5cf6', away: '#f59e0b' };
+  function mCalendarHtml() {
+    var today = mToday();
+    if (!mCalStart) mCalStart = today;
+    var from = mCalStart;
+    var to = toDateInputValue(addDays(parseDate(from), 6));
+    var data = mWithPlain(function () { return cal2Collect(from, to, from === today); });
+    var strip = document.getElementById('m-cal-strip');
+    var days = [];
+    for (var i = 0; i < 7; i++) days.push(toDateInputValue(addDays(parseDate(from), i)));
+    if (strip) {
+      strip.innerHTML = '<button type="button" class="m-icon-btn" data-m-act="cal-shift" data-n="-7" aria-label="Previous week">' + mIcon('back') + '</button>' +
+        days.map(function (d) {
+          var dt = parseDate(d);
+          return '<button type="button" class="m-strip-day' + (d === today ? ' m-today' : '') + ((data[d] || []).length ? ' m-has' : '') + '" data-m-act="cal-day" data-day="' + d + '">' +
+            dt.toLocaleDateString('en-US', { weekday: 'short' }) + '<b>' + dt.getDate() + '</b><i></i></button>';
+        }).join('') +
+        '<button type="button" class="m-icon-btn" data-m-act="cal-shift" data-n="7" aria-label="Next week">' + mIcon('chev') + '</button>';
+    }
+    var range = formatShortDate(from) + ' – ' + formatShortDate(to);
+    var html = '<div class="m-lede" style="display:flex;justify-content:space-between;padding-top:12px"><span>' + escapeHtml(range) + '</span>' +
+      (from !== today ? '<button type="button" data-m-act="cal-today" style="color:var(--m-brand);font-weight:600">Today</button>' : '') + '</div>';
+    html += days.map(function (d) {
+      var items = data[d] || [];
+      var dt = parseDate(d);
+      return '<div class="m-cal-head' + (d === today ? ' m-is-today' : '') + '" id="m-cal-d-' + d + '">' + escapeHtml(dt.toLocaleDateString('en-US', { weekday: 'long' })) +
+        '<span>' + escapeHtml(formatShortDate(d)) + (d === today ? ' · Today' : '') + '</span></div>' +
+        '<div style="margin:0 16px">' + (items.length ? mGroup(items.map(mCalItemHtml).join('')) : '<p style="padding:2px 6px 6px;color:var(--m-faint);font-size:14px">Nothing scheduled</p>') + '</div>';
+    }).join('');
+    return html;
+  }
+  function mCalItemHtml(it) {
+    var kind = CAL2_KIND[it.kind] || { label: it.kind };
+    var attr = it.taskId ? ' data-m-task="' + it.taskId + '"' : (it.project && it.kind !== 'away') ? ' data-m-project="' + escapeHtml(it.project) + '"' : it.who ? ' data-m-person="' + escapeHtml(it.who) + '"' : '';
+    var title = it.kind === 'project' ? 'Project deadline' : it.title;
+    var sub = it.kind === 'away' ? escapeHtml(it.note || '')
+      : escapeHtml(kind.label) + ' · ' + projectNameHtml(it.project || '') + (it.who ? ' · ' + escapeHtml(mFirst(it.who)) : '');
+    return '<button type="button" class="m-row"' + attr + (it.done ? ' style="opacity:.55"' : '') + '>' +
+      '<span class="m-kind" style="background:' + (M_KIND_COLOR[it.kind] || '#a1a1aa') + '"></span>' +
+      '<span class="m-row-main"><span class="m-row-title"' + (it.done ? ' style="text-decoration:line-through"' : '') + '>' + escapeHtml(title) +
+        (it.late ? ' <span class="m-late">LATE' + (it.lateFrom ? ' · ' + escapeHtml(formatShortDate(it.lateFrom)) : '') + '</span>' : '') + '</span>' +
+        '<span class="m-row-sub">' + sub + '</span></span>' +
+      (attr ? mIcon('chev', 'm-chev') : '') + '</button>';
+  }
+
+  /* ---------- Chat ---------- */
+  function mChatNames() {
+    var seen = {};
+    return projectDocs.filter(function (p) {
+      if (!p || !p.name || !Array.isArray(p.chat) || seen[p.name]) return false;
+      seen[p.name] = true;
+      return true;
+    }).map(function (p) { return p.name; });
+  }
+  function mChatsHtml() {
+    var me = mMe();
+    var rows = mChatNames().map(function (name) {
+      var chat = (projectDeadlineDoc(name) || {}).chat || [];
+      var last = chat[chat.length - 1] || null;
+      return { name: name, last: last, at: last ? last.date : '', unread: chatUnreadCount(name) };
+    }).sort(function (a, b) { return (b.at || '') < (a.at || '') ? -1 : (b.at || '') > (a.at || '') ? 1 : a.name.localeCompare(b.name); });
+    if (!rows.length) return '<div class="m-section">' + mEmpty('No group chats yet', 'Start one from the Chat page on desktop.') + '</div>';
+    return '<div class="m-section" style="margin-top:12px">' + mGroup(rows.map(function (r) {
+      var preview = r.last
+        ? (r.last.author === me ? 'You: ' : escapeHtml(mFirst(r.last.author)) + ': ') + escapeHtml(r.last.text || (r.last.imageUrl ? 'Photo' : ''))
+        : 'No messages yet';
+      return '<button type="button" class="m-row" data-m-chat="' + escapeHtml(r.name) + '">' + chatAvatarHtml(r.name, 'w-12 h-12', 'text-sm') +
+        '<span class="m-row-main"><span style="display:flex;align-items:baseline;gap:8px"><span class="m-row-title" style="flex:1;-webkit-line-clamp:1' + (r.unread ? '' : ';font-weight:600') + '">' + escapeHtml(r.name) + '</span>' +
+          '<span style="font-size:12.5px;color:' + (r.unread ? 'var(--m-brand)' : 'var(--m-sub)') + ';flex-shrink:0">' + escapeHtml(r.at ? chatListTimestamp(r.at) : '') + '</span></span>' +
+          '<span style="display:flex;align-items:center;gap:8px"><span class="m-row-note" style="flex:1' + (r.unread ? ';color:var(--m-text)' : '') + '">' + preview + '</span>' +
+          (r.unread ? '<span class="m-count">' + (r.unread > 99 ? '99+' : r.unread) + '</span>' : '') + '</span></span></button>';
+    }).join('')) + '</div>';
+  }
+  function mOpenChat(name) {
+    mPush({
+      key: 'chat:' + name, title: name, backLabel: 'Chats',
+      footer: '<form class="m-compose" data-m-form="chat" data-project="' + escapeHtml(name) + '"><textarea rows="1" placeholder="Message" aria-label="Message"></textarea>' +
+        '<button type="submit" class="m-send" aria-label="Send" disabled>' + mIcon('send') + '</button></form>',
+      render: function () { return mChatThreadHtml(name); },
+      after: function (s) {
+        s.body.querySelectorAll('img[data-m-img]').forEach(mLoadImg);
+        if (s.first || s.wasNearBottom || s.forceBottom) { s.body.scrollTop = s.body.scrollHeight; s.forceBottom = false; }
+        markChatRead(name);
+        markChatNotificationsRead(name);
+      }
+    });
+  }
+  function mChatThreadHtml(name) {
+    var chat = (projectDeadlineDoc(name) || {}).chat || [];
+    var me = mMe();
+    var folder = projectDriveLink(name);
+    var head = '<div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:18px 20px 4px;text-align:center">' + chatAvatarHtml(name, 'w-16 h-16', 'text-xl') +
+      '<div style="font-weight:700;font-size:16px;overflow-wrap:anywhere">' + projectNameHtml(name) + '</div>' +
+      '<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">' +
+        '<button type="button" class="m-pill-btn" data-m-project="' + escapeHtml(name) + '">' + mIcon('layers') + 'Project</button>' +
+        (folder ? '<a class="m-pill-btn" href="' + escapeHtml(folder) + '" target="_blank" rel="noopener">' + mIcon('folder') + 'Folder</a>' : '') +
+      '</div></div>';
+    if (!chat.length) return head + '<div class="m-empty"><b>No messages yet</b>Say hello to the team.</div>';
+    var out = '<div class="m-msgs">';
+    var lastDay = '';
+    var prevAuthor = null;
+    chat.forEach(function (m) {
+      var day = toDateInputValue(new Date(m.date));
+      if (day !== lastDay) { out += '<div class="m-day">' + escapeHtml(mDayLabel(day)) + '</div>'; lastDay = day; prevAuthor = null; }
+      var mine = m.author === me;
+      var showAuthor = !mine && m.author !== prevAuthor;
+      prevAuthor = m.author;
+      var quote = '';
+      if (m.replyTo) {
+        var o = chat.find(function (x) { return x.id === m.replyTo; });
+        if (o) quote = '<div class="m-quote"><b>' + escapeHtml(mFirst(o.author)) + '</b> ' + escapeHtml(o.text || (o.imageUrl ? 'Photo' : '')) + '</div>';
+      }
+      if (m.forwarded) quote = '<div class="m-quote" style="border-color:var(--m-faint)">Forwarded' + (m.forwardedFrom ? ' from ' + escapeHtml(m.forwardedFrom) : '') + '</div>' + quote;
+      var reacts = Object.keys(m.reactions || {}).filter(function (k) { return (m.reactions[k] || []).length; }).map(function (k) {
+        return '<span>' + escapeHtml(k) + ' ' + m.reactions[k].length + '</span>';
+      }).join('');
+      out += '<div class="m-msg' + (mine ? ' m-mine' : '') + '">' +
+        (mine ? '' : '<div style="width:28px;flex-shrink:0">' + (showAuthor ? avatarHtml(m.author, 'w-7 h-7', 'text-[10px]') : '') + '</div>') +
+        '<div class="m-msg-col">' + (showAuthor ? '<div class="m-msg-author">' + escapeHtml(m.author || '') + '</div>' : '') +
+          '<div class="m-bubble">' + quote + (m.imageUrl ? '<img class="m-chat-img" data-m-img="' + escapeHtml(m.imageUrl) + '" alt="">' : '') + (m.text ? enrichCommentText(m.text) : '') + '</div>' +
+          (reacts ? '<div class="m-reacts">' + reacts + '</div>' : '') +
+          '<div class="m-msg-time">' + escapeHtml(mTime(m.date)) + (m.editedAt ? ' · edited' : '') + '</div>' +
+        '</div></div>';
+    });
+    return head + out + '</div>';
+  }
+  // Images in chat are behind storage.rules, so they're fetched with the ID token (see
+  // loadProtectedChatImage). Cached per URL for the session so a live re-render doesn't refetch.
+  function mLoadImg(img) {
+    var url = img.getAttribute('data-m-img');
+    var cached = mImgCache[url];
+    if (typeof cached === 'string') { img.src = cached; return; }
+    var p = cached || (mImgCache[url] = (auth.currentUser ? auth.currentUser.getIdToken() : Promise.reject(new Error('signed out'))).then(function (token) {
+      return fetch(url, { headers: { Authorization: 'Bearer ' + token } });
+    }).then(function (res) {
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      return res.blob();
+    }).then(function (blob) {
+      var u = URL.createObjectURL(blob);
+      mImgCache[url] = u;
+      return u;
+    }).catch(function (e) { delete mImgCache[url]; throw e; }));
+    p.then(function (u) { if (img.isConnected) img.src = u; }).catch(function () {
+      if (img.isConnected) img.replaceWith(document.createRange().createContextualFragment('<span style="font-size:12px;font-style:italic;color:var(--m-sub)">Could not load image</span>'));
+    });
+  }
+  function mSendChat(name, text, form) {
+    var pd = projectDeadlineDoc(name);
+    if (!pd || !text) return;
+    var btn = form.querySelector('.m-send');
+    btn.disabled = true;
+    var msg = { id: uid(), text: text, date: new Date().toISOString(), author: mMe() };
+    var s = mStack[mStack.length - 1];
+    if (s) s.forceBottom = true;
+    updateDoc(doc(projectsCol, pd.id), { chat: arrayUnion(msg) }).then(function () {
+      var ta = form.querySelector('textarea');
+      ta.value = '';
+      mAutosize(ta);
+      notifyOnProjectChat(text, name, false);
+      mHaptic();
+    }).catch(function (err) {
+      btn.disabled = false;
+      showToast('Could not send: ' + err.message, 'error');
+    });
+  }
+
+  /* ---------- Task ---------- */
+  function mOpenTask(id) {
+    var top = mStack[mStack.length - 1];
+    if (top && top.key === 'task:' + id) return;
+    mPush({
+      key: 'task:' + id, title: 'Task', backLabel: 'Back',
+      actions: '<button type="button" class="m-icon-btn" data-m-act="task-more" data-task="' + id + '" aria-label="More">' + mIcon('dots') + '</button>',
+      footer: '<form class="m-compose" data-m-form="comment" data-task="' + id + '"><textarea rows="1" placeholder="Add a comment" aria-label="Add a comment"></textarea>' +
+        '<button type="submit" class="m-send" aria-label="Send" disabled>' + mIcon('send') + '</button></form>',
+      render: function () { return mTaskHtml(id); }
+    });
+  }
+  function mTaskHtml(id) {
+    var t = tasks.find(function (x) { return x.id === id; });
+    if (!t) {
+      var gone = archivedTasks.find(function (x) { return x.id === id; });
+      return '<div class="m-section">' + (gone ? mEmpty('Archived', 'This task has been archived. Open Archived on desktop to see it.') : mEmpty('Task not found', 'It may have been deleted.')) + '</div>';
+    }
+    var due = mDue(t.deadline, t);
+    var pm = t.status === 'Done' ? DONE_META : PRIORITY_META[t.priority];
+    var html = '<div class="m-eyebrow" style="text-transform:none;letter-spacing:0;font-size:14px;font-weight:600;padding-top:14px">' +
+        '<button type="button" data-m-project="' + escapeHtml(t.project || '') + '" style="text-align:left;overflow-wrap:anywhere">' + projectNameHtml(t.project || 'No project') + '</button></div>' +
+      '<h1 class="m-title m-text">' + escapeHtml(t.name) + '</h1>' +
+      '<div class="m-chips">' +
+        (pm ? '<span class="text-xs font-bold px-2.5 py-1 rounded-full ' + pm.badge + '">' + escapeHtml(t.status === 'Done' ? 'Completed' : t.priority) + '</span>' : '') +
+        (t.deadline ? '<span class="m-chip ' + due.cls + '">' + mIcon('clock', 'w-3.5 h-3.5') + escapeHtml(due.text === formatShortDate(t.deadline) ? 'Due ' + due.text : due.text + ' · ' + formatShortDate(t.deadline)) + '</span>' : '<span class="m-chip">No deadline</span>') +
+        (isReadyForReview(t) ? '<span class="text-xs font-bold px-2.5 py-1 rounded-full ' + READY_FOR_REVIEW_META.badge + '">Ready for review</span>' : '') +
+        (t.status === 'Review' && t.reviewAudience ? '<span class="m-chip">' + escapeHtml(t.reviewAudience === 'client' ? 'Client review' : 'Internal review') + '</span>' : '') +
+      '</div>';
+
+    html += '<div class="m-section"><div class="m-section-head"><span>Status</span></div>' +
+      '<div class="m-seg m-status" style="margin:0">' + STATUSES.map(function (s) {
+        return '<button type="button" data-m-act="status" data-task="' + t.id + '" data-status="' + s + '" class="' + (t.status === s ? 'm-on' : '') + '">' + mStatusLabel(s) + '</button>';
+      }).join('') + '</div></div>';
+
+    var inv = (Array.isArray(t.involved) ? t.involved : []).filter(function (n) { return n && n !== t.assignee; });
+    var details =
+      '<button type="button" class="m-kv m-tap" style="width:100%" data-m-person="' + escapeHtml(t.assignee || '') + '"><span>Owner</span><span>' + avatarHtml(t.assignee, 'w-6 h-6', 'text-[10px]') + escapeHtml(t.assignee || '—') + '</span></button>' +
+      (inv.length ? '<div class="m-kv"><span>Also involved</span><span>' + escapeHtml(inv.map(mFirst).join(', ')) + '</span></div>' : '') +
+      '<div class="m-kv"><span>Dates</span><span>' + escapeHtml((t.startDate ? formatShortDate(t.startDate) : '—') + ' → ' + (t.deadline ? formatShortDate(t.deadline) : 'TBD')) + '</span></div>' +
+      (t.driveLink ? '<a class="m-row m-tap" href="' + escapeHtml(t.driveLink) + '" target="_blank" rel="noopener"><span class="m-row-icon" style="background:#0891b2">' + mIcon('folder') + '</span><span class="m-row-main"><span class="m-row-title" style="color:var(--m-brand)">Open project folder</span></span>' + mIcon('external', 'm-chev') + '</a>' : '');
+    html += '<div class="m-section">' + mGroup(details) + '</div>';
+
+    var su = taskStatusList(t);
+    var updates = su.length
+      ? mGroup(su.slice(0, 3).map(function (u, i) {
+          return '<div class="m-comment"' + (i ? ' style="opacity:.7"' : '') + '><div style="min-width:0;flex:1"><div style="font-size:12.5px;color:var(--m-sub);font-weight:600">' +
+            escapeHtml(formatShortDate(u.date)) + (u.author ? ' · ' + escapeHtml(mFirst(u.author)) : '') + '</div><div class="m-comment-text">' + escapeHtml(u.text) + '</div></div></div>';
+        }).join(''))
+      : mGroup('<button type="button" class="m-row" data-m-act="add-update" data-task="' + t.id + '"><span class="m-row-main"><span class="m-row-sub" style="white-space:normal">No update yet. Tap to say where this stands.</span></span></button>');
+    html += mSection('Latest update', updates, '<button type="button" data-m-act="add-update" data-task="' + t.id + '">Add</button>');
+
+    var list = t.checklist || [];
+    if (list.length) {
+      var done = list.filter(function (it) { return it && it.done; });
+      var open = list.filter(function (it) { return it && !it.done; });
+      var showDone = !!mShowDone[t.id];
+      var rows = open.map(function (it) { return mStepRow(t, it, true); }).join('') +
+        (done.length ? '<button type="button" class="m-row" data-m-act="toggle-done" data-task="' + t.id + '"><span class="m-row-main"><span class="m-row-sub" style="color:var(--m-brand);font-weight:600">' + (showDone ? 'Hide' : 'Show') + ' ' + done.length + ' done</span></span></button>' : '') +
+        (showDone ? done.map(function (it) { return mStepRow(t, it, true); }).join('') : '');
+      html += mSection('Checklist · ' + done.length + ' of ' + list.length, mGroup(rows));
+    }
+
+    var comments = (t.comments || []).slice().sort(function (a, b) { return (b.date || '') < (a.date || '') ? -1 : 1; });
+    html += mSection('Comments' + (comments.length ? ' · ' + comments.length : ''), comments.length
+      ? mGroup(comments.map(function (c) {
+          return '<div class="m-comment">' + avatarHtml(c.author, 'w-8 h-8', 'text-[11px]') +
+            '<div style="min-width:0;flex:1"><div style="font-size:13px"><b>' + escapeHtml(c.author || '') + '</b> <span style="color:var(--m-sub)">' + escapeHtml(mAgo(c.date)) + '</span></div>' +
+            '<div class="m-comment-text">' + enrichCommentText(c.text || '') + '</div></div></div>';
+        }).join(''))
+      : mEmpty('', 'No comments yet.'));
+    if (t.createdBy) html += '<p style="text-align:center;font-size:12.5px;color:var(--m-faint);padding:18px 20px 0">Created by ' + escapeHtml(t.createdBy) + '</p>';
+    return html;
+  }
+  function mToggleStep(taskId, itemId, btn) {
+    var t = tasks.find(function (x) { return x.id === taskId; });
+    if (!t) return;
+    var old = t.checklist || [];
+    var item = old.find(function (it) { return it && it.id === itemId; });
+    if (!item) return;
+    var nowDone = !item.done;
+    if (btn) {
+      btn.classList.toggle('m-done', nowDone);
+      var row = btn.closest('.m-row');
+      if (row) row.classList.toggle('m-struck', nowDone);
+    }
+    mHaptic();
+    var list = old.map(function (it) { return it && it.id === itemId ? Object.assign({}, it, { done: nowDone }) : it; });
+    updateDoc(doc(tasksCol, t.id), { checklist: list, updatedAt: new Date().toISOString() }).then(function () {
+      notifyChecklistChanges(t, old, list);
+      logActivity('task_updated', (nowDone ? 'Ticked "' : 'Unticked "') + item.text + '" on "' + t.name + '"', { taskId: t.id });
+    }).catch(function (err) {
+      showToast('Could not update the step: ' + writeErrorMessage(err, t), 'error');
+      mRefresh();
+    });
+  }
+  function mSendComment(taskId, text, form) {
+    var t = tasks.find(function (x) { return x.id === taskId; });
+    if (!t || !text) return;
+    var btn = form.querySelector('.m-send');
+    btn.disabled = true;
+    var c = { id: uid(), text: text, date: new Date().toISOString(), author: mMe() };
+    var replyTo = inferReplyTarget(t.comments || [], text);
+    if (replyTo) c.replyTo = replyTo;
+    updateDoc(doc(tasksCol, t.id), { comments: arrayUnion(c) }).then(function () {
+      var ta = form.querySelector('textarea');
+      ta.value = '';
+      mAutosize(ta);
+      ta.blur();
+      notifyOnComment(text, t);
+      logActivity('task_comment', 'Commented on "' + t.name + '": "' + (text.length > 60 ? text.slice(0, 60) + '…' : text) + '"', { taskId: t.id });
+      mHaptic();
+    }).catch(function (err) {
+      btn.disabled = false;
+      showToast('Could not add comment: ' + err.message, 'error');
+    });
+  }
+  function mOpenUpdateSheet(taskId) {
+    var t = tasks.find(function (x) { return x.id === taskId; });
+    if (!t) return;
+    mSheet('<div class="m-sheet-title">Status update</div>' +
+      '<p style="text-align:center;font-size:14px;color:var(--m-sub);margin:-8px 8px 14px;overflow-wrap:anywhere">' + escapeHtml(t.name) + '</p>' +
+      '<form data-m-form="update" data-task="' + t.id + '"><textarea class="m-input" name="text" maxlength="1000" placeholder="Where does this stand?"></textarea>' +
+      '<p style="font-size:13px;color:var(--m-sub);margin:8px 4px 14px">Shows on the task and in WIP Meeting, dated today.</p>' +
+      '<button type="submit" class="m-btn">Post update</button></form>', function (sh) {
+        setTimeout(function () { var ta = sh.querySelector('textarea'); if (ta) ta.focus(); }, 380);
+      });
+  }
+
+  /* ---------- Quick add ---------- */
+  function mOpenQuickAdd() {
+    var me = mMe();
+    var roster = teamRoster().slice().sort(function (a, b) { return a.localeCompare(b); });
+    if (me && roster.indexOf(me) === -1) roster.unshift(me);
+    var projects = allProjectNames().slice().sort(function (a, b) { return a.localeCompare(b); });
+    mSheet('<div class="m-sheet-title">New task</div><form data-m-form="quick-add" autocomplete="off">' +
+      '<label class="m-field"><span>Task</span><input class="m-input" name="name" maxlength="120" placeholder="What needs doing?"></label>' +
+      '<label class="m-field"><span>Project</span><input class="m-input" name="project" list="m-project-list" maxlength="60" placeholder="Pick or type a project">' +
+        '<datalist id="m-project-list">' + projects.map(function (p) { return '<option value="' + escapeHtml(p) + '">'; }).join('') + '</datalist></label>' +
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">' +
+        '<label class="m-field"><span>Owner</span><select class="m-input" name="owner">' + roster.map(function (n) { return '<option' + (n === me ? ' selected' : '') + '>' + escapeHtml(n) + '</option>'; }).join('') + '</select></label>' +
+        '<label class="m-field"><span>Deadline</span><input class="m-input" type="date" name="deadline"></label>' +
+      '</div>' +
+      '<div class="m-field"><span>Priority</span><div class="m-seg" style="margin:0" data-m-seg="qa-prio">' +
+        PRIORITIES.map(function (p) { return '<button type="button" data-v="' + p + '" class="' + (p === 'Medium' ? 'm-on' : '') + '">' + p + '</button>'; }).join('') +
+      '</div><input type="hidden" name="priority" value="Medium"></div>' +
+      '<p style="font-size:13px;color:var(--m-sub);margin:2px 4px 14px">Add the checklist, links and other details later on desktop.</p>' +
+      '<button type="submit" class="m-btn">Add task</button></form>', function (sh) {
+        setTimeout(function () { var i = sh.querySelector('[name="name"]'); if (i) i.focus(); }, 380);
+      });
+  }
+  function mSubmitQuickAdd(form) {
+    var me = mMe();
+    var name = sentenceCase(form.elements.name.value.trim());
+    var project = stripZwsp(form.elements.project.value).trim();
+    var assignee = form.elements.owner.value || me;
+    var deadline = form.elements.deadline.value || '';
+    var priority = form.elements.priority.value || 'Medium';
+    if (!name) { showToast('Give the task a name', 'error'); form.elements.name.focus(); return; }
+    if (!project) { showToast('Pick a project', 'error'); form.elements.project.focus(); return; }
+    if (project.length > 60) { showToast('Keep the project name under 60 characters', 'error'); return; }
+    var start = mToday();
+    if (deadline && deadline < start) start = deadline;
+    var id = uid();
+    var now = new Date().toISOString();
+    var data = {
+      name: name, project: project, assignee: assignee, involved: [], priority: priority, status: 'Pipeline',
+      startDate: start, deadline: deadline, driveLink: '', checklist: [], timeEntries: [], dependsOn: [], reviewAudience: null,
+      updatedAt: now, createdAt: now, comments: [], createdBy: me
+    };
+    form.querySelector('[type="submit"]').disabled = true;
+    setDoc(doc(tasksCol, id), data).then(function () {
+      mDismissSheet();
+      showToast('Task added', 'success');
+      mHaptic();
+      logActivity('task_created', 'Added task "' + name + '"', { taskId: id });
+      notifyAssignment({ id: id, name: name, deadline: deadline }, assignee);
+    }).catch(function (err) {
+      form.querySelector('[type="submit"]').disabled = false;
+      showToast('Could not add the task: ' + err.message, 'error');
+    });
+  }
+
+  /* ---------- More, and the screens it opens ---------- */
+  function mMoreRow(icon, color, label, attrs, right) {
+    return '<button type="button" class="m-row" ' + attrs + '><span class="m-row-icon" style="background:' + color + '">' + mIcon(icon) + '</span>' +
+      '<span class="m-row-main"><span class="m-row-title" style="font-weight:500">' + label + '</span></span>' + (right || '') + mIcon('chev', 'm-chev') + '</button>';
+  }
+  function mMoreHtml() {
+    var me = mMe();
+    var u = auth.currentUser;
+    var unread = myNotifications.filter(function (n) { return !n.read; }).length;
+    var updates = unseenUpdateIds().length;
+    var depts = personDepartments(me).map(departmentLabel).join(' · ');
+    var dark = document.documentElement.classList.contains('dark');
+    return '<div class="m-section" style="margin-top:8px">' + mGroup('<button type="button" class="m-profile m-tap" style="width:100%;text-align:left" data-m-person="' + escapeHtml(me) + '">' +
+        avatarHtml(me, 'w-14 h-14', 'text-lg') + '<span class="m-row-main"><span style="font-size:19px;font-weight:700">' + escapeHtml(me) + '</span>' +
+        '<span class="m-row-sub">' + escapeHtml(depts || (u && u.email) || '') + '</span></span>' + mIcon('chev', 'm-chev') + '</button>') + '</div>' +
+      mSection('Meetings', mGroup(
+        (typeof WEEKLY_ENABLED !== 'undefined' && WEEKLY_ENABLED ? mMoreRow('clipboard', '#6366f1', 'Monday Meeting', 'data-m-go="monday"') : '') +
+        mMoreRow('layers', '#ff4e20', 'WIP Meeting', 'data-m-go="wip"'))) +
+      mSection('Team', mGroup(
+        mMoreRow('users', '#0ea5e9', 'People', 'data-m-go="people"') +
+        mMoreRow('folder', '#0d9488', 'Projects', 'data-m-go="projects"'))) +
+      mSection('App', mGroup(
+        mMoreRow('bell', '#e11d48', 'Notifications', 'data-m-go="notifications"', unread ? '<span class="m-count" style="background:#e11d48">' + (unread > 99 ? '99+' : unread) + '</span>' : '') +
+        mMoreRow('megaphone', '#7c3aed', "What's new", 'data-m-go="updates"', updates ? '<span class="m-count">' + updates + '</span>' : '') +
+        '<button type="button" class="m-row" data-m-act="theme"><span class="m-row-icon" style="background:#3f3f46">' + mIcon('moon') + '</span>' +
+          '<span class="m-row-main"><span class="m-row-title" style="font-weight:500">Dark mode</span></span><span class="m-switch' + (dark ? ' m-on' : '') + '"></span></button>' +
+        mMoreRow('monitor', '#71717a', 'Use desktop layout', 'data-m-act="desktop"'))) +
+      '<div class="m-section">' + mGroup('<button type="button" class="m-row" data-m-act="signout" style="justify-content:center;color:#e11d48;font-weight:600">Sign out</button>') + '</div>' +
+      '<p style="text-align:center;font-size:12.5px;color:var(--m-faint);padding:18px 20px 0">Editing is kept to the quick things here. Open Project Manager on a computer for everything else.</p>';
+  }
+
+  function mGo(where) {
+    if (where === 'notifications') return mPush({ key: 'notifications', title: 'Notifications', backLabel: 'Back', actions: '<button type="button" class="m-back" style="font-size:15px;font-weight:600" data-m-act="read-all">Read all</button>', render: mNotifsHtml });
+    if (where === 'monday') { mWeekKey = weeklyCurrentKey(); return mPush({ key: 'monday', title: 'Monday Meeting', backLabel: 'Back', render: mMondayHtml }); }
+    if (where === 'wip') return mPush({ key: 'wip', title: 'WIP Meeting', backLabel: 'Back', render: mWipHtml });
+    if (where === 'people') return mPush({ key: 'people', title: 'People', backLabel: 'More', render: mPeopleHtml });
+    if (where === 'projects') return mPush({ key: 'projects', title: 'Projects', backLabel: 'More', render: mProjectsHtml });
+    if (where === 'updates') {
+      var unseen = unseenUpdateIds();
+      markUpdatesSeen();
+      return mPush({ key: 'updates', title: "What's new", backLabel: 'More', render: function () { return mUpdatesHtml(unseen); } });
+    }
+  }
+
+  function mNotifsHtml() {
+    var list = myNotifications.slice(0, 80);
+    if (!list.length) return '<div class="m-section">' + mEmpty('No notifications', 'Mentions, comments and reminders land here.') + '</div>';
+    return '<div class="m-section" style="margin-top:12px">' + mGroup(list.map(function (n) {
+      return '<button type="button" class="m-row" data-m-notif="' + n.id + '" style="align-items:flex-start">' +
+        '<span style="width:8px;height:8px;border-radius:4px;margin-top:7px;flex-shrink:0;background:' + (n.read ? 'transparent' : 'var(--m-brand)') + '"></span>' +
+        '<span class="m-row-main"><span class="m-row-title" style="font-weight:' + (n.read ? '400;color:var(--m-sub)' : '600') + '">' + notificationHeadlineHtml(n) + '</span>' +
+          (n.snippet ? '<span class="m-row-note">' + escapeHtml(n.snippet) + '</span>' : '') +
+          '<span class="m-row-sub">' + escapeHtml(mAgo(n.at)) + '</span></span></button>';
+    }).join('')) + '</div>';
+  }
+  function mOpenNotif(id) {
+    var n = myNotifications.find(function (x) { return x.id === id; });
+    if (!n) return;
+    if (!n.read) updateDoc(doc(notificationsCol, id), { read: true }).catch(function () {});
+    if (n.chatProject) { mOpenChat(n.chatProject); return; }
+    if (n.type === 'weekly_reminder') { openWeeklyEditor(); return; }
+    if (n.type === 'suggestion_fixed') { showToast('Open Suggestions on desktop to see it', 'info'); return; }
+    var t = n.taskId ? tasks.find(function (x) { return x.id === n.taskId; }) : null;
+    if (t) mOpenTask(t.id);
+    else if (n.taskId) showToast('That task no longer exists', 'info');
+  }
+
+  function mMondayHtml() {
+    var key = mWeekKey || weeklyCurrentKey();
+    var isCurrent = key === weeklyCurrentKey();
+    var people = weeklyPeople(key);
+    var me = mMe();
+    var mine = me ? weeklyEntryFor(me, key) : null;
+    var inCount = people.filter(function (n) { return !!weeklyEntryFor(n, key); }).length;
+    var waiting = people.filter(function (n) { return !weeklyEntryFor(n, key) && !weeklyAwayDuring(n, key); });
+    var pct = people.length ? Math.round(inCount / people.length * 100) : 0;
+    var html = '<div style="display:grid;grid-template-columns:44px 1fr 44px;align-items:center;margin:10px 8px 0">' +
+      '<button type="button" class="m-icon-btn" data-m-act="week-shift" data-n="-1" aria-label="Previous week">' + mIcon('back') + '</button>' +
+      '<div style="text-align:center"><div style="font-weight:700;font-size:17px">' + escapeHtml(weeklyLabel(key)) + '</div>' +
+        (isCurrent ? '' : '<button type="button" data-m-act="week-shift" data-n="0" style="color:var(--m-brand);font-weight:600;font-size:13px">Back to this week</button>') + '</div>' +
+      '<button type="button" class="m-icon-btn" data-m-act="week-shift" data-n="1" aria-label="Next week">' + mIcon('chev') + '</button></div>';
+    html += '<div class="m-section" style="margin-top:12px">' + mGroup('<div style="padding:14px">' +
+      '<div style="display:flex;justify-content:space-between;gap:10px;font-size:14px;margin-bottom:8px"><b>' + inCount + ' of ' + people.length + ' in</b>' +
+        '<span style="color:var(--m-sub);text-align:right">' + (waiting.length ? (waiting.length <= 3 ? 'Waiting on ' + escapeHtml(waiting.map(mFirst).join(', ')) : waiting.length + ' to go') : 'Everyone is in') + '</span></div>' +
+      '<div class="m-progress"><i style="width:' + pct + '%"></i></div>' +
+      (isCurrent && me ? '<div style="height:12px"></div><button type="button" class="m-btn' + (mine ? ' m-btn-plain' : '') + '" data-weekly-write>' + (mine ? 'Edit my update' : 'Write my update') + '</button>' : '') +
+    '</div>') + '</div>';
+    var help = weeklyHelpItems(key, people);
+    if (help.length) {
+      html += mSection('Needs help · ' + help.length, mGroup(help.map(function (h) {
+        return '<div class="m-row"><span class="m-row-main"><span class="m-row-sub">' + escapeHtml(mFirst(h.name)) + ' · ' + projectNameHtml(h.project) + '</span>' +
+          '<span class="m-row-title" style="-webkit-line-clamp:4">' + escapeHtml(h.note || 'Needs help') + '</span></span></div>';
+      }).join('')));
+    }
+    var groups = [];
+    people.forEach(function (n) {
+      var d = weeklyGroupDept(n);
+      var g = groups.length && groups[groups.length - 1].dept === d ? groups[groups.length - 1] : null;
+      if (!g) { g = { dept: d, names: [] }; groups.push(g); }
+      g.names.push(n);
+    });
+    html += groups.map(function (g) {
+      return mSection(escapeHtml(g.dept ? departmentLabel(g.dept) : 'No department'),
+        '<div class="m-weekly" style="display:flex;flex-direction:column;gap:12px">' + g.names.map(function (n) { return weeklyCardHtml(n, key); }).join('') + '</div>');
+    }).join('');
+    return html;
+  }
+
+  function mProjectRow(name, open) {
+    var list = open.filter(function (t) { return t.project === name; });
+    var next = list.map(function (t) { return t.deadline; }).filter(Boolean).sort()[0] || '';
+    var late = list.filter(function (t) { return dueUrgency(t).overdue; }).length;
+    var latest = weeklyLatestStatus(name);
+    var pd = projectDeadlineDoc(name) || {};
+    var note = latest ? latest.text : (pd.wipNote || '');
+    var due = next ? mDue(next) : null;
+    return '<button type="button" class="m-row" data-m-project="' + escapeHtml(name) + '">' +
+      '<span class="m-row-main"><span class="m-row-title">' + projectNameHtml(name) + '</span>' +
+        '<span class="m-row-sub">' + (list.length ? list.length + ' open' : 'No open tasks') + (late ? ' · <span class="m-due-late">' + late + ' overdue</span>' : '') +
+          (due ? ' · next <span class="' + due.cls + '">' + escapeHtml(due.text) + '</span>' : '') + '</span>' +
+        (note ? '<span class="m-row-note">' + escapeHtml(note) + '</span>' : '') + '</span>' + mIcon('chev', 'm-chev') + '</button>';
+  }
+  function mWipHtml() {
+    var today = mToday();
+    var horizon = toDateInputValue(addDays(todayMidnight(), 13));
+    var scoped = activeTasks();
+    var open = scoped.filter(function (t) { return t.status !== 'Done'; });
+    var scopedProjects = Object.keys(scoped.reduce(function (acc, t) { if (t.project) acc[t.project] = true; return acc; }, {}));
+    var alerts = wipAlerts(open, today, horizon, scopedProjects);
+    var html = '<p class="m-lede" style="padding-top:12px">Everything the room needs, company-wide. Edits happen in the meeting on desktop.</p>';
+    html += mSection('Needs a decision · ' + alerts.length, alerts.length ? mGroup(alerts.map(function (a) {
+      var inner = '<span class="m-row-main"><span><span class="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + (WIP_TONES[a.tone] || '') + '">' + escapeHtml(a.kind) + '</span></span>' +
+        '<span class="m-row-title" style="margin-top:4px">' + projectNameHtml(a.title) + '</span><span class="m-row-note">' + projectNameHtml(a.detail) + '</span></span>';
+      return a.taskId ? '<button type="button" class="m-row" data-m-task="' + a.taskId + '">' + inner + mIcon('chev', 'm-chev') + '</button>' : '<div class="m-row">' + inner + '</div>';
+    }).join('')) : mEmpty('', 'Nothing needs a decision.'));
+    var names = {};
+    open.forEach(function (t) { if (t.project) names[t.project] = true; });
+    projectDocs.forEach(function (p) { if (p && p.name && projectWipCategory(p.name)) names[p.name] = true; });
+    var cats = WIP_CATEGORIES.concat([{ key: '', label: 'Not sorted' }]);
+    cats.forEach(function (c) {
+      var list = Object.keys(names).filter(function (n) { return projectWipCategory(n) === c.key; });
+      if (!list.length) return;
+      list.sort(function (a, b) {
+        var x = open.filter(function (t) { return t.project === a && t.deadline; }).map(function (t) { return t.deadline; }).sort()[0] || '9999';
+        var y = open.filter(function (t) { return t.project === b && t.deadline; }).map(function (t) { return t.deadline; }).sort()[0] || '9999';
+        return x < y ? -1 : x > y ? 1 : a.localeCompare(b);
+      });
+      html += mSection(escapeHtml(c.label) + ' · ' + list.length, mGroup(list.map(function (n) { return mProjectRow(n, open); }).join('')));
+    });
+    return html;
+  }
+  function mProjectsHtml() {
+    var open = mOpenTasks();
+    var names = {};
+    open.forEach(function (t) { if (t.project) names[t.project] = true; });
+    var list = Object.keys(names).sort(function (a, b) {
+      var x = open.filter(function (t) { return t.project === a && t.deadline; }).map(function (t) { return t.deadline; }).sort()[0] || '9999';
+      var y = open.filter(function (t) { return t.project === b && t.deadline; }).map(function (t) { return t.deadline; }).sort()[0] || '9999';
+      return x < y ? -1 : x > y ? 1 : a.localeCompare(b);
+    });
+    if (!list.length) return '<div class="m-section">' + mEmpty('No open projects', '') + '</div>';
+    return mSection('Ongoing · ' + list.length, mGroup(list.map(function (n) { return mProjectRow(n, open); }).join('')));
+  }
+  function mOpenProject(name) {
+    if (!name) return;
+    var top = mStack[mStack.length - 1];
+    if (top && top.key === 'project:' + name) return;
+    mPush({ key: 'project:' + name, title: 'Project', backLabel: 'Back', render: function () { return mProjectHtml(name); } });
+  }
+  function mProjectHtml(name) {
+    var pd = projectDeadlineDoc(name) || {};
+    var all = activeTasks().filter(function (t) { return t.project === name; });
+    var open = all.filter(function (t) { return t.status !== 'Done'; }).sort(mByDeadline);
+    var done = all.filter(function (t) { return t.status === 'Done'; });
+    var cat = projectWipCategory(name);
+    var deadline = projectDeadlineFor(name);
+    var folder = projectDriveLink(name);
+    var hasChat = Array.isArray(pd.chat);
+    var html = (cat ? '<div class="m-eyebrow" style="padding-top:14px">' + escapeHtml(wipCategoryLabel(cat)) + '</div>' : '<div style="height:14px"></div>') +
+      '<h1 class="m-title m-text">' + projectNameHtml(name) + '</h1>' +
+      '<div class="m-chips">' + (deadline ? '<span class="m-chip ' + mDue(deadline).cls + '">' + mIcon('clock', 'w-3.5 h-3.5') + 'Due ' + escapeHtml(formatShortDate(deadline)) + '</span>' : '') +
+        (pd.wipOwner ? '<span class="m-chip">' + escapeHtml(pd.wipOwner) + '</span>' : '') +
+        '<span class="m-chip">' + open.length + ' open</span></div>';
+    if (folder || hasChat) {
+      html += '<div class="m-actions">' +
+        (hasChat ? '<button type="button" class="m-pill-btn" data-m-chat="' + escapeHtml(name) + '">' + mIcon('chat') + 'Group chat</button>' : '') +
+        (folder ? '<a class="m-pill-btn" href="' + escapeHtml(folder) + '" target="_blank" rel="noopener">' + mIcon('folder') + 'Open folder</a>' : '') + '</div>';
+    }
+    if (pd.wipNote) html += mSection('Notes', mGroup('<div class="m-comment"><div class="m-comment-text">' + escapeHtml(pd.wipNote) + '</div></div>'));
+    if (typeof wipCanSeeDetails === 'function' && wipCanSeeDetails() && (pd.clientContact || (pd.links || []).length)) {
+      html += mSection('Contact & links', mGroup(
+        (pd.clientContact ? '<div class="m-comment"><div class="m-comment-text">' + escapeHtml(pd.clientContact) + '</div></div>' : '') +
+        (pd.links || []).map(function (l) {
+          return '<a class="m-row m-tap" href="' + escapeHtml(l.url) + '" target="_blank" rel="noopener"><span class="m-row-main"><span class="m-row-title" style="color:var(--m-brand)">' + escapeHtml(l.label || linkChipLabel(l.url)) + '</span></span>' + mIcon('external', 'm-chev') + '</a>';
+        }).join('')));
+    }
+    html += mSection('Open tasks · ' + open.length, open.length ? mGroup(open.map(function (t) { return mTaskRow(t, { owner: true }); }).join('')) : mEmpty('', 'Nothing open.'));
+    var dels = Array.isArray(pd.wipDeliverables) ? pd.wipDeliverables : [];
+    if (dels.length && !open.length) {
+      html += mSection('Deliverables', mGroup(dels.map(function (d) {
+        var latest = statusSorted(d.status)[0];
+        return '<div class="m-row"><span class="m-row-main"><span class="m-row-title">' + escapeHtml(d.text || '') + '</span>' +
+          (latest ? '<span class="m-row-note">' + escapeHtml(latest.text) + '</span>' : '') +
+          (d.next ? '<span class="m-row-sub">Next: ' + escapeHtml(d.next) + '</span>' : '') + '</span></div>';
+      }).join('')));
+    }
+    if (done.length) {
+      var key = 'p:' + name;
+      html += mSection('Done · ' + done.length, mShowDone[key]
+        ? mGroup(done.map(function (t) { return mTaskRow(t, { owner: true }); }).join(''))
+        : mGroup('<button type="button" class="m-row" data-m-act="toggle-done" data-key="' + escapeHtml(key) + '"><span class="m-row-main"><span class="m-row-sub" style="color:var(--m-brand);font-weight:600">Show ' + done.length + ' done</span></span></button>'));
+    }
+    return html;
+  }
+
+  function mPeopleHtml() {
+    var open = mOpenTasks();
+    var cutoff = Date.now() - 60 * 86400000;
+    var seen = {};
+    var people = teamPeople.filter(function (p) {
+      if (!p.name || seen[p.name]) return false;
+      seen[p.name] = true;
+      var active = p.lastSeen && new Date(p.lastSeen).getTime() >= cutoff;
+      return active || open.some(function (t) { return t.assignee === p.name; });
+    }).map(function (p) { return p.name; }).sort(function (a, b) { return a.localeCompare(b); });
+    var away = mAwayRows(14);
+    var html = away.length ? mSection('Away · next 2 weeks', mAwayHtml(away)) : '';
+    html += mSection('Everyone · ' + people.length, mGroup(people.map(function (n) {
+      var mine = open.filter(function (t) { return t.assignee === n; });
+      var late = mine.filter(function (t) { return dueUrgency(t).overdue; }).length;
+      var depts = personDepartments(n).map(departmentLabel).join(' · ');
+      return '<button type="button" class="m-row" data-m-person="' + escapeHtml(n) + '">' + avatarHtml(n, 'w-10 h-10', 'text-xs') +
+        '<span class="m-row-main"><span class="m-row-title">' + escapeHtml(n) + (isOnLeave(n, mToday()) ? ' <span class="m-chip" style="background:#fef3c7;color:#92400e;padding:1px 7px;font-size:11px">Away</span>' : '') + '</span>' +
+          '<span class="m-row-sub">' + escapeHtml(depts || 'No department') + '</span></span>' +
+        '<span class="m-row-right"><span>' + mine.length + ' open</span>' + (late ? '<span class="m-due-late">' + late + ' late</span>' : '') + '</span>' + mIcon('chev', 'm-chev') + '</button>';
+    }).join('')));
+    return html;
+  }
+  function mOpenPerson(name) {
+    if (!name) return;
+    var top = mStack[mStack.length - 1];
+    if (top && top.key === 'person:' + name) return;
+    mPush({ key: 'person:' + name, title: mFirst(name), backLabel: 'Back', render: function () { return mPersonHtml(name); } });
+  }
+  function mPersonHtml(name) {
+    var p = teamPeople.find(function (x) { return x.name === name; }) || {};
+    var open = mOpenTasks();
+    var owned = open.filter(function (t) { return t.assignee === name; }).sort(mByDeadline);
+    var involved = open.filter(function (t) { return t.assignee !== name && Array.isArray(t.involved) && t.involved.indexOf(name) !== -1; }).sort(mByDeadline);
+    var steps = [];
+    open.forEach(function (t) {
+      if (t.assignee === name) return;
+      (t.checklist || []).forEach(function (it) { if (it && !it.done && it.assignee === name) steps.push({ t: t, it: it }); });
+    });
+    steps.sort(function (a, b) { return (a.it.due || '9999') < (b.it.due || '9999') ? -1 : 1; });
+    var away = mAwayRows(30).filter(function (r) { return r.name === name; });
+    var depts = personDepartments(name).map(departmentLabel).join(' · ');
+    var html = '<div style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:20px 20px 0;text-align:center">' + avatarHtml(name, 'w-20 h-20', 'text-2xl') +
+      '<div style="font-size:22px;font-weight:800">' + escapeHtml(name) + '</div>' +
+      '<div style="color:var(--m-sub);font-size:14px">' + escapeHtml(depts || 'No department') + (isPersonOnline(name) ? ' · <span style="color:#10b981;font-weight:600">Online</span>' : '') + '</div>' +
+      (p.email ? '<a class="m-pill-btn" href="mailto:' + escapeHtml(p.email) + '">' + mIcon('mail') + 'Email</a>' : '') + '</div>';
+    if (away.length) html += mSection('Time off', mAwayHtml(away));
+    html += mSection('Owns · ' + owned.length, owned.length ? mGroup(owned.map(function (t) { return mTaskRow(t); }).join('')) : mEmpty('', 'No open tasks.'));
+    if (involved.length) html += mSection('Also involved · ' + involved.length, mGroup(involved.map(function (t) { return mTaskRow(t, { owner: true }); }).join('')));
+    if (steps.length) html += mSection("Steps on others' tasks · " + steps.length, mGroup(steps.map(function (x) { return mStepRow(x.t, x.it, false); }).join('')));
+    return html;
+  }
+
+  var M_UPDATE_TYPE = { new: ['New', '#ff4e20'], improved: ['Improved', '#7c3aed'], fixed: ['Fixed', '#059669'] };
+  function mUpdatesHtml(unseen) {
+    var days = [];
+    CHANGELOG.slice(0, 40).forEach(function (r) {
+      var d = days.length && days[days.length - 1].date === r.date ? days[days.length - 1] : null;
+      if (!d) { d = { date: r.date, items: [] }; days.push(d); }
+      (r.items || []).forEach(function (it) { d.items.push({ it: it, fresh: unseen.indexOf(r.id) !== -1 }); });
+    });
+    return days.filter(function (d) { return d.items.length; }).map(function (d) {
+      return mSection(escapeHtml(parseDate(d.date).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' })), mGroup(d.items.map(function (x) {
+        var ty = M_UPDATE_TYPE[x.it.type] || ['Update', '#71717a'];
+        return '<div class="m-comment"' + (x.fresh ? ' style="box-shadow:inset 3px 0 0 var(--m-brand)"' : '') + '><div style="min-width:0;flex:1">' +
+          '<span style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.04em;color:' + ty[1] + '">' + ty[0] + (x.fresh ? ' · new to you' : '') + '</span>' +
+          '<div style="font-weight:700;font-size:15px;margin-top:2px">' + escapeHtml(x.it.title) + '</div>' +
+          '<div class="m-comment-text" style="color:var(--m-sub);font-size:14px">' + escapeHtml(x.it.text) + '</div></div></div>';
+      }).join('')));
+    }).join('');
+  }
+
+  /* ---------- events ---------- */
+  function mAutosize(ta) {
+    ta.style.height = 'auto';
+    ta.style.height = Math.min(132, ta.scrollHeight + 1) + 'px';
+    var btn = ta.form && ta.form.querySelector('.m-send');
+    if (btn) btn.disabled = !ta.value.trim();
+  }
+  function mOnInput(e) {
+    var el = e.target;
+    if (el.id === 'm-task-search') { mTaskQuery = el.value; mRenderTab('tasks'); return; }
+    if (el.matches && el.matches('.m-compose textarea')) mAutosize(el);
+  }
+  function mOnSubmit(e) {
+    var form = e.target.closest('[data-m-form]');
+    if (!form) return;
+    e.preventDefault();
+    var kind = form.getAttribute('data-m-form');
+    if (kind === 'quick-add') { mSubmitQuickAdd(form); return; }
+    var ta = form.querySelector('textarea');
+    var text = ta ? ta.value.trim() : '';
+    if (!text) return;
+    if (kind === 'comment') mSendComment(form.getAttribute('data-task'), text, form);
+    else if (kind === 'chat') mSendChat(form.getAttribute('data-project'), text, form);
+    else if (kind === 'update') {
+      var t = tasks.find(function (x) { return x.id === form.getAttribute('data-task'); });
+      if (!t) return;
+      form.querySelector('[type="submit"]').disabled = true;
+      addTaskStatus(t, mToday(), text).then(function () {
+        mDismissSheet();
+        showToast('Update posted', 'success');
+        mHaptic();
+      }).catch(function () { form.querySelector('[type="submit"]').disabled = false; });
+    }
+  }
+  function mOnClick(e) {
+    var el;
+    if ((el = e.target.closest('[data-m-tab]'))) { mSetTab(el.getAttribute('data-m-tab')); return; }
+    if ((el = e.target.closest('[data-weekly-write]'))) { openWeeklyEditor(); return; }
+    if ((el = e.target.closest('[data-m-act]'))) { mAct(el.getAttribute('data-m-act'), el); return; }
+    if ((el = e.target.closest('[data-m-seg] button'))) { mSeg(el); return; }
+    if ((el = e.target.closest('[data-m-task]'))) { mOpenTask(el.getAttribute('data-m-task')); return; }
+    if ((el = e.target.closest('[data-m-chat]'))) { mOpenChat(el.getAttribute('data-m-chat')); return; }
+    if ((el = e.target.closest('[data-m-project]'))) { mOpenProject(el.getAttribute('data-m-project')); return; }
+    if ((el = e.target.closest('[data-m-person]'))) { mOpenPerson(el.getAttribute('data-m-person')); return; }
+    if ((el = e.target.closest('[data-m-notif]'))) { mOpenNotif(el.getAttribute('data-m-notif')); return; }
+    if ((el = e.target.closest('[data-m-go]'))) { mGo(el.getAttribute('data-m-go')); return; }
+  }
+  function mSeg(btn) {
+    var seg = btn.closest('[data-m-seg]');
+    var which = seg.getAttribute('data-m-seg');
+    var v = btn.getAttribute('data-v');
+    seg.querySelectorAll('button').forEach(function (b) { b.classList.toggle('m-on', b === btn); });
+    if (which === 'task-scope') { mTaskScope = v; mRenderTab('tasks'); }
+    else if (which === 'cal-scope') { mCalScope = v; mRenderTab('calendar'); }
+    else if (which === 'qa-prio') { var f = seg.closest('form'); if (f) f.elements.priority.value = v; }
+  }
+  function mAct(act, el) {
+    var taskId = el.getAttribute('data-task');
+    if (act === 'back') { mBack(); return; }
+    if (act === 'sheet-close') { mDismissSheet(); return; }
+    if (act === 'quick-add') { mOpenQuickAdd(); return; }
+    if (act === 'go-mine') { mTaskScope = 'mine'; mSetTab('tasks'); mRenderTab('tasks'); return; }
+    if (act === 'step') { mToggleStep(taskId, el.getAttribute('data-item'), el); return; }
+    if (act === 'status') {
+      var t = tasks.find(function (x) { return x.id === taskId; });
+      var s = el.getAttribute('data-status');
+      if (!t || t.status === s) return;
+      el.parentNode.querySelectorAll('button').forEach(function (b) { b.classList.toggle('m-on', b === el); });
+      mHaptic();
+      updateTaskStatus(taskId, s);
+      return;
+    }
+    if (act === 'add-update') { mOpenUpdateSheet(taskId); return; }
+    if (act === 'toggle-done') { var k = el.getAttribute('data-key') || taskId; mShowDone[k] = !mShowDone[k]; mRefresh(); return; }
+    if (act === 'task-more') {
+      mActionSheet('', [
+        { act: 'full-editor', label: 'Open full editor', attrs: ' data-task="' + taskId + '"' },
+        { act: 'copy-link', label: 'Copy link', attrs: ' data-task="' + taskId + '"' }
+      ]);
+      return;
+    }
+    if (act === 'full-editor') {
+      var ft = tasks.find(function (x) { return x.id === taskId; });
+      mDismissSheet();
+      if (ft) setTimeout(function () { mFullEditor = true; openTaskModal(ft); }, 60);
+      return;
+    }
+    if (act === 'copy-link') {
+      var url = location.origin + location.pathname + '#task=' + taskId;
+      mDismissSheet();
+      if (navigator.clipboard) navigator.clipboard.writeText(url).then(function () { showToast('Link copied', 'success'); }).catch(function () { showToast(url, 'info'); });
+      else showToast(url, 'info');
+      return;
+    }
+    if (act === 'cal-shift') { mCalStart = toDateInputValue(addDays(parseDate(mCalStart || mToday()), parseInt(el.getAttribute('data-n'), 10))); mRenderTab('calendar'); return; }
+    if (act === 'cal-today') { mCalStart = mToday(); mRenderTab('calendar'); return; }
+    if (act === 'cal-day') {
+      var head = document.getElementById('m-cal-d-' + el.getAttribute('data-day'));
+      var pane = head && head.closest('.m-pane');
+      if (head && pane) pane.scrollTo({ top: head.offsetTop - 50, behavior: 'smooth' });
+      return;
+    }
+    if (act === 'week-shift') {
+      var n = parseInt(el.getAttribute('data-n'), 10);
+      mWeekKey = n === 0 ? weeklyCurrentKey() : weeklyShiftKey(mWeekKey || weeklyCurrentKey(), n);
+      mRefresh();
+      return;
+    }
+    if (act === 'read-all') {
+      myNotifications.filter(function (x) { return !x.read; }).forEach(function (x) { updateDoc(doc(notificationsCol, x.id), { read: true }).catch(function () {}); });
+      return;
+    }
+    if (act === 'theme') { toggleTheme(); mSyncThemeColor(); mRefresh(); return; }
+    if (act === 'desktop') {
+      openConfirm('Use the desktop layout?', 'Project Manager will show the full desktop pages on this phone. Switch back any time from the profile menu: "Use mobile layout".', function () {
+        try { localStorage.setItem(M_DESKTOP_KEY, '1'); } catch (e) { /* ignore */ }
+        mApplyMode();
+      }, { tone: 'question', confirmText: 'Switch', cancelText: 'Cancel' });
+      return;
+    }
+    if (act === 'signout') {
+      openConfirm('Sign out?', 'You\'ll need to sign in again with your Mediashock Google account to get back in.', function () {
+        signOut(auth).catch(function (err) { showToast('Sign-out failed: ' + err.message, 'error'); });
+      }, { tone: 'question', confirmText: 'Sign out', cancelText: 'Cancel' });
+    }
+  }
+
+  window.addEventListener('popstate', function () {
+    if (!mBuilt) return;
+    if (mSheetOpen) { mCloseSheet(); return; }
+    if (mStack.length) mPop();
+  });
+  if (mMedia) {
+    if (mMedia.addEventListener) mMedia.addEventListener('change', mApplyMode);
+    else if (mMedia.addListener) mMedia.addListener(mApplyMode);
+  }
+  mApplyMode();
+
   function renderAll() {
     renderProfileDepartments();
     renderStats();
@@ -15252,6 +16807,7 @@
     renderFilterOptions();
     renderCurrentSecondaryView();
     renderDigestPanel();
+    mRefresh();
   }
 
   /* =========================================================
@@ -15590,6 +17146,20 @@
     badge.classList.toggle('hidden', unread.length === 0);
   }
 
+  // One sentence per notification, shared by the bell panel and the phone layout's list.
+  function notificationHeadlineHtml(n) {
+    var systemHeadline = systemAlertHeadline(n.type);
+    var subject = n.chatProject ? ('the "' + escapeHtml(n.chatProject) + '" group chat') : ('"' + escapeHtml(n.taskName) + '"');
+    var verb = n.chatProject
+      ? (n.type === 'chat_post' ? 'posted in' : n.type === 'chat_reaction' ? 'reacted to your message in' : 'mentioned you in')
+      : (n.type === 'mention' ? 'mentioned you on' : n.type === 'assigned' ? 'made you the owner of' : n.type === 'involved' ? 'added you to' : n.type === 'checklist_assigned' ? 'assigned you a checklist item on' : n.type === 'checklist_done' ? 'finished a checklist item on' : 'commented on');
+    return systemHeadline
+      ? escapeHtml(systemHeadline)
+      : n.type === 'suggestion_fixed'
+        ? '<span class="font-semibold">' + escapeHtml(n.author) + '</span> marked your suggestion as fixed'
+        : '<span class="font-semibold">' + escapeHtml(n.author) + '</span> ' + verb + ' ' + subject;
+  }
+
   function renderNotificationBell() {
     var unread = myNotifications.filter(function (n) { return !n.read; });
     var badge = document.getElementById('notification-badge');
@@ -15616,16 +17186,7 @@
           // thing -- these are a system observation, and the old phrasing ("Deadline alert
           // flagged an approaching deadline on 'X'" right above a detail line naming that same
           // task again) read as clinical and repetitive when reported back against a screenshot.
-          var systemHeadline = systemAlertHeadline(n.type);
-          var subject = n.chatProject ? ('the "' + escapeHtml(n.chatProject) + '" group chat') : ('"' + escapeHtml(n.taskName) + '"');
-          var verb = n.chatProject
-            ? (n.type === 'chat_post' ? 'posted in' : n.type === 'chat_reaction' ? 'reacted to your message in' : 'mentioned you in')
-            : (n.type === 'mention' ? 'mentioned you on' : n.type === 'assigned' ? 'made you the owner of' : n.type === 'involved' ? 'added you to' : n.type === 'checklist_assigned' ? 'assigned you a checklist item on' : n.type === 'checklist_done' ? 'finished a checklist item on' : 'commented on');
-          var headlineHtml = systemHeadline
-            ? escapeHtml(systemHeadline)
-            : n.type === 'suggestion_fixed'
-              ? '<span class="font-semibold">' + escapeHtml(n.author) + '</span> marked your suggestion as fixed'
-              : '<span class="font-semibold">' + escapeHtml(n.author) + '</span> ' + verb + ' ' + subject;
+          var headlineHtml = notificationHeadlineHtml(n);
           return '<button type="button" data-notification-id="' + n.id + '" data-notification-task="' + (n.taskId || '') + '" data-notification-chat-project="' + escapeHtml(n.chatProject || '') + '" data-notification-type="' + escapeHtml(n.type || '') + '" class="w-full text-left px-3.5 py-2.5 hover:bg-zinc-50 dark:hover:bg-zinc-700/50 flex items-start gap-2 ' + (isUnread ? 'bg-brand-50/50 dark:bg-brand-500/5' : '') + '">' +
             '<span class="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ' + (isUnread ? 'bg-brand-500' : 'bg-transparent') + '"></span>' +
             '<div class="min-w-0 flex-1">' +
@@ -15635,6 +17196,7 @@
           '</button>';
         }).join('')
       : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-8">No notifications yet.</p>';
+    mRefresh();
   }
 
   var digestPanel = document.getElementById('digest-panel');
@@ -15758,7 +17320,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-06T14:27:00Z";
+  var CURRENT_BUILD_VERSION = "2026-10-06T14:59:49Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

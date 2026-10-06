@@ -29,7 +29,7 @@ Google Auth) so the whole team edits one live board together with real-time upda
   no caching, see comment in the file).
 - `version.txt` — a timestamp stamped on every deploy; polled client-side to trigger auto-reload.
 
-Views: Board, Timeline (Gantt), Calendar, People, Projects, Chat, **Events → WIP Meeting**,
+Views: Board, Timeline (Gantt), Calendar, People, Projects, Chat, **Events → WIP Meeting**, **Monday Meeting**,
 Activity, Suggestions, Archived, **New Updates**.
 
 Live at https://mediashock-apac.github.io/ms-project-manager/ (deployed via GitHub Pages, not Firebase
@@ -2627,6 +2627,70 @@ needs revisiting.
   intentional, and reported directly from a screenshot as needing to look neater. If either
   row's content ever needs to grow taller than 64px, both heights need to move together or this
   drifts out of alignment again.
+
+### Mobile app (phones, below 768px)
+
+Asked: "The mobile view is horrible. Interfaces overlap each other, scrolling is a pain ... I don't
+need it to function 100% the same way as desktop. It should only be editable in key and simple
+areas and the main objective of it is to get information on the go ... like a polished native
+mobile app instead of a web app." The old phone view was the desktop squeezed: the header, filters,
+search and Focus of the Day took half the screen on every page, the Board and Timeline scrolled
+sideways inside the page, and the task window was the full desktop form.
+
+- **A separate layout, not responsive tweaks to the desktop pages.** `#m-app` (the MOBILE APP section
+  of the script, `.m-*` CSS in the style block) is drawn from the same live data; `html.m-mode` hides
+  `#app`. `#m-app` must stay the next sibling of `#app` (the CSS hides it while `#app` is hidden, i.e.
+  signed out). Plain CSS rather than Tailwind for the shell: blurred bars, safe areas, pushed screens
+  and sheets need control the utilities don't give, and it avoids the CDN cascade-order problem.
+- **Shape:** a tab bar (Home, Tasks, Calendar, Chat, More), large titles that collapse into the bar
+  on scroll, screens that slide in from the right (back button, left-edge swipe, or the phone's own
+  back via `history.pushState`/`popstate`), bottom sheets with a drag handle. Each tab is its own
+  scroller, so switching tabs keeps your place; tapping the active tab scrolls to the top.
+  - **Home:** greeting, three tiles (overdue / due this week / open), the Monday update card
+    (Write/Edit), Needs attention (your overdue + due by tomorrow), Your steps (checklist steps due
+    within a week, tickable), Later this week, Away.
+  - **Tasks:** Mine / Everyone + search, grouped Overdue, Today, Tomorrow, Next 7 days, Later, In
+    review, No date. **Calendar:** a week strip and day-by-day agenda from `cal2Collect` (late work
+    carried to today). **Chat:** chat list with unread counts, WhatsApp-style thread, send text.
+  - **More:** Monday Meeting (reuses `weeklyCardHtml`), WIP Meeting (read-only: Needs a decision +
+    projects by category with the latest status line), People and person pages (tasks, steps, leave,
+    an Email button), Projects and project pages (folder, chat, notes, tasks), Notifications, What's
+    new, Dark mode, Use desktop layout, Sign out.
+- **The only edits on a phone** (decided from the ask): tick a checklist step, move a task's
+  status, post a status update (a sheet; same `addTaskStatus` as WIP), comment, send a chat message,
+  write the Monday update (the desktop editor, full screen), quick-add a task (name, project, owner,
+  deadline, priority; created exactly like the desktop's new-task save). **Everything else stays on
+  desktop**; a task's "..." > **Open full editor** opens the desktop task window as the escape hatch.
+- **`openTaskModal` routes to the phone task screen** while `mActive()` (a task) or to quick add (no
+  task), unless `mFullEditor` is set. So notifications, deep links (`#task=`) and anything else that
+  opens a task land in the right place without each knowing about phones.
+- **Company-wide, and the desktop's saved filters are ignored** (`mWithPlain` swaps `filters`,
+  `currentTeamspace` and `calendarScope` for the call): a phone has nowhere to show them, and a
+  hidden filter silently hiding tasks is the one thing a read-on-the-go view can't afford.
+- **Guided tours don't run on a phone** (`maybeStartTour`/`maybeStartPageTour` return early): they
+  point at the desktop layout.
+- **Notification wording is shared** (`notificationHeadlineHtml`), so the bell and the phone list
+  can't drift.
+- **Switches:** `MOBILE_APP_ENABLED = false` turns it off for everyone. Per person: More > Use
+  desktop layout (`flowboard_mobile_desktop` in localStorage), and back via the profile menu's
+  "Use mobile layout" (`#btn-use-mobile`, created by JS, only on a phone-sized screen).
+- **Home-screen ready:** `viewport-fit=cover` + safe-area padding, apple/mobile web-app meta tags,
+  `interactive-widget=resizes-content`; on iOS the composer is lifted above the keyboard via
+  `visualViewport` (`--m-kb`). The status-bar colour follows the phone layout's background.
+- **Verified in Chromium at 390x844 with touch, light and dark**, against the real page with the
+  in-memory Firestore stand-in (23 checks: every tab and screen renders, ticking a step, status,
+  comment, status update, chat send, quick add, Monday editor, notification to chat, browser back
+  pops a screen, no sideways scroll, desktop layout returns at 1280px), and the existing 58-check
+  desktop suite still passes. **Not yet tried on a real iPhone/Android**; the iOS keyboard handling
+  in particular is worth a real check.
+
+**Long project names and zero-width spaces.** `projectNameHtml` marks break points (camelCase,
+letter/number, `_ - /`, either side of the `[Client]` tag) with a zero-width space, not `<wbr>`:
+Chromium breaks at a `<wbr>` even inside `white-space: nowrap`, which turned one-line truncated labels
+into two or three lines (measured). A zero-width space respects nowrap. Because it would ride along
+on copy, a document `copy` handler strips it, and every project-name save strips it (`stripZwsp`):
+the task form, quick add and WIP's "+ Add entry". **Any new place that saves a project name typed
+by hand should strip it too**, or a pasted name becomes a different project.
 
 ### Sidebar groups (named, 11 rows)
 
