@@ -2646,11 +2646,13 @@ Asked directly: "how can I categorize these items or make this side bar better?"
 - **Unread New Updates no longer tints the row.** The tinted, glowing, light-sweep row looked
   exactly like `.view-toggle-btn.active` ("is that the page I'm on?"). Still prominent, as
   originally asked, via orange label text, the pulsing count and the ringing megaphone; just not
-  a background. **Made flashier on request ("New Updates can be flashier")** without breaking
-  that rule: a Poppy→indigo→cyan conic-gradient border that travels round the row (`::before`,
-  masked to a 1.5px ring, angle animated via `@property --updates-angle`), a light sweep across the
-  label (`background-clip: text`), and a gradient count badge. Still no fill. All off under
-  reduced motion.
+  a background. **Then made flashier on request, and is now a SOLID Poppy-to-indigo gradient bar** (white text, white
+  count, ringing megaphone; asked "should it use a solid bar?"). This does not break the rule above: the
+  problem was a *pale tint*, identical to the selected page. A full-strength bar is a different thing.
+  Gradient, not solid Poppy, because solid Poppy is the primary-button colour (Add Task). Styled via
+  `#updates-nav-btn` so it beats `.view-toggle-btn:hover` later in the sheet. On the collapsed rail
+  the count moves to the bar's corner so it doesn't cover the megaphone. A moving gradient outline
+  plus label shine shipped first and was replaced the same day.
 - **On the collapsed rail, the teamspace menu opens BESIDE the rail at 13rem** (`#sidebar.collapsed
   #teamspace-menu` in the styles). It spans its wrapper (`left-2 right-2`), i.e. the sidebar's width,
   which on the rail cut every name to one letter (reported from a screenshot). The mobile drawer

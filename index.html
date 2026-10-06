@@ -272,39 +272,26 @@
   @keyframes field-shake { 10%, 90% { transform: translateX(-1px); } 20%, 80% { transform: translateX(2px); } 30%, 50%, 70% { transform: translateX(-3px); } 40%, 60% { transform: translateX(3px); } }
   .field-shake { animation: field-shake 0.4s ease-in-out; }
 
-  /* New Updates nav item while something is unread: a brand tint on the row itself plus a soft
-     pulse on its count, so it is noticeable at a glance without a popup. Both go away the moment
-     the tab is opened (see renderUpdatesNavBadge). */
-  /* Unread New Updates: orange label text, the pulsing count and the ringing megaphone (below).
-     NO row background -- the tinted, glowing row it used to have looked exactly like the
-     selected-page state (.view-toggle-btn.active), so people couldn't tell "new" from "here". */
-  .updates-unread:not(.active) { color: #e0431a; font-weight: 600; }
-  .dark .updates-unread:not(.active) { color: #ff9d7e; }
+  /* Unread New Updates: a SOLID Poppy-to-indigo bar with white text, a white count and the ringing
+     megaphone, until the tab is opened (renderUpdatesNavBadge). History: a pale tint was dropped
+     because it looked exactly like the selected page (.view-toggle-btn.active, a pale Poppy tint);
+     then a moving outline + label shine; then this, on request ("should it use a solid bar?").
+     Full-strength gradient reads as an announcement, not "you are here", and isn't solid Poppy,
+     which is what primary buttons (Add Task) use. The id raises specificity over
+     .view-toggle-btn:hover, which comes later in this sheet and would otherwise repaint it. */
+  #updates-nav-btn.updates-unread:not(.active),
+  #updates-nav-btn.updates-unread:not(.active):hover {
+    background: linear-gradient(90deg, #ff4e20, #6366f1); color: #fff; font-weight: 600;
+  }
+  #updates-nav-btn.updates-unread:not(.active):hover { filter: brightness(1.06); }
   @keyframes updates-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255,78,32,0.45); } 50% { box-shadow: 0 0 0 5px rgba(255,78,32,0); } }
   .updates-pulse { animation: updates-pulse 2s ease-in-out infinite; }
-
-  /* Flashier, still with NO fill (see above): a brand-gradient border that travels round the row,
-     a light sweep across the label, and a gradient count. An outline in moving colour reads as
-     "look here", never as the selected page, which is a flat tint. */
-  @property --updates-angle { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
-  .updates-unread:not(.active)::before {
-    content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 1.5px; pointer-events: none;
-    background: conic-gradient(from var(--updates-angle), #ff4e20, #6366f1, #0891b2, #ff4e20);
-    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-    -webkit-mask-composite: xor; mask-composite: exclude;
-    animation: updates-spin 3s linear infinite;
+  #updates-nav-btn.updates-unread:not(.active) #updates-nav-badge { background: #fff; color: #6366f1; }
+  /* Collapsed rail: the count would sit on the megaphone, so it moves to the bar's corner. Desktop
+     only -- below md the sidebar is a full-width drawer and ignores .collapsed. */
+  @media (min-width: 768px) {
+    #sidebar.collapsed #updates-nav-btn.updates-unread #updates-nav-badge { top: -5px; right: -5px; }
   }
-  @keyframes updates-spin { to { --updates-angle: 360deg; } }
-  .updates-unread:not(.active) .sidebar-label {
-    background: linear-gradient(90deg, #e0431a 0%, #e0431a 35%, #ffb199 50%, #e0431a 65%, #e0431a 100%);
-    background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; color: transparent;
-    animation: updates-shimmer 2.6s linear infinite;
-  }
-  .dark .updates-unread:not(.active) .sidebar-label {
-    background-image: linear-gradient(90deg, #ff9d7e 0%, #ff9d7e 35%, #fff1eb 50%, #ff9d7e 65%, #ff9d7e 100%);
-  }
-  @keyframes updates-shimmer { from { background-position: 100% 0; } to { background-position: -150% 0; } }
-  #updates-nav-badge { background-image: linear-gradient(135deg, #ff4e20, #6366f1); }
 
   .updates-unread:not(.active) > svg { animation: updates-ring 3.2s ease-in-out infinite; transform-origin: 30% 70%; }
   @keyframes updates-ring { 0%, 55%, 100% { transform: rotate(0); } 60% { transform: rotate(-16deg); } 66% { transform: rotate(14deg); } 72% { transform: rotate(-10deg); } 78% { transform: rotate(8deg); } 84% { transform: rotate(0); } }
@@ -403,7 +390,7 @@
   @media (prefers-reduced-motion: reduce) {
     .update-banner, .update-banner-icon svg,
     .remote-change-flash, .saved-tick, .expand-in, .expand-fade,
-    .updates-pulse, .updates-unread:not(.active), .updates-unread:not(.active)::after, .updates-unread:not(.active)::before, .updates-unread:not(.active) .sidebar-label, .updates-unread:not(.active) > svg,
+    .updates-pulse, .updates-unread:not(.active), .updates-unread:not(.active) > svg,
     .task-just-completed, .done-today-bounce, .modal-backdrop, .modal-pop-in, .panel-pop-in,
     .checklist-just-checked, .bell-nudge, .chat-message-enter, .chat-receipt-flip,
     .chat-star-pop, .chat-typing-dots span, .field-shake, .chat-message-jump-flash { animation: none; }
@@ -13103,7 +13090,7 @@
   ========================================================= */
   var CHANGELOG = [
     { id: '2026-10-06w', date: '2026-10-06', items: [
-      { type: 'improved', title: 'Harder to miss New Updates', text: 'When there is something new, the New Updates item in the sidebar now has a colourful border running round it and a shine across its name, until you open it.' }
+      { type: 'improved', title: 'Harder to miss New Updates', text: 'When there is something new, the New Updates item in the sidebar turns into a bold orange-to-purple bar, until you open it.' }
     ] },
     { id: '2026-10-06v', date: '2026-10-06', items: [
       { type: 'improved', title: 'Tidier WIP editing', text: "In WIP Meeting, a deliverable's next step now shows a small pencil so you can see it can be edited: click it to change it, or Remove to delete it. Edit boxes are also shorter, so Save and Cancel sit right beside what you are typing. And a lead or closing report can now be owned by someone without a Mediashock account: pick \"+ Someone else…\" and type their name." }
@@ -15098,7 +15085,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-06T03:10:59Z";
+  var CURRENT_BUILD_VERSION = "2026-10-06T03:41:43Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
