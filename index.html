@@ -330,6 +330,7 @@
     .view-toggle-btn[data-view-btn="projects"]:hover > svg { animation: nav-spin 0.6s ease; }
     .view-toggle-btn[data-view-btn="chat"]:hover > svg { animation: nav-wiggle 0.5s ease; }
     .view-toggle-btn[data-view-btn="wip"]:hover > svg { animation: nav-hop 0.5s ease; }
+    .view-toggle-btn[data-view-btn="weekly"]:hover > svg { animation: nav-wiggle 0.5s ease; }
     .view-toggle-btn[data-view-btn="activity"]:hover > svg { animation: nav-beat 0.5s ease; }
     .view-toggle-btn[data-view-btn="suggestions"]:hover > svg { animation: nav-wiggle 0.5s ease; }
     .view-toggle-btn[data-view-btn="archived"]:hover > svg { animation: nav-drop 0.45s ease; }
@@ -661,6 +662,12 @@
       <button data-view-btn="wip" data-tooltip="WIP Meeting" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
         <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="12" rx="2"></rect><line x1="12" y1="15" x2="12" y2="19"></line><line x1="8" y1="19" x2="16" y2="19"></line></svg>
         <span class="sidebar-label truncate">WIP Meeting</span>
+      </button>
+      <!-- Monday Meeting: everyone's weekly update (replaces the MMM Pulse-board sheet). A
+           clipboard with ticks -- not WIP's screen, People's users or Calendar's grid. -->
+      <button data-view-btn="weekly" data-tooltip="Monday Meeting" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
+        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"></rect><path d="M9 2h6v4H9z"></path><path d="m9 12 2 2 4-4"></path><path d="M9 17h6"></path></svg>
+        <span class="sidebar-label truncate">Monday Meeting</span>
       </button>
 
       <p class="sidebar-label px-2.5 pt-3 pb-1 text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">History</p>
@@ -1286,6 +1293,12 @@
       </div>
     </section>
 
+    <!-- ============ MONDAY MEETING VIEW (weekly updates; see WEEKLY UPDATE) ============ -->
+    <section id="view-weekly" data-view class="flex-1">
+      <div id="weekly-bar" class="flex flex-wrap items-center gap-3 mb-4"></div>
+      <div id="weekly-view"></div>
+    </section>
+
     <!-- ============ ACTIVITY VIEW ============ -->
     <section id="view-activity" data-view class="flex-1">
       <!-- max-w-4xl (was 2xl) to cut scrolling, asked for alongside New Updates. Deliberately still
@@ -1637,6 +1650,24 @@
   </div>
 </div>
 
+<!-- Weekly update (Monday meeting): your own update, one tap per project. Body built by
+     renderWeeklyEditor. See "Weekly update" in CLAUDE.md. -->
+<div id="weekly-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-2 sm:p-4 modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="weekly-modal-title">
+  <div class="bg-white dark:bg-zinc-800 w-full max-w-2xl rounded-2xl shadow-pop overflow-hidden max-h-[92vh] flex flex-col modal-pop-in">
+    <div class="flex items-start gap-3 px-5 py-4 border-b border-zinc-100 dark:border-zinc-700">
+      <div class="min-w-0 flex-1">
+        <h3 id="weekly-modal-title" class="text-lg font-bold text-zinc-900 dark:text-zinc-100"></h3>
+        <p id="weekly-modal-sub" class="text-sm text-zinc-500 dark:text-zinc-400"></p>
+      </div>
+      <button type="button" id="weekly-modal-close" aria-label="Close" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+    <div id="weekly-modal-body" class="overflow-y-auto"></div>
+    <div id="weekly-modal-foot" class="flex flex-wrap items-center gap-3 px-5 py-3 border-t border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/40"></div>
+  </div>
+</div>
+
 <!-- Full-size viewer for a chat screenshot thumbnail -- click anywhere (or Escape) to close.
      `hidden` deliberately has no competing `flex` in this static class list, same
      hidden-attribute-plus-JS-toggled-flex-class idiom as #chat-reply-preview/#chat-search-bar
@@ -1929,6 +1960,7 @@
       : type === 'deadline_reminder' ? 'A deadline is coming up'
       : type === 'review_stale' ? 'Still waiting on a review'
       : type === 'leave_clash' ? 'A deadline clashes with your leave'
+      : type === 'weekly_reminder' ? 'Your Monday update is due'
       : null;
   }
 
@@ -1977,6 +2009,8 @@
         selectChatProject(notif.chatProject);
       } else if (notif.type === 'suggestion_fixed') {
         setView('suggestions');
+      } else if (notif.type === 'weekly_reminder') {
+        openWeeklyFromReminder();
       } else if (notif.taskId) {
         var t = tasks.find(function (x) { return x.id === notif.taskId; });
         if (t) openTaskModal(t);
@@ -10553,6 +10587,545 @@
   /* =========================================================
      RENDER: PEOPLE (workload comparison, for delegation)
   ========================================================= */
+  /* =========================================================
+     WEEKLY UPDATE (Monday meeting) -- replaces the "MMM Pulse-board" sheet's person x week
+     tabs. Everyone answers once a week, one tap per project; the meeting reads the Monday
+     Meeting page (its own page under Meetings, so People stays as it is). Stored on each person's OWN roster doc (people/{uid}.weekly), so it needed no
+     rules change. See "Weekly update" in CLAUDE.md. Switch off: WEEKLY_ENABLED = false.
+  ========================================================= */
+  var WEEKLY_ENABLED = true;
+  var WEEKLY_KEEP = 26;          // weeks of history kept on each person's doc
+  var WEEKLY_ACTIVE_DAYS = 45;   // signed in within this many days = expected at the meeting
+  // Order the buttons are offered in...
+  var WEEKLY_PICK_ORDER = ['ontrack', 'client', 'us', 'help', 'done'];
+  // ...and the order rows are read out in: what the room has to act on first.
+  var WEEKLY_READ_ORDER = ['help', 'us', 'client', 'ontrack', 'done'];
+  var WEEKLY_ICON_PATHS = {
+    help: '<path d="M18 11V6a2 2 0 0 0-4 0v5"></path><path d="M14 10V4a2 2 0 0 0-4 0v6"></path><path d="M10 10.5V6a2 2 0 0 0-4 0v8"></path><path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.9-6-2.4l-3.6-3.6a2 2 0 0 1 2.8-2.8L7 15"></path>',
+    us: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path>',
+    client: '<circle cx="12" cy="12" r="10"></circle><path d="M12 6v6l4 2"></path>',
+    ontrack: '<path d="M20 6 9 17l-5-5"></path>',
+    done: '<circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path>',
+    extra: '<path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path>'
+  };
+  // Label colours avoid the priority hues (rose/amber/sky) and purple (ready for review):
+  // brand for the one that needs the room, emerald for done (the app's one "finished" green),
+  // neutrals for the rest.
+  var WEEKLY_STATUS = {
+    help: { label: 'Needs help', text: 'text-brand-800 dark:text-brand-300', row: 'bg-brand-50 dark:bg-brand-500/10', on: 'bg-brand-600 border-brand-600 text-white' },
+    us: { label: 'Waiting on us', text: 'text-zinc-700 dark:text-zinc-200', row: '', on: 'bg-zinc-900 border-zinc-900 text-white dark:bg-white dark:border-white dark:text-zinc-900' },
+    client: { label: 'Waiting on client', text: 'text-zinc-700 dark:text-zinc-200', row: '', on: 'bg-zinc-900 border-zinc-900 text-white dark:bg-white dark:border-white dark:text-zinc-900' },
+    ontrack: { label: 'On track', text: 'text-zinc-500 dark:text-zinc-400', row: '', on: 'bg-zinc-900 border-zinc-900 text-white dark:bg-white dark:border-white dark:text-zinc-900' },
+    done: { label: 'Done', text: 'text-emerald-700 dark:text-emerald-400', row: '', on: 'bg-emerald-600 border-emerald-600 text-white' }
+  };
+
+  function weeklyIcon(key, cls) {
+    return '<svg class="' + (cls || 'w-3.5 h-3.5') + ' shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (WEEKLY_ICON_PATHS[key] || '') + '</svg>';
+  }
+
+  var weeklyViewKey = null;      // null = the current meeting week
+  var weeklyDraft = null;        // the open editor's working copy
+
+  function weeklyMondayOf(date) {
+    var d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    return d;
+  }
+  // The meeting an update is FOR. From Friday the app already looks ahead to next Monday, so the
+  // Friday reminder and everything written over the weekend land on the right meeting.
+  function weeklyCurrentKey(now) {
+    now = now || new Date();
+    var mon = weeklyMondayOf(now);
+    var day = now.getDay();
+    if (day === 5 || day === 6 || day === 0) mon = addDays(mon, 7);
+    return toDateInputValue(mon);
+  }
+  function weeklyShownKey() { return weeklyViewKey || weeklyCurrentKey(); }
+  function weeklyShiftKey(key, n) { return toDateInputValue(addDays(parseDate(key), 7 * n)); }
+  function weeklyLabel(key) { return 'Week of ' + formatShortDate(key); }
+  // Counts as "edited after the meeting" once it changes past 10am on the meeting's Monday.
+  function weeklyMeetingStart(key) { var d = parseDate(key); d.setHours(10, 0, 0, 0); return d; }
+  function weeklyStamp(iso) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    return d.toLocaleDateString('en-US', { weekday: 'short' }) + ' ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  }
+
+  function weeklyPersonDocByName(name) {
+    return teamPeople.find(function (p) { return p.name === name; }) || null;
+  }
+  function weeklyListOf(person) {
+    return person && Array.isArray(person.weekly) ? person.weekly : [];
+  }
+  function weeklyEntryFor(name, key) {
+    return weeklyListOf(weeklyPersonDocByName(name)).find(function (e) { return e && e.week === key; }) || null;
+  }
+  function weeklyMe() {
+    var u = auth.currentUser;
+    return u ? (u.displayName || u.email) : null;
+  }
+
+  // The person's open work grouped by project: tasks they own or are involved in, plus
+  // checklist steps assigned to them. `next` is their nearest upcoming date there, `late` their
+  // oldest missed one, `dueThisWeek` what falls inside the meeting week (shown on a card whose
+  // update isn't in yet).
+  function weeklyBoardProjects(name, key) {
+    var weekEnd = toDateInputValue(addDays(parseDate(key), 6));
+    var today = toDateInputValue(todayMidnight());
+    var by = {};
+    activeTasks().forEach(function (t) {
+      if (t.status === 'Done') return;
+      var owns = t.assignee === name;
+      var involved = Array.isArray(t.involved) && t.involved.indexOf(name) !== -1;
+      var steps = (t.checklist || []).filter(function (it) {
+        return it && !it.done && (it.assignee ? it.assignee === name : owns);
+      });
+      if (!owns && !involved && !steps.length) return;
+      var p = t.project || 'No project';
+      var g = by[p] || (by[p] = { project: p, dates: [], dueThisWeek: [] });
+      if (t.deadline && owns) {
+        g.dates.push(t.deadline);
+        if (t.deadline >= key && t.deadline <= weekEnd) g.dueThisWeek.push({ date: t.deadline, text: t.name });
+      }
+      steps.forEach(function (it) {
+        if (!it.due) return;
+        g.dates.push(it.due);
+        if (it.due >= key && it.due <= weekEnd) g.dueThisWeek.push({ date: it.due, text: it.text });
+      });
+    });
+    return Object.keys(by).map(function (k) {
+      var g = by[k];
+      g.next = g.dates.filter(function (d) { return d >= today; }).sort()[0] || null;
+      g.late = g.dates.filter(function (d) { return d < today; }).sort()[0] || null;
+      g.dueThisWeek.sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+      return g;
+    }).sort(function (a, b) { return (a.next || '9999') < (b.next || '9999') ? -1 : (a.next || '9999') > (b.next || '9999') ? 1 : a.project.localeCompare(b.project); });
+  }
+
+  function weeklyAwayDuring(name, key) {
+    for (var i = 0; i < 5; i++) {
+      if (isOnLeave(name, toDateInputValue(addDays(parseDate(key), i)))) return true;
+    }
+    return false;
+  }
+
+  // Who the meeting expects an update from: people with a sign-in (a hand-typed name can't fill
+  // anything in) who have been around lately, or who already wrote one for this week.
+  // Ignores the teamspace switcher on purpose, like WIP: it's one company-wide meeting, and a
+  // switcher left on Production would silently drop Suits from the room's screen.
+  function weeklyPeople(key) {
+    var cutoff = Date.now() - WEEKLY_ACTIVE_DAYS * 86400000;
+    var list = teamPeople.filter(function (p) {
+      if (!p.name) return false;
+      var seen = p.lastSeen ? new Date(p.lastSeen).getTime() : 0;
+      return seen >= cutoff || !!weeklyListOf(p).find(function (e) { return e && e.week === key; });
+    }).map(function (p) { return p.name; });
+    var seenName = {};
+    list = list.filter(function (n) { if (seenName[n]) return false; seenName[n] = true; return true; });
+    // Grouped by department like the sheet's SUIT block, then by name.
+    function deptRank(n) {
+      var d = personDepartments(n)[0];
+      var i = DEPARTMENTS.findIndex(function (x) { return x.key === d; });
+      return i === -1 ? DEPARTMENTS.length : i;
+    }
+    return list.sort(function (a, b) { return (deptRank(a) - deptRank(b)) || a.localeCompare(b); });
+  }
+
+  function weeklyRowsSorted(rows) {
+    return (rows || []).filter(function (r) { return r && WEEKLY_STATUS[r.status]; }).slice().sort(function (a, b) {
+      return WEEKLY_READ_ORDER.indexOf(a.status) - WEEKLY_READ_ORDER.indexOf(b.status);
+    });
+  }
+
+  // A row is NEW when last week's update said something different about that project. Nothing
+  // is marked when there was no update last week -- otherwise everything would be "new".
+  function weeklyRowIsNew(name, key, row) {
+    var prev = weeklyEntryFor(name, weeklyShiftKey(key, -1));
+    if (!prev || prev.leave) return false;
+    var old = (prev.rows || []).find(function (r) { return r.project === row.project; });
+    return !old || old.status !== row.status || String(old.note || '') !== String(row.note || '');
+  }
+
+  function renderWeeklyBar() {
+    var bar = document.getElementById('weekly-bar');
+    var html = '';
+    var key = weeklyShownKey();
+    var isCurrent = key === weeklyCurrentKey();
+    var people = weeklyPeople(key);
+    var inCount = people.filter(function (n) { return !!weeklyEntryFor(n, key); }).length;
+    var waiting = people.filter(function (n) { return !weeklyEntryFor(n, key) && !weeklyAwayDuring(n, key); });
+    var me = weeklyMe();
+    var mine = me ? weeklyEntryFor(me, key) : null;
+    var pct = people.length ? Math.round(inCount / people.length * 100) : 0;
+    html +=
+      '<div class="flex items-center gap-0.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 p-0.5">' +
+        '<button type="button" data-weekly-nav="-1" aria-label="Previous week" class="w-8 h-8 flex items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700">' + '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg>' + '</button>' +
+        '<span class="text-sm font-bold text-zinc-900 dark:text-white px-1.5 whitespace-nowrap">' + escapeHtml(weeklyLabel(key)) + '</span>' +
+        (isCurrent ? '' : '<button type="button" data-weekly-nav="0" class="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline px-1.5">This week</button>') +
+        '<button type="button" data-weekly-nav="1" aria-label="Next week" class="w-8 h-8 flex items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700">' + '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg>' + '</button>' +
+      '</div>' +
+      '<div class="flex items-center gap-2.5 min-w-0">' +
+        '<div class="w-28 h-2 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden shrink-0"><div class="h-full bg-zinc-800 dark:bg-zinc-200" style="width:' + pct + '%"></div></div>' +
+        '<span class="text-sm text-zinc-600 dark:text-zinc-300 truncate"><b class="text-zinc-900 dark:text-white">' + inCount + ' of ' + people.length + '</b> in' +
+          (waiting.length && waiting.length <= 4 ? ' · waiting on ' + escapeHtml(waiting.map(function (n) { return n.split(' ')[0]; }).join(', ')) : waiting.length ? ' · ' + waiting.length + ' to go' : '') + '</span>' +
+      '</div>' +
+      '<span class="flex-1"></span>' +
+      (me ? '<button type="button" data-weekly-write class="text-sm font-semibold px-3.5 py-2 rounded-lg ' +
+        (mine ? 'border border-zinc-300 dark:border-zinc-600 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700' : 'bg-brand-500 hover:bg-brand-600 text-white') + '">' +
+        (mine ? 'Edit my update' : 'Write my update') + '</button>' : '');
+    bar.innerHTML = html;
+  }
+
+  function weeklyRowHtml(name, key, row, nextDate) {
+    var meta = WEEKLY_STATUS[row.status];
+    var isNew = weeklyRowIsNew(name, key, row);
+    // Below sm the status label takes its own line, so the project text keeps the card's width.
+    return '<div class="grid grid-cols-[minmax(0,1fr)_3.5rem] sm:grid-cols-[8.5rem_minmax(0,1fr)_3.5rem] gap-x-3 gap-y-0.5 items-baseline px-4 py-2.5 ' + (meta.row || '') + '">' +
+      '<span class="col-span-2 sm:col-span-1 flex items-center gap-1.5 text-xs font-bold ' + meta.text + '">' + weeklyIcon(row.status) + meta.label + '</span>' +
+      '<span class="text-sm leading-snug min-w-0 break-words"><span class="font-semibold text-zinc-900 dark:text-white">' + projectNameHtml(row.project) + '</span>' +
+        (row.note ? ' <span class="text-zinc-600 dark:text-zinc-300">– ' + escapeHtml(row.note) + '</span>' : '') +
+        (isNew ? ' <span class="align-middle text-[10px] font-bold px-1.5 py-px rounded-full bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300">NEW</span>' : '') + '</span>' +
+      '<span class="text-xs text-zinc-500 dark:text-zinc-400 text-right whitespace-nowrap">' + (nextDate ? escapeHtml(formatShortDate(nextDate)) : '') + '</span>' +
+    '</div>';
+  }
+
+  function weeklyCardHtml(name, key) {
+    var entry = weeklyEntryFor(name, key);
+    var me = weeklyMe();
+    var board = weeklyBoardProjects(name, key);
+    var nextOf = {};
+    board.forEach(function (g) { nextOf[g.project] = g.next || g.late; });
+    var right = '';
+    var body = '';
+    if (entry) {
+      var edited = entry.editedAt && new Date(entry.editedAt) > weeklyMeetingStart(key);
+      right = '<span class="text-xs text-zinc-500 dark:text-zinc-400">' + (edited ? 'Edited ' + escapeHtml(weeklyStamp(entry.editedAt)) : 'Updated ' + escapeHtml(weeklyStamp(entry.at))) + '</span>';
+      if (entry.leave) {
+        body = '<p class="px-4 py-3 text-sm text-zinc-600 dark:text-zinc-300"><span class="font-semibold text-amber-800 dark:text-amber-300">On leave this week.</span>' + (entry.extra ? ' ' + escapeHtml(entry.extra) : '') + '</p>';
+      } else {
+        var rows = weeklyRowsSorted(entry.rows);
+        body = '<div class="divide-y divide-zinc-100 dark:divide-zinc-700/60">' +
+          rows.map(function (r) { return weeklyRowHtml(name, key, r, nextOf[r.project]); }).join('') +
+          (entry.extra ? '<div class="grid grid-cols-1 sm:grid-cols-[8.5rem_minmax(0,1fr)] gap-x-3 gap-y-0.5 items-baseline px-4 py-2.5"><span class="flex items-center gap-1.5 text-xs font-bold text-zinc-500 dark:text-zinc-400">' + weeklyIcon('extra') + 'Also</span><span class="text-sm text-zinc-600 dark:text-zinc-300 break-words">' + escapeHtml(entry.extra) + '</span></div>' : '') +
+          (!rows.length && !entry.extra ? '<p class="px-4 py-3 text-sm text-zinc-400">Nothing to report.</p>' : '') +
+        '</div>';
+      }
+    } else {
+      var away = weeklyAwayDuring(name, key);
+      right = away
+        ? '<span class="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/30">Away this week</span>'
+        : '<span class="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/30">Not in yet</span>';
+      var due = [];
+      board.forEach(function (g) { g.dueThisWeek.forEach(function (d) { due.push({ date: d.date, text: d.text, project: g.project }); }); });
+      due.sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+      var isMe = name === me && key === weeklyCurrentKey();
+      body = '<div class="px-4 py-3 flex flex-col gap-2">' +
+        (isMe ? '<div class="flex flex-wrap items-center gap-3 rounded-xl border border-dashed border-brand-300 dark:border-brand-500/40 bg-brand-50 dark:bg-brand-500/10 px-3.5 py-3">' +
+            '<p class="flex-1 min-w-[12rem] text-sm text-zinc-700 dark:text-zinc-200"><span class="font-bold">Your update isn\'t in yet.</span> Your projects are already listed, so it\'s one tap each.</p>' +
+            '<button type="button" data-weekly-write class="text-sm font-bold px-3.5 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white">Write my update</button></div>' : '') +
+        (due.length
+          ? '<p class="text-xs text-zinc-500 dark:text-zinc-400">From the board, due this week:</p>' +
+            due.slice(0, 5).map(function (d) {
+              return '<div class="grid grid-cols-[3.5rem_minmax(0,1fr)] gap-3 items-baseline text-sm"><span class="text-xs text-zinc-500 dark:text-zinc-400">' + escapeHtml(formatShortDate(d.date)) + '</span><span class="text-zinc-600 dark:text-zinc-300 min-w-0 break-words"><span class="font-semibold text-zinc-800 dark:text-zinc-100">' + projectNameHtml(d.project) + '</span> – ' + escapeHtml(d.text) + '</span></div>';
+            }).join('') + (due.length > 5 ? '<p class="text-xs text-zinc-400">+' + (due.length - 5) + ' more</p>' : '')
+          : (isMe ? '' : '<p class="text-sm text-zinc-400 dark:text-zinc-500">Nothing on the board due this week.</p>')) +
+      '</div>';
+    }
+    var chips = personDepartments(name).map(function (k) {
+      return '<span class="text-xs font-bold px-1.5 py-0.5 rounded ' + DEPARTMENT_BADGE[k] + '">' + escapeHtml(departmentLabel(k)) + '</span>';
+    }).join('');
+    return '<section class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card overflow-hidden">' +
+      '<div class="flex items-center gap-2.5 px-4 py-2.5 bg-zinc-100 dark:bg-zinc-700/60 border-b border-zinc-200 dark:border-zinc-600">' +
+        avatarHtml(name, 'w-7 h-7 shrink-0', 'text-xs') +
+        '<p class="text-base font-bold text-zinc-900 dark:text-white truncate min-w-0" data-tooltip="' + escapeHtml(name) + '">' + escapeHtml(name) + '</p>' +
+        chips + '<span class="flex-1"></span>' + right +
+      '</div>' + body +
+    '</section>';
+  }
+
+  // Every "Needs help" row this week, pulled to the top: the meeting starts with what it has to
+  // act on.
+  function weeklyHelpItems(key, people) {
+    var out = [];
+    people.forEach(function (n) {
+      var e = weeklyEntryFor(n, key);
+      if (!e || e.leave) return;
+      (e.rows || []).forEach(function (r) { if (r && r.status === 'help') out.push({ name: n, project: r.project, note: r.note }); });
+    });
+    return out;
+  }
+
+  function renderWeeklyPage() {
+    renderWeeklyBar();
+    renderWeeklyView();
+  }
+
+  function renderWeeklyView() {
+    var wrap = document.getElementById('weekly-view');
+    var key = weeklyShownKey();
+    var people = weeklyPeople(key);
+    if (!people.length) {
+      wrap.innerHTML = '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-10">No one has signed in lately.</p>';
+      return;
+    }
+    var help = weeklyHelpItems(key, people);
+    var helpHtml = help.length
+      ? '<section class="mb-5 rounded-xl border border-brand-200 dark:border-brand-500/30 bg-brand-50 dark:bg-brand-500/10 px-4 py-3.5">' +
+          '<h2 class="flex items-center gap-2 text-base font-bold text-brand-800 dark:text-brand-200 mb-2.5">' + weeklyIcon('help', 'w-4 h-4') + 'Needs help · ' + help.length + '</h2>' +
+          '<div class="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">' + help.map(function (h) {
+            return '<div class="rounded-lg bg-white dark:bg-zinc-800 px-3.5 py-2.5 min-w-0"><p class="text-xs font-semibold text-zinc-500 dark:text-zinc-400 truncate">' + escapeHtml(h.name.split(' ')[0]) + ' · ' + escapeHtml(h.project) + '</p>' +
+              '<p class="text-sm text-zinc-900 dark:text-zinc-100 break-words">' + (h.note ? escapeHtml(h.note) : 'Needs help') + '</p></div>';
+          }).join('') + '</div></section>'
+      : '';
+    // One heading per department, like the sheet's blocks.
+    var groups = [];
+    people.forEach(function (n) {
+      var d = personDepartments(n)[0] || '';
+      var g = groups.length && groups[groups.length - 1].dept === d ? groups[groups.length - 1] : null;
+      if (!g) { g = { dept: d, names: [] }; groups.push(g); }
+      g.names.push(n);
+    });
+    var showHeads = groups.length > 1;
+    wrap.innerHTML = helpHtml + groups.map(function (g) {
+      return (showHeads ? '<h3 class="text-sm font-bold text-zinc-500 dark:text-zinc-400 mt-1 mb-2.5">' + escapeHtml(g.dept ? departmentLabel(g.dept) : 'No department') + '</h3>' : '') +
+        '<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start mb-6">' + g.names.map(function (n) { return weeklyCardHtml(n, key); }).join('') + '</div>';
+    }).join('');
+  }
+
+  /* ---------- Your own update ---------- */
+  var weeklyModal = document.getElementById('weekly-modal');
+
+  function openWeeklyEditor() {
+    var me = weeklyMe();
+    if (!me || !myPersonDoc()) { showToast('Your profile is still loading. Try again in a moment.', 'info'); return; }
+    var key = weeklyCurrentKey();
+    var existing = weeklyEntryFor(me, key);
+    var prev = weeklyEntryFor(me, weeklyShiftKey(key, -1));
+    var board = weeklyBoardProjects(me, key);
+    var rows = [];
+    var byProject = {};
+    function add(project, info) {
+      if (byProject[project]) return byProject[project];
+      var r = { project: project, status: null, note: '', next: info ? info.next : null, late: info ? info.late : null, steps: info ? info.dueThisWeek.length : 0, last: null };
+      byProject[project] = r; rows.push(r);
+      return r;
+    }
+    board.forEach(function (g) { add(g.project, g); });
+    // Anything you reported last week that's still open, even if it has left the board.
+    if (prev && !prev.leave) (prev.rows || []).forEach(function (r) { if (r && r.status !== 'done') add(r.project, null); });
+    if (prev && !prev.leave) (prev.rows || []).forEach(function (r) { if (r && byProject[r.project]) byProject[r.project].last = r; });
+    if (existing && !existing.leave) (existing.rows || []).forEach(function (r) {
+      if (!r) return;
+      var row = add(r.project, null);
+      row.status = r.status; row.note = r.note || '';
+    });
+    weeklyDraft = { week: key, rows: rows, extra: existing ? (existing.extra || '') : '', leave: !!(existing && existing.leave), existing: existing };
+    renderWeeklyEditor();
+    weeklyModal.classList.remove('hidden');
+    weeklyModal.classList.add('flex');
+  }
+
+  function closeWeeklyEditor() {
+    weeklyModal.classList.add('hidden');
+    weeklyModal.classList.remove('flex');
+    weeklyDraft = null;
+  }
+
+  function renderWeeklyEditor() {
+    var d = weeklyDraft;
+    if (!d) return;
+    document.getElementById('weekly-modal-title').textContent = 'Your update · ' + weeklyLabel(d.week).replace('Week of ', 'week of ');
+    document.getElementById('weekly-modal-sub').textContent = d.leave
+      ? 'Marked as on leave. Add a note if anyone needs to know something.'
+      : d.rows.length
+        ? d.rows.length + (d.rows.length === 1 ? ' project' : ' projects') + ' from the board. One tap each; add a note only if it helps.'
+        : 'Nothing open on the board for you. Add anything worth saying below.';
+    var body = '';
+    if (!d.leave) {
+      body += d.rows.map(function (r, i) {
+        var when = r.next ? 'Next: ' + formatShortDate(r.next) : r.late ? 'Late since ' + formatShortDate(r.late) : '';
+        var sub = [when, r.steps ? r.steps + (r.steps === 1 ? ' step' : ' steps') + ' due this week' : ''].filter(Boolean).join(' · ');
+        return '<div class="px-5 py-3.5 border-b border-zinc-100 dark:border-zinc-700/60 flex flex-col gap-2.5">' +
+          '<div class="flex items-baseline gap-2.5 flex-wrap"><span class="text-[15px] font-bold text-zinc-900 dark:text-white break-words min-w-0">' + projectNameHtml(r.project) + '</span>' +
+            (sub ? '<span class="text-xs text-zinc-500 dark:text-zinc-400">' + escapeHtml(sub) + '</span>' : '') + '</div>' +
+          (r.last && !r.status
+            ? '<div class="flex flex-wrap items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400"><span class="min-w-0 break-words">Last week: <b class="text-zinc-700 dark:text-zinc-200">' + escapeHtml(WEEKLY_STATUS[r.last.status] ? WEEKLY_STATUS[r.last.status].label : '') + '</b>' + (r.last.note ? ' – ' + escapeHtml(r.last.note) : '') + '</span>' +
+              '<button type="button" data-weekly-same="' + i + '" class="font-bold text-brand-600 dark:text-brand-400 hover:underline">Same as last week</button></div>'
+            : '') +
+          '<div class="flex flex-wrap gap-1.5">' + WEEKLY_PICK_ORDER.map(function (s) {
+            var on = r.status === s;
+            return '<button type="button" data-weekly-status="' + s + '" data-weekly-row="' + i + '" aria-pressed="' + on + '" class="text-[13px] font-semibold px-3 py-1.5 rounded-full border ' +
+              (on ? WEEKLY_STATUS[s].on : 'border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:border-zinc-400 dark:hover:border-zinc-500') + '">' + WEEKLY_STATUS[s].label + '</button>';
+          }).join('') + '</div>' +
+          (r.status || r.note
+            ? '<input type="text" data-weekly-note="' + i + '" maxlength="200" value="' + escapeHtml(r.note || '') + '" placeholder="' + (r.status === 'help' ? 'What do you need, and from whom?' : 'Add a note (optional)') + '" aria-label="Note for ' + escapeHtml(r.project) + '" class="w-full max-w-md text-sm rounded-lg border px-3 py-2 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand-500/40 ' + (r.status === 'help' ? 'border-brand-300 dark:border-brand-500/50' : 'border-zinc-300 dark:border-zinc-600') + '">'
+            : '') +
+        '</div>';
+      }).join('');
+    }
+    body += '<div class="px-5 py-4 flex flex-col gap-2">' +
+      '<label for="weekly-extra" class="text-sm font-semibold text-zinc-700 dark:text-zinc-200">' + (d.leave ? 'Note (optional)' : 'Anything not on the board? <span class="font-normal text-zinc-500 dark:text-zinc-400">Admin, new biz, training</span>') + '</label>' +
+      '<input type="text" id="weekly-extra" maxlength="300" value="' + escapeHtml(d.extra) + '" placeholder="' + (d.leave ? 'e.g. Invoices sent before I left' : 'e.g. AI course booked for Thursday') + '" class="w-full max-w-md text-sm rounded-lg border border-dashed border-zinc-300 dark:border-zinc-600 px-3 py-2 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand-500/40">' +
+    '</div>';
+    document.getElementById('weekly-modal-body').innerHTML = body;
+    var answered = d.rows.filter(function (r) { return r.status; }).length;
+    var open = d.rows.length - answered;
+    document.getElementById('weekly-modal-foot').innerHTML =
+      '<button type="button" data-weekly-leave class="text-[13px] font-semibold px-3 py-1.5 rounded-full border ' + (d.leave ? 'bg-amber-100 border-amber-300 text-amber-800 dark:bg-amber-500/15 dark:border-amber-500/30 dark:text-amber-300' : 'border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:border-zinc-400') + '">' + (d.leave ? 'On leave this week' : 'I\'m on leave this week') + '</button>' +
+      (!d.leave && d.rows.length ? '<span class="text-sm text-zinc-500 dark:text-zinc-400"><b class="text-zinc-800 dark:text-zinc-100">' + answered + ' of ' + d.rows.length + '</b> answered</span>' : '') +
+      (!d.leave && open > 0 && answered > 0 ? '<button type="button" data-weekly-rest class="text-[13px] font-bold text-brand-600 dark:text-brand-400 hover:underline">Mark the rest On track</button>' : '') +
+      '<span class="flex-1"></span>' +
+      '<button type="button" data-weekly-cancel class="text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 px-2 py-2">Later</button>' +
+      '<button type="button" data-weekly-send class="text-sm font-bold px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white">' + (d.existing ? 'Save changes' : 'Send update') + '</button>';
+  }
+
+  function weeklyKeepNotes() {
+    // Notes and the extra line are read from the DOM before any re-render throws them away.
+    if (!weeklyDraft) return;
+    document.querySelectorAll('#weekly-modal-body [data-weekly-note]').forEach(function (el) {
+      var r = weeklyDraft.rows[+el.getAttribute('data-weekly-note')];
+      if (r) r.note = el.value;
+    });
+    var ex = document.getElementById('weekly-extra');
+    if (ex) weeklyDraft.extra = ex.value;
+  }
+
+  function saveWeeklyUpdate() {
+    weeklyKeepNotes();
+    var d = weeklyDraft;
+    var me = myPersonDoc();
+    if (!d || !me) return;
+    var rows = d.leave ? [] : d.rows.filter(function (r) { return r.status; }).map(function (r) {
+      return { project: r.project, status: r.status, note: String(r.note || '').trim().slice(0, 200) };
+    });
+    var extra = String(d.extra || '').trim().slice(0, 300);
+    if (!d.leave && !rows.length && !extra) { showToast('Tap a status on at least one project first', 'info'); return; }
+    var now = new Date().toISOString();
+    var entry = { week: d.week, rows: rows, extra: extra, leave: d.leave, at: d.existing ? (d.existing.at || now) : now };
+    if (d.existing) entry.editedAt = now;
+    var list = weeklyListOf(me).filter(function (e) { return e && e.week !== d.week; }).concat([entry]);
+    list.sort(function (a, b) { return a.week < b.week ? 1 : -1; });
+    list = list.slice(0, WEEKLY_KEEP);
+    var btn = document.querySelector('#weekly-modal-foot [data-weekly-send]');
+    if (btn) btn.disabled = true;
+    setDoc(doc(peopleCol, me.id), { weekly: list }, { merge: true }).then(function () {
+      closeWeeklyEditor();
+      showToast(d.existing ? 'Update saved' : 'Update sent. Thanks!', 'success');
+    }).catch(function (err) {
+      if (btn) btn.disabled = false;
+      showToast('Could not save your update: ' + err.message, 'error');
+    });
+  }
+
+  if (WEEKLY_ENABLED) {
+    document.getElementById('weekly-modal-close').addEventListener('click', closeWeeklyEditor);
+    weeklyModal.addEventListener('click', function (e) {
+      if (e.target === weeklyModal) { closeWeeklyEditor(); return; }
+      if (!weeklyDraft) return;
+      var t = e.target.closest('button');
+      if (!t) return;
+      if (t.hasAttribute('data-weekly-status')) {
+        weeklyKeepNotes();
+        var r = weeklyDraft.rows[+t.getAttribute('data-weekly-row')];
+        var s = t.getAttribute('data-weekly-status');
+        r.status = r.status === s ? null : s;
+        renderWeeklyEditor();
+        if (r.status === 'help') {
+          var inp = document.querySelector('#weekly-modal-body [data-weekly-note="' + weeklyDraft.rows.indexOf(r) + '"]');
+          if (inp) inp.focus();
+        }
+      } else if (t.hasAttribute('data-weekly-same')) {
+        weeklyKeepNotes();
+        var row = weeklyDraft.rows[+t.getAttribute('data-weekly-same')];
+        if (row && row.last) { row.status = row.last.status; row.note = row.last.note || ''; }
+        renderWeeklyEditor();
+      } else if (t.hasAttribute('data-weekly-rest')) {
+        weeklyKeepNotes();
+        weeklyDraft.rows.forEach(function (x) { if (!x.status) x.status = 'ontrack'; });
+        renderWeeklyEditor();
+      } else if (t.hasAttribute('data-weekly-leave')) {
+        weeklyKeepNotes();
+        weeklyDraft.leave = !weeklyDraft.leave;
+        renderWeeklyEditor();
+      } else if (t.hasAttribute('data-weekly-cancel')) {
+        closeWeeklyEditor();
+      } else if (t.hasAttribute('data-weekly-send')) {
+        saveWeeklyUpdate();
+      }
+    });
+    weeklyModal.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeWeeklyEditor(); }
+      else if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); saveWeeklyUpdate(); }
+    });
+
+    document.getElementById('weekly-bar').addEventListener('click', function (e) {
+      var b = e.target.closest('button');
+      if (!b) return;
+      if (b.hasAttribute('data-weekly-nav')) {
+        var n = +b.getAttribute('data-weekly-nav');
+        var next = n === 0 ? null : weeklyShiftKey(weeklyShownKey(), n);
+        weeklyViewKey = next === weeklyCurrentKey() ? null : next;
+        renderWeeklyPage();
+      } else if (b.hasAttribute('data-weekly-write')) {
+        openWeeklyEditor();
+      }
+    });
+    document.getElementById('weekly-view').addEventListener('click', function (e) {
+      if (e.target.closest('[data-weekly-write]')) openWeeklyEditor();
+    });
+  }
+
+  /* ---------- Reminders ----------
+     Friday 4pm for next Monday's meeting, then Monday 9am-6pm only if it still isn't in.
+     Same client-side limits as the other automations: it fires the next time your own app is
+     open after those times (no server), only you can trigger your own, and the slots you've
+     already been sent are recorded on your roster doc so a reload or a second tab doesn't
+     resend them. */
+  var weeklyReminderSession = {};
+  function checkWeeklyReminder() {
+    if (!WEEKLY_ENABLED) return;
+    var me = myPersonDoc();
+    var name = weeklyMe();
+    if (!me || !name) return;
+    var now = new Date();
+    var day = now.getDay(), hr = now.getHours();
+    var slot = null;
+    if ((day === 5 && hr >= 16) || day === 6 || day === 0) slot = 'fri';
+    else if (day === 1 && hr >= 9 && hr < 18) slot = 'mon';
+    if (!slot) return;
+    var key = weeklyCurrentKey(now);
+    if (weeklyEntryFor(name, key)) return;
+    if (weeklyAwayDuring(name, key) && slot === 'mon') return;
+    var tag = key + '|' + slot;
+    var sent = Array.isArray(me.weeklyReminded) ? me.weeklyReminded : [];
+    if (sent.indexOf(tag) !== -1 || weeklyReminderSession[tag]) return;
+    weeklyReminderSession[tag] = true;
+    setDoc(doc(peopleCol, me.id), { weeklyReminded: sent.concat([tag]).slice(-8) }, { merge: true }).then(function () {
+      return setDoc(doc(notificationsCol), {
+        recipient: name,
+        type: 'weekly_reminder',
+        taskId: null,
+        taskName: '',
+        chatProject: null,
+        author: 'Project Manager',
+        snippet: slot === 'fri'
+          ? 'Fill in your update for Monday\'s meeting. Your projects are listed, so it\'s one tap each.'
+          : 'Your update for today\'s meeting isn\'t in yet. It takes a minute.',
+        at: now.toISOString(),
+        read: false
+      });
+    }).catch(function (e) { console.error('weekly reminder failed', e); });
+  }
+  if (WEEKLY_ENABLED) setInterval(checkWeeklyReminder, 10 * 60 * 1000);
+  else { var weeklyNavBtn = document.querySelector('[data-view-btn="weekly"]'); if (weeklyNavBtn) weeklyNavBtn.remove(); }
+
+  function openWeeklyFromReminder() {
+    weeklyViewKey = null;
+    setView('weekly');
+    openWeeklyEditor();
+  }
+
   function personTaskRowHtml(t) {
     var pm = PRIORITY_META[t.priority] || PRIORITY_META.Medium;
     var urgency = dueUrgency(t);
@@ -13104,6 +13677,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-06x', date: '2026-10-06', items: [
+      { type: 'new', title: 'Weekly updates for the Monday meeting', text: "The Monday meeting sheet now lives in the app, under Meetings in the sidebar. Tap Write my update, pick a status for each of your projects (they're already listed) and add a note only if it helps. On Monday, Needs help comes first, then everyone's card in the same order. You'll get a reminder on Friday afternoon, and again on Monday morning if yours isn't in.", tourTarget: '[data-view-btn="weekly"]' }
+    ] },
     { id: '2026-10-06w', date: '2026-10-06', items: [
       { type: 'improved', title: 'Harder to miss New Updates', text: 'When there is something new, the New Updates item in the sidebar turns into a bold orange-to-purple bar with colours that drift and a shine that sweeps across it, until you open it.' }
     ] },
@@ -13643,6 +14219,10 @@
     people: { since: PAGE_TOURS_EXISTING, steps: [
       { target: '#people-grid', title: "Who's doing what", text: "Everyone gets a card with their open work and anything running late. Off on leave soon? Book it at the bottom of your own card." }
     ] },
+    weekly: { since: '2026-10-06', steps: [
+      { target: '#weekly-bar', title: "Your Monday meeting", text: "Everyone's weekly update lives here. Tap Write my update: your projects are already listed, so it's one tap each, with a note only if it helps." },
+      { target: '#weekly-view', title: "Going through it together", text: "Needs help comes first, then one card per person, grouped by team, each in the same order." }
+    ] },
     projects: { since: PAGE_TOURS_EXISTING, steps: [
       { target: '#projects-grid', title: "All your projects in one place", text: "Ongoing projects come first, nearest deadline on top. Open a card to see its tasks and hours, or give the project a deadline of its own. When every task is done, \"Ready to archive\" tidies the project away." },
       { target: '#projects-grid [data-open-brief]', title: "Write the brief here", text: "Every project can have a creative brief. Click \"+ Brief\", pick a template and add only the sections the job needs. Everyone on the job can open it from the project and its tasks." }
@@ -13927,7 +14507,7 @@
     startTour('welcome');
   });
 
-  var VIEW_LABELS = { board: 'Board', gantt: 'Timeline', calendar: 'Calendar', people: 'People', projects: 'Projects', chat: 'Chat', wip: 'WIP Meeting', activity: 'Activity', suggestions: 'Suggestions', archived: 'Archived', updates: 'New Updates' };
+  var VIEW_LABELS = { board: 'Board', gantt: 'Timeline', calendar: 'Calendar', people: 'People', projects: 'Projects', chat: 'Chat', wip: 'WIP Meeting', weekly: 'Monday Meeting', activity: 'Activity', suggestions: 'Suggestions', archived: 'Archived', updates: 'New Updates' };
 
   function setView(view) {
     currentView = view;
@@ -14052,7 +14632,7 @@
   // WIP hides the whole toolbar rather than just disabling it. The filters persist across
   // sessions, so one left set last week would quietly drop items from a meeting agenda with
   // nothing on screen to say so -- see the EVENTS -> WIP section header.
-  var TOOLBAR_FULLY_HIDDEN_VIEWS = ['suggestions', 'wip', 'updates'];
+  var TOOLBAR_FULLY_HIDDEN_VIEWS = ['suggestions', 'wip', 'weekly', 'updates'];
 
   /* On a wide screen the header row is mostly empty between the stats and the bell, and the
      toolbar row below it is mostly empty on the left -- two full rows for one row of controls
@@ -14244,6 +14824,7 @@
     // someone's actually visited Projects or Archived this session.
     if (currentView === 'chat') { ensureArchivedTasksListener(); renderChatView(); }
     if (currentView === 'wip') renderWipView();
+    if (currentView === 'weekly' && WEEKLY_ENABLED) renderWeeklyPage();
     if (currentView === 'activity') renderActivityFeed();
     if (currentView === 'suggestions') renderSuggestions();
     if (currentView === 'archived') { ensureArchivedTasksListener(); renderArchived(); }
@@ -14453,6 +15034,7 @@
       if (!confirmModal.classList.contains('hidden')) closeConfirm();
       else if (!taskModal.classList.contains('hidden')) requestCloseTaskModal();
       else if (!calendarDayModal.classList.contains('hidden')) closeCalendarDayModal();
+      else if (!weeklyModal.classList.contains('hidden')) closeWeeklyEditor();
       else if (appRoot.classList.contains('sidebar-open')) closeMobileSidebar();
     }
   });
@@ -14858,6 +15440,7 @@
       // After the department prompt, never alongside it: maybeStartTour waits while any modal
       // (that one included) is open.
       maybeStartTour();
+      checkWeeklyReminder();
       // Full re-render (renderAll -> renderCurrentSecondaryView already covers the Chat tab's
       // online strip too, so a heartbeat write shows up there immediately, not just on the 30s
       // aging-out tick): this collection now carries personal leave as well as the roster, and
@@ -15023,6 +15606,7 @@
     var chatProject = item.getAttribute('data-notification-chat-project');
     if (chatProject) { setView('chat'); selectChatProject(chatProject); return; }
     if (item.getAttribute('data-notification-type') === 'suggestion_fixed') { setView('suggestions'); return; }
+    if (item.getAttribute('data-notification-type') === 'weekly_reminder') { openWeeklyFromReminder(); return; }
     var taskId = item.getAttribute('data-notification-task');
     var t = taskId ? tasks.find(function (x) { return x.id === taskId; }) : null;
     if (t) openTaskModal(t);
@@ -15100,7 +15684,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-06T03:43:57Z";
+  var CURRENT_BUILD_VERSION = "2026-10-06T04:14:55Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

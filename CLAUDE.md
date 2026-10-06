@@ -3558,6 +3558,58 @@ since that is not a department key, so `indexOf` found it in nobody's list and t
 teamspace listed no roster members at all. That is the one teamspace where people with no
 department are the entire point.
 
+### Monday Meeting (weekly updates)
+
+Replaces the "MMM Pulse-board" Google Sheet's monthly person x week tabs, where everyone typed
+their week into a cell before the Monday meeting. Asked: "Is there a way to integrate this?", then
+"as painless as possible to fill ... organised and easy to read and go through".
+
+- **Its own page under Meetings** (`view-weekly`, sidebar "Monday Meeting"), NOT a mode on People.
+  It was built as a Workload | This week switch on People first and moved before shipping: "I like
+  how People page works and looks now. Will it affect the usability...?" A switch would add a
+  control to a page people like and make its toolbar appear and disappear by mode. **Don't fold it
+  back into People.**
+- **Filling it in is one tap per project.** `openWeeklyEditor` lists your open projects from the
+  board (tasks you own or are involved in, plus checklist steps assigned to you, via
+  `weeklyBoardProjects`), each with five statuses: On track, Waiting on client, Waiting on us
+  (added on request), Needs help, Done. A note is optional; picking Needs help focuses it.
+  "Same as last week", "Mark the rest On track", "I'm on leave this week" and one line for things
+  not on the board (admin, new biz). Unanswered projects are simply left out.
+- **Reading it:** Needs help from everyone first, then one card per person grouped by department
+  (like the sheet's blocks), rows always in the order needs help, waiting on us, waiting on
+  client, on track, done, with the next date in a fixed right column. NEW marks a row that
+  differs from that person's previous week (nothing is marked if there was no previous update).
+  A person with no update shows "Not in yet" plus what's due for them this week from the board;
+  someone on leave shows "Away this week" and doesn't count as waiting. Below `sm` the status
+  label takes its own line so the text keeps the card's width.
+- **Present mode was built and removed before shipping** ("Present mode is not necessary").
+- **Company-wide, ignores the teamspace switcher**, same reasoning as WIP: one shared meeting.
+  Expected people = roster accounts seen in the last `WEEKLY_ACTIVE_DAYS` (45), or who already
+  wrote one for that week. Hand-typed assignee names can't sign in, so they aren't expected.
+- **Which week:** `weeklyCurrentKey` is the Monday of the meeting the update is FOR. Mon-Thu = this
+  Monday; from Friday it looks ahead to next Monday, so the Friday reminder and weekend edits land
+  on the right meeting. Editable all week (decided); a save after 10am on the meeting Monday shows
+  "Edited <time>" instead of "Updated".
+- **Stored on the person's OWN roster doc**, `people/{uid}.weekly` = `[{week, rows: [{project,
+  status, note}], extra, leave, at, editedAt?}]`, newest first, last `WEEKLY_KEEP` (26) weeks.
+  Same place as `chatLastRead`/`toursSeen`, so **no rules change**: team-readable, only you can
+  write yours. Rows key on the project NAME, so renaming a project breaks NEW for that row once.
+- **Reminders** (`checkWeeklyReminder`, on the people snapshot and every 10 min): Friday from 4pm
+  (and the weekend), then Monday 9am-6pm only if still missing (not if away that week). An in-app
+  notification to yourself, `type: 'weekly_reminder'` ("Your Monday update is due"); clicking it
+  opens the page and your editor. Slots sent are recorded in `people/{uid}.weeklyReminded` so a
+  reload or second tab doesn't resend. Client-side like every automation here: it fires the next
+  time your app is open after those times.
+- **Not done (offered, deferred):** writing a note through to the WIP task status line. Rows are
+  per project and WIP status is per task, so it needs a rule for which task gets it.
+- **The sheet:** one Monday running both, then retire it (decided). That is a team step, not code.
+- **To switch off:** `WEEKLY_ENABLED = false` in the WEEKLY UPDATE section removes the sidebar item
+  and all wiring. Saved `weekly` fields stay on people docs harmlessly.
+- Verified in Chromium against the real page with an in-memory Firestore stand-in (47 checks:
+  filling, saving to your own doc only, editing, NEW, edited mark, week navigation, teamspace
+  ignored, Friday/Monday reminders and no duplicate, bell click-through, page tour, People
+  unchanged, no sideways scroll at 390px, light and dark).
+
 ### Calendar v2: what's on which day (supersedes the section below while switched on)
 
 Asked "calendar seems redundant", then "what can make it better so that it is usable?", then a mockup, then
