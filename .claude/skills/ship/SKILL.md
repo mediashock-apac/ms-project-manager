@@ -52,12 +52,11 @@ node scripts/check-syntax.mjs
 It must say "Syntax check passed" and "Build stamp matches". If it fails, fix it and run it
 again. Never push a failure: one syntax error takes down the entire app.
 
-## 5. Look at it (for visual changes)
+## 5. Design check (for anything people will see)
 
-If the change is visual and Playwright is available (it's installed in the session scratchpad,
-not the repo), render the affected markup in Chromium and look at the screenshot in light and
-dark mode. Use a viewport wider than 767px, or the sidebar turns into the hidden mobile drawer.
-If you can't check it in a browser, say so plainly in the final message.
+If the change alters what people see or click, run the `design-check` skill on it first and fix
+what fails. It includes looking at the change in Chromium, in light and dark mode. If you can't
+check it in a browser, say so plainly in the final message.
 
 ## 6. Keep CLAUDE.md current
 
