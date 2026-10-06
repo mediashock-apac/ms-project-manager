@@ -25,6 +25,8 @@ Google Auth) so the whole team edits one live board together with real-time upda
   for `pscr-project-manager`. Chat image sharing (see below) needs this project on the **Blaze**
   (pay-as-you-go) plan with Cloud Storage enabled — Firestore usage alone would still fit inside
   Spark's free tier, and everything else in this app assumed Spark until that feature shipped.
+  **As of 2026-10-07 the project is still on Spark** (the upgrade was never done), so image
+  sharing is switched off with `CHAT_IMAGES_ENABLED = false`; see "Chat image sharing".
 - `sw.js` — a no-op service worker (exists only to satisfy PWA installability; deliberately does
   no caching, see comment in the file).
 - `version.txt` — a timestamp stamped on every deploy; polled client-side to trigger auto-reload.
@@ -2128,6 +2130,15 @@ to bottom:
        "add a link" form doesn't silently carry over into a different project's chat. A pushpin
        icon (`ICONS.pin`) sits next to the "Pinned links" label itself, requested directly right
        after — the section header had no visual tie to what a literal pin means beyond its text.
+     - **SWITCHED OFF (2026-10-07): `CHAT_IMAGES_ENABLED = false`.** Everything below assumed the
+       project had been upgraded to Blaze. It hadn't: the console's Storage page still offers
+       "Upgrade project", so there is no bucket and every upload (desktop paste, phone photo
+       button) failed with an error toast. Asked whether to upgrade or hide it: "hide it for now".
+       Off means no desktop screenshot paste, no photo button in phone chat, and the Chat page tour
+       doesn't mention screenshots. **To turn it on:** upgrade to Blaze, create the Storage bucket
+       (a US region qualifies for Google's free allowance; Singapore is faster but bills from the
+       first byte, still pennies at this volume), publish `storage.rules`, set a budget alert, then
+       set the flag to true and add a New Updates entry.
      - **Chat image sharing** — requested directly ("can sharing of screenshots be allowed on
        chat"), the first real deviation from "$0/month, needs no server" this app has taken
        (see the top-level `Claude Projects/CLAUDE.md`'s own note on this). Two options were
@@ -2670,7 +2681,8 @@ sideways inside the page, and the task window was the full desktop form.
 - **The only edits on a phone** (decided from the ask): tick a checklist step, move a task's
   status, post a status update (a sheet; same `addTaskStatus` as WIP), comment, send a chat message
   or a photo (the photo button beside the box; shrunk and uploaded like a desktop paste, shown as
-  "Sending photo…" meanwhile, tap a photo for the full-screen viewer), @mention in chat and comments
+  "Sending photo…" meanwhile, tap a photo for the full-screen viewer; **hidden while
+  `CHAT_IMAGES_ENABLED` is off**, see "Chat image sharing"), @mention in chat and comments
   (the desktop's `wireMentionAutocomplete` with phone-sized rows, `.m-mention`), write the Monday update (the desktop editor, full screen), quick-add a task (name, project, owner,
   deadline, priority; created exactly like the desktop's new-task save). **Everything else stays on
   desktop**; a task's "..." > **Open full editor** opens the desktop task window as the escape hatch.

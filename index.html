@@ -4455,6 +4455,13 @@
   // sharing" in this project's own CLAUDE.md for the full writeup, including why a third-party
   // image host was considered and rejected (these can be client-confidential screenshots).
   var CHAT_IMAGE_MAX_BYTES = 8 * 1024 * 1024; // matches storage.rules' own cap -- keep in sync
+  // OFF until the Firebase project is actually on Blaze with Storage set up. Found 2026-10-07: the
+  // upgrade these notes assumed had never been done (the console's Storage page still offers
+  // "Upgrade project"), so every upload failed with an error toast. Asked: "hide it for now".
+  // Off = no desktop screenshot paste, no photo button in phone chat, no mention in the Chat tour.
+  // Images already in chats (none, in practice) would still render. To turn on: upgrade, create
+  // the Storage bucket, publish storage.rules, then set this to true.
+  var CHAT_IMAGES_ENABLED = false;
 
   // Phone photos are 3-5 MB; shrunk to at most CHAT_IMAGE_MAX_SIDE on the long edge and re-encoded
   // as JPEG (~200-400 KB) before upload, which keeps Storage and download use (and so any Blaze
@@ -4547,6 +4554,7 @@
   // to do something other than paste as text (there is no text form of an image to paste anyway,
   // so pre-empting the default paste here doesn't compete with normal typing).
   document.getElementById('project-chat-input').addEventListener('paste', function (e) {
+    if (!CHAT_IMAGES_ENABLED) return;
     var items = (e.clipboardData || window.clipboardData || {}).items || [];
     var imageItem = null;
     for (var i = 0; i < items.length; i++) {
@@ -14036,8 +14044,7 @@
   ========================================================= */
   var CHANGELOG = [
     { id: '2026-10-06zc', date: '2026-10-06', items: [
-      { type: 'new', title: 'Photos and @mentions in phone chat', text: "On your phone, tap the photo button next to the message box to share a picture in a group chat, and type @ to tag a teammate in a chat or comment. Tap a photo to see it full screen." },
-      { type: 'improved', title: 'Smaller image uploads', text: "Photos and big screenshots are resized before they're sent, so they upload faster and take up less space. Deleting a chat message or a chat now deletes its images too." }
+      { type: 'new', title: '@mentions on your phone', text: "In the phone app, type @ in a chat message or a comment to tag a teammate, just like on desktop." }
     ] },
     { id: '2026-10-06zb', date: '2026-10-06', items: [
       { type: 'new', title: 'A proper phone app', text: "On a phone, Project Manager now opens as its own app, with Home, Tasks, Calendar, Chat and More along the bottom. It's built for checking things on the go: tick off steps, move a task's status, post an update or comment, chat, write your Monday update and add a quick task. Bigger edits stay on a computer. Tip: add it to your home screen for the full-screen feel." }
@@ -14604,7 +14611,7 @@
     ] },
     chat: { since: PAGE_TOURS_EXISTING, steps: [
       { target: '#chat-new-btn', title: "Chat with your project team", text: "Start a group chat for any project here. Everyone working on it hears about new messages." },
-      { target: '#chat-project-list-pane', title: "Your conversations", text: "Filter to your chats, favourites or unread ones. In a chat, type @ to mention someone, paste a screenshot straight in, and right-click any message to reply, forward, pin or react." }
+      { target: '#chat-project-list-pane', title: "Your conversations", text: "Filter to your chats, favourites or unread ones. In a chat, type @ to mention someone, " + (CHAT_IMAGES_ENABLED ? "paste a screenshot straight in, " : "") + "and right-click any message to reply, forward, pin or react." }
     ] },
     wip: { since: PAGE_TOURS_EXISTING, steps: [
       { target: '#wip-mode-toggle', title: "Ready for the WIP meeting?", text: "By project walks through each project one at a time. Agenda shows what's coming up and who's away. Next to it, pick how many weeks ahead to look." },
@@ -16178,7 +16185,7 @@
       key: 'chat:' + name, title: name, backLabel: 'Chats',
       footer: '<div class="m-mention hidden"></div>' +
         '<form class="m-compose" data-m-form="chat" data-project="' + escapeHtml(name) + '">' +
-        '<label class="m-attach" aria-label="Send a photo">' + mIcon('image') + '<input type="file" accept="image/*" data-m-photo hidden></label>' +
+        (CHAT_IMAGES_ENABLED ? '<label class="m-attach" aria-label="Send a photo">' + mIcon('image') + '<input type="file" accept="image/*" data-m-photo hidden></label>' : '') +
         '<textarea rows="1" placeholder="Message" aria-label="Message"></textarea>' +
         '<button type="submit" class="m-send" aria-label="Send" disabled>' + mIcon('send') + '</button></form>',
       render: function () { return mChatThreadHtml(name); },
@@ -17458,7 +17465,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-06T15:38:38Z";
+  var CURRENT_BUILD_VERSION = "2026-10-06T16:01:53Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
