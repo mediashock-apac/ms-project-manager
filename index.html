@@ -7199,7 +7199,7 @@
     return host || 'Link';
   }
   function linkChipHtml(url) {
-    return '<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer" data-tooltip="' + escapeHtml(url) + '" class="tooltip-top inline-flex max-w-full items-center gap-1 mt-0.5 text-[11px] font-medium rounded px-1.5 py-0.5 bg-zinc-100 dark:bg-zinc-700 text-zinc-600 dark:text-zinc-300 hover:text-brand-600 dark:hover:text-brand-400">' +
+    return '<a href="' + escapeHtml(url) + '" target="_blank" rel="noopener noreferrer" data-tooltip="' + escapeHtml(url) + '" class="tooltip-top inline-flex max-w-full items-center gap-1 mt-0.5 text-[11px] font-semibold rounded px-1.5 py-0.5 bg-brand-50 dark:bg-brand-500/10 text-brand-800 dark:text-brand-300 hover:bg-brand-100 dark:hover:bg-brand-500/20">' +
       svgIcon('link', 'w-3 h-3 shrink-0') + '<span class="truncate">' + escapeHtml(linkChipLabel(url)) + '</span></a>';
   }
   var draggedChecklistIndex = null;
@@ -14921,6 +14921,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-07j', date: '2026-10-07', items: [
+      { type: 'improved', title: 'Checklist links stand out', text: "Links on checklist steps, like Frame.io or Google Drive, are now orange like every other link, so they're easy to spot and clearly clickable." }
+    ] },
     { id: '2026-10-07i', date: '2026-10-07', items: [
       { type: 'improved', title: 'Monday "Needs help" shows on WIP Meeting', text: "When someone marks a project Needs help in their Monday update, WIP Meeting flags that project and says who needs what, so the room sees it without anyone repeating it. It shows on the phone's project page too." },
       { type: 'improved', title: "A heads-up when Done doesn't match the board", text: "In your Monday update, picking Done on a project that still has open tasks shows a short note, so the update and the board don't disagree." },
@@ -18407,7 +18410,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-07T10:17:53Z";
+  var CURRENT_BUILD_VERSION = "2026-10-07T10:21:39Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

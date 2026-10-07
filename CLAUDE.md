@@ -997,7 +997,10 @@ to bottom:
        already scrolls: two scrollbars, rows cut off mid-item).
      - **Checklist links are a chip naming the site** (`linkChipLabel`/`linkChipHtml`: Google
        Slides/Docs/Sheets/Drive, Frame.io, Figma, Canva, YouTube…, else the bare host), full URL in
-       the tooltip. The raw URL was longer than the item name and brighter than it.
+       the tooltip. The raw URL was longer than the item name and brighter than it. **The chip is brand-tinted
+       (`text-brand-800` on `bg-brand-50`; `brand-300` in dark)**, asked "should the links be more prominent?":
+       grey read as a label, not a link, and brand is what every other clickable link here uses.
+       `brand-700` measured ~4.2:1 at 11px, under 4.5:1, so it's 800.
      - **Time entries are one line each** (avatar, fixed-width duration, item/note, date, actions).
        The per-row Billable pill only shows when entries are mixed; when all are billable the
        total reads "6h 30m logged · all billable" once. Overtime always shows on its row.
