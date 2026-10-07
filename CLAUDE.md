@@ -2751,6 +2751,31 @@ separately", then "make this a rule" (see the standing rule near the top). A fou
   earlier suites still pass (phone 25/25 with the new review question answered; the Monday suite's
   "Chloe away" check now expects "not away" for a Tue-Fri leave).
 
+### Expressive UI pass (2026-10-07)
+
+Asked: "how can the PM's UI be more expressive? This needs to add to the usability and not hinder or
+serve as a distraction ... more pleasant and delightful to use", then "go with your recommendations".
+Each item had to help at the moment of use and add nothing at rest.
+
+- **Undo instead of "Are you sure?"** for reversible actions: archiving a task (Board row), "Archive
+  completed", archiving a project (`confirmArchiveProject`), removing a checklist step, removing a time
+  entry (a group's toast says "Removed 3h for 3 people"). `showToast(msg, type, {action: {label, onClick}})`
+  stays 7s. `restoreArchivedTasks(list)` puts tasks back from the objects captured before archiving
+  (rules allow the move back for anyone via `existsAfter(tasks/..)`). Step/time Undo only applies while the
+  same task window is open. Permanent deletes (task, comment, chat message, suggestion) keep their confirm;
+  status moves get no toast (a toast per move was rejected earlier as fatigue).
+- **Glide (FLIP)**: `flipCapture`/`flipPlay` around `renderBoard` (keyed by `data-task-id`) and
+  `renderChecklistEditor` (`data-flip` = step id): anything that moved slides from its old spot (220ms).
+  Nothing new pops in; off under reduced motion.
+- **Ctrl K / Cmd K quick jump** (`cmdk*`, built in JS): pages, tasks, projects (opens the Projects card,
+  expanded and flashed), chats. Nothing typed = your next open tasks, then pages. Not on the phone layout,
+  not while a modal is open. A "Ctrl K" hint in the search box opens it; its CHANGELOG item has a
+  `tourTarget` so existing users get one "Show me".
+- **Empty states say what goes there**: Board columns per status ("Nothing waiting on review. Nice."), or
+  "Nothing here with the current filters" when filters/teamspace narrow the board; Projects (with an "Add a
+  task" button), Archived, the bell ("You're all caught up."), task-window steps and comments.
+- Verified in Chromium (17 checks) plus the earlier suites.
+
 ### Mobile app (phones, below 768px)
 
 Asked: "The mobile view is horrible. Interfaces overlap each other, scrolling is a pain ... I don't

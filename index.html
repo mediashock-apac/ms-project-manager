@@ -1103,7 +1103,8 @@
            outrank that with order-first to actually render first, not just be numbered lower. -->
       <div class="relative w-full sm:w-64 order-2 sm:order-first">
         <svg class="w-4 h-4 text-zinc-400 dark:text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
-        <input id="filter-search" type="text" placeholder="Search…" class="w-full pl-8 pr-3 py-2 text-sm text-ellipsis rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+        <button type="button" id="cmdk-hint" title="Jump to any task, project, chat or page" class="hidden sm:flex absolute right-1.5 top-1/2 -translate-y-1/2 items-center px-1.5 py-0.5 rounded border border-zinc-200 dark:border-zinc-600 text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 hover:border-brand-300">Ctrl K</button>
+        <input id="filter-search" type="text" placeholder="Search…" class="w-full pl-8 pr-3 sm:pr-14 py-2 text-sm text-ellipsis rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
       </div>
 
       <div id="filters-panel" class="hidden w-full space-y-2 sm:space-y-0 sm:contents order-3">
@@ -6658,8 +6659,13 @@
   /* =========================================================
      TOASTS
   ========================================================= */
-  function showToast(message, type) {
+  // `opts.action` = { label, onClick } adds a button (used for Undo) and keeps the toast up longer.
+  // Undo replaced "Are you sure?" on things that can be put back (asked: "more pleasant and
+  // delightful ... add to the usability"): one less pop-up to click through, and a slip is easy
+  // to reverse. Permanent deletes keep their confirm.
+  function showToast(message, type, opts) {
     type = type || 'success';
+    var action = opts && opts.action;
     var iconMap = { success: 'check', error: 'alertCircle', info: 'info', celebrate: 'sparkles' };
     var colorMap = {
       success: 'bg-emerald-600',
@@ -6674,16 +6680,28 @@
       colorMap[type] + (isCelebrate ? ' celebrate-toast' : '');
     el.innerHTML = svgIcon(iconMap[type], (isCelebrate ? 'w-5 h-5' : 'w-4 h-4') + ' shrink-0') + '<span></span>';
     el.querySelector('span').textContent = message;
-    container.appendChild(el);
-    // The celebration toast is reserved for finishing a whole project (see
-    // celebrateProjectComplete) -- rare enough to earn a longer dwell than a routine save/delete
-    // confirmation.
-    setTimeout(function () {
+    var gone = false;
+    function dismiss() {
+      if (gone) return;
+      gone = true;
       el.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
       el.style.opacity = '0';
       el.style.transform = 'translateY(6px)';
       setTimeout(function () { el.remove(); }, 260);
-    }, isCelebrate ? 5200 : 2800);
+    }
+    if (action) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'toast-action ml-2 -my-1 px-2 py-1 rounded-md font-bold text-white bg-white/15 hover:bg-white/25';
+      b.textContent = action.label;
+      b.addEventListener('click', function () { dismiss(); action.onClick(); });
+      el.appendChild(b);
+    }
+    container.appendChild(el);
+    // The celebration toast is reserved for finishing a whole project (see
+    // celebrateProjectComplete) -- rare enough to earn a longer dwell than a routine save/delete
+    // confirmation.
+    setTimeout(dismiss, isCelebrate ? 5200 : action ? 7000 : 2800);
   }
 
   // Keeps Tab/Shift+Tab cycling within an open modal instead of escaping into the
@@ -7322,7 +7340,7 @@
     function rowHtml(item, i, inGroup, peopleOnHead) {
           var editing = checklistEditIndex === i;
           var itemMinutes = checklistItemMinutes(item.id);
-          return '<div class="checklist-item-row rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-700/50' + (justCheckedItemIds[item.id] ? ' checklist-just-checked' : '') + '" data-checklist-i="' + i + '">' +
+          return '<div class="checklist-item-row rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-700/50' + (justCheckedItemIds[item.id] ? ' checklist-just-checked' : '') + '" data-checklist-i="' + i + '" data-flip="' + escapeHtml(item.id || '') + '">' +
             '<div class="flex items-center gap-2 px-2 py-1.5">' +
               '<span draggable="true" data-checklist-drag-handle data-checklist-i="' + i + '" title="Drag to reorder" aria-label="Drag to reorder" class="hidden sm:flex shrink-0 w-4 h-4 items-center justify-center text-zinc-300 dark:text-zinc-600 hover:text-zinc-500 dark:hover:text-zinc-400 cursor-grab active:cursor-grabbing">' + svgIcon('grip', 'w-3.5 h-3.5') + '</span>' +
               '<input type="checkbox" data-checklist-i="' + i + '" ' + (item.done ? 'checked' : '') + ' class="brand-checkbox checklist-toggle w-4 h-4 rounded border border-zinc-300 dark:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500/40 shrink-0 cursor-pointer">' +
@@ -7382,9 +7400,11 @@
           (checklistDoneOpen ? 'Hide ' + doneRows.length + ' done' : (openRows.length ? '' : 'All ') + doneRows.length + ' done') +
         '</button>'
       : '';
+    var stepsBefore = flipCapture(el, '[data-flip]', 'data-flip');
     el.innerHTML = currentChecklist.length
       ? openRows.join('') + doneToggle + (checklistDoneOpen ? doneRows.join('') : '')
-      : '<p class="text-xs text-zinc-400 dark:text-zinc-500">No checklist items yet.</p>';
+      : '<p class="text-xs text-zinc-400 dark:text-zinc-500">No steps yet. Break the work into steps below; each can have a date and people.</p>';
+    flipPlay(el, '[data-flip]', 'data-flip', stepsBefore);
     if (checklistEditIndex !== null) {
       var textInput = el.querySelector('.checklist-text-input');
       if (textInput) { textInput.focus(); textInput.select(); }
@@ -7450,10 +7470,15 @@
     if (removeBtn) {
       var removeIdx = parseInt(removeBtn.dataset.checklistI, 10);
       var removeItem = currentChecklist[removeIdx];
-      openConfirm('Remove this checklist item?', '"' + (removeItem ? removeItem.text : 'This item') + '" will be removed once you save this task.', function () {
-        currentChecklist.splice(removeIdx, 1);
+      if (!removeItem) return;
+      var removedFrom = editingTaskId;
+      currentChecklist.splice(removeIdx, 1);
+      renderChecklistEditor();
+      showToast('Step removed', 'info', { action: { label: 'Undo', onClick: function () {
+        if (editingTaskId !== removedFrom || taskModal.classList.contains('hidden')) return;
+        currentChecklist.splice(Math.min(removeIdx, currentChecklist.length), 0, removeItem);
         renderChecklistEditor();
-      });
+      } } });
       return;
     }
     var editToggle = e.target.closest('.checklist-edit-toggle');
@@ -7816,7 +7841,7 @@
     });
     logEl.innerHTML = list.length
       ? roots.map(function (c) { return commentNode(c, 0); }).join('')
-      : '<p class="text-xs text-zinc-400 dark:text-zinc-500">No comments yet.</p>';
+      : '<p class="text-xs text-zinc-400 dark:text-zinc-500">No comments yet. Type @ and a name to loop someone in.</p>';
   }
 
   // Entries logged together for several people (one each, see commitTimeEntry) share the exact
@@ -8149,17 +8174,20 @@
       var idxs = rowIdx(removeBtn).sort(function (a, b) { return b - a; });
       var entry = currentTimeEntries[idxs[0]];
       if (!entry) return;
-      // A group asks about everyone in it, so nobody's hours disappear without saying so.
-      var title = idxs.length > 1 ? 'Remove this time for all ' + idxs.length + ' people?' : 'Remove this time entry?';
-      var body = idxs.length > 1
-        ? formatDuration(entry.minutes) + ' each, ' + formatDuration(entry.minutes * idxs.length) + ' in all, will be removed once you save this task. To remove one person, edit the row and untick them.'
-        : formatDuration(entry.minutes) + ' will be removed once you save this task.';
-      openConfirm(title, body, function () {
-        idxs.forEach(function (k) { currentTimeEntries.splice(k, 1); });
-        if (timeEntryEditIndex !== null) { exitTimeEntryEditMode(); timePeopleFor = null; timePeopleSelected = []; syncTimePeople(); }
+      // Removed straight away with Undo on the toast; a group's toast says how much time for how
+      // many people, so nobody's hours disappear without it being said.
+      var beforeEntries = currentTimeEntries.slice();
+      var removedFromTask = editingTaskId;
+      idxs.forEach(function (k) { currentTimeEntries.splice(k, 1); });
+      if (timeEntryEditIndex !== null) { exitTimeEntryEditMode(); timePeopleFor = null; timePeopleSelected = []; syncTimePeople(); }
+      renderTimeEntriesEditor(currentTimeEntries, document.getElementById('task-time-log'), document.getElementById('task-time-total'));
+      renderChecklistEditor();
+      showToast(idxs.length > 1 ? 'Removed ' + formatDuration(entry.minutes * idxs.length) + ' for ' + idxs.length + ' people' : 'Removed ' + formatDuration(entry.minutes), 'info', { action: { label: 'Undo', onClick: function () {
+        if (editingTaskId !== removedFromTask || taskModal.classList.contains('hidden')) return;
+        currentTimeEntries = beforeEntries;
         renderTimeEntriesEditor(currentTimeEntries, document.getElementById('task-time-log'), document.getElementById('task-time-total'));
         renderChecklistEditor();
-      });
+      } } });
     }
   });
 
@@ -9304,6 +9332,7 @@
   /* ===== end CREATIVE BRIEFS ===== */
 
   document.getElementById('btn-add-task').addEventListener('click', function () { openTaskModal(null); });
+  document.addEventListener('click', function (e) { if (e.target.closest('[data-empty-add-task]')) openTaskModal(null); });
   document.getElementById('task-deadline-tbd').addEventListener('change', function (e) {
     var deadlineEl = document.getElementById('task-deadline');
     deadlineEl.disabled = e.target.checked;
@@ -9931,18 +9960,12 @@
   // "Ready to archive" button on a project card), not gated on the project's deadline having
   // passed and not part of the once-per-session popup queue.
   function confirmArchiveProject(name, count) {
-    openConfirm(
-      'Archive "' + name + '"?',
-      'Every task is done. Archive all ' + count + ' task' + (count === 1 ? '' : 's') + ' to move this project into Completed? Nothing is deleted -- archived tasks can be restored any time.',
-      function () {
-        archiveProjectTasks(name).then(function (n) {
-          showToast('Archived ' + n + ' task' + (n === 1 ? '' : 's') + ' -- "' + name + '" moved to Completed', 'success');
-        }).catch(function (err) {
-          showToast('Could not archive project tasks: ' + err.message, 'error');
-        });
-      },
-      { tone: 'question', confirmText: 'Archive', cancelText: 'Not yet' }
-    );
+    var before = activeTasks().filter(function (t) { return t.project === name && t.status === 'Done'; }).map(function (t) { return Object.assign({}, t); });
+    archiveProjectTasks(name).then(function (n) {
+      showToast('"' + name + '" moved to Completed', 'success', { action: { label: 'Undo', onClick: function () { restoreArchivedTasks(before, 'Project'); } } });
+    }).catch(function (err) {
+      showToast('Could not archive project tasks: ' + err.message, 'error');
+    });
   }
 
   function promptProjectDueToday(name, projectTasks, done) {
@@ -10387,7 +10410,7 @@
     batch.set(doc(archivedTasksCol, id), data);
     batch.delete(doc(tasksCol, id));
     batch.commit().then(function () {
-      showToast('Task archived', 'success');
+      showToast('Task archived', 'success', { action: { label: 'Undo', onClick: function () { restoreArchivedTasks([t], 'Task'); } } });
       logActivity('task_archived', 'Archived "' + t.name + '"', { taskId: t.id });
     }).catch(function (err) {
       showToast('Could not archive task: ' + err.message, 'error');
@@ -10397,6 +10420,32 @@
   // Only ever called from the Archived view, so archivedTasks (not tasks) is where this task
   // actually lives right now -- ensureArchivedTasksListener has always already run by the time
   // someone can see a Restore button to click.
+  // Undo for an archive: puts the tasks back exactly as they were (`list` = the task objects from
+  // before archiving), whoever archived them -- the rules allow the move back for anyone.
+  function restoreArchivedTasks(list, what) {
+    if (!list || !list.length) return;
+    var chain = Promise.resolve();
+    for (var i = 0; i < list.length; i += 250) {
+      (function (chunk) {
+        chain = chain.then(function () {
+          var batch = writeBatch(db);
+          chunk.forEach(function (t) {
+            var data = Object.assign({}, t);
+            delete data.id;
+            delete data.archivedAt;
+            batch.set(doc(tasksCol, t.id), data);
+            batch.delete(doc(archivedTasksCol, t.id));
+          });
+          return batch.commit();
+        });
+      })(list.slice(i, i + 250));
+    }
+    chain.then(function () {
+      showToast(list.length === 1 ? what + ' back on the board' : list.length + ' tasks back on the board', 'success');
+      logActivity('task_unarchived', 'Undid archiving ' + (list.length === 1 ? '"' + list[0].name + '"' : list.length + ' tasks'), list.length === 1 ? { taskId: list[0].id } : null);
+    }).catch(function (err) { showToast('Could not undo: ' + err.message, 'error'); });
+  }
+
   function unarchiveTask(id) {
     var t = archivedTasks.find(function (x) { return x.id === id; });
     if (!t) return;
@@ -10416,20 +10465,15 @@
   function handleArchiveCompletedClick(btn) {
     var count = activeTasks().filter(function (t) { return t.status === 'Done'; }).length;
     if (!count) { showToast('No completed tasks to archive', 'info'); return; }
-    openConfirm(
-      'Archive ' + count + ' completed task' + (count === 1 ? '' : 's') + '?',
-      'They\'ll be moved out of the board into the Archived view, where you can restore them any time. Nothing is deleted.',
-      function () {
-        btn.disabled = true;
-        archiveCompletedTasks().then(function (n) {
-          showToast('Archived ' + n + ' task' + (n === 1 ? '' : 's'), 'success');
-        }).catch(function (err) {
-          showToast('Could not archive tasks: ' + err.message, 'error');
-        }).finally(function () {
-          btn.disabled = false;
-        });
-      }
-    );
+    var before = activeTasks().filter(function (t) { return t.status === 'Done'; }).map(function (t) { return Object.assign({}, t); });
+    btn.disabled = true;
+    archiveCompletedTasks().then(function (n) {
+      showToast('Archived ' + n + ' completed task' + (n === 1 ? '' : 's'), 'success', { action: { label: 'Undo', onClick: function () { restoreArchivedTasks(before, 'Task'); } } });
+    }).catch(function (err) {
+      showToast('Could not archive tasks: ' + err.message, 'error');
+    }).finally(function () {
+      btn.disabled = false;
+    });
   }
 
   /* =========================================================
@@ -10775,6 +10819,34 @@
     );
   }
 
+  // Glide (FLIP): before a re-render, note where each keyed element sits; after it, anything that
+  // moved slides from its old spot to its new one (~0.2s). Asked for as part of "more pleasant and
+  // delightful, without distraction": the eye follows a card to its new column instead of losing
+  // it, which matters most when a teammate moves something. Only moves animate -- nothing new
+  // pops in, nothing moves at rest -- and reduced motion turns it off.
+  var flipReducedMotion = window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+  function flipCapture(root, selector, keyAttr) {
+    var map = {};
+    if (!root || (flipReducedMotion && flipReducedMotion.matches)) return map;
+    root.querySelectorAll(selector).forEach(function (el) {
+      var r = el.getBoundingClientRect();
+      if (r.width && r.height) map[el.getAttribute(keyAttr)] = r;
+    });
+    return map;
+  }
+  function flipPlay(root, selector, keyAttr, before) {
+    if (!root || !before || !Object.keys(before).length) return;
+    root.querySelectorAll(selector).forEach(function (el) {
+      var a = before[el.getAttribute(keyAttr)];
+      if (!a || !el.animate) return;
+      var b = el.getBoundingClientRect();
+      if (!b.width) return;
+      var dx = a.left - b.left, dy = a.top - b.top;
+      if (Math.abs(dx) < 2 && Math.abs(dy) < 2) return;
+      el.animate([{ transform: 'translate(' + dx + 'px,' + dy + 'px)' }, { transform: 'none' }], { duration: 220, easing: 'cubic-bezier(.2,.8,.2,1)' });
+    });
+  }
+
   function renderBoard() {
     document.getElementById('empty-board-banner').classList.toggle('hidden', activeTasks().length !== 0);
     var filtered = applyFilters(activeTasks());
@@ -10787,6 +10859,7 @@
     var bounceDoneToday = lastDoneTodayCount !== null && doneToday > lastDoneTodayCount;
     lastDoneTodayCount = doneToday;
 
+    var boardBefore = flipCapture(container, '.task-card[data-task-id]', 'data-task-id');
     container.innerHTML = STATUSES.map(function (status) {
       var isDoneCol = status === 'Done';
       var items = sortTasksForDisplay(filtered.filter(function (t) { return t.status === status; }));
@@ -10800,9 +10873,13 @@
       // with tighter spacing) were both reported back as not matching what was actually being
       // asked for -- a real project-card container with a task list inside, each row still
       // showing assignee/deadline -- confirmed against a mockup before building this version.
+      // Empty columns say something useful (asked: "more pleasant ... add to the usability"): what
+      // the column is for, or, when filters are narrowing the board, that the filter is why.
+      var emptyLine = filtered.length !== activeTasks().length ? 'Nothing here with the current filters'
+        : ({ Pipeline: 'Nothing waiting to start', 'In Progress': 'Nothing in progress right now', Review: 'Nothing waiting on review. Nice.', Done: 'Finished work lands here' })[status] || 'Nothing here';
       var cardsHtml = items.length
         ? groupTasksByProject(items).map(projectGroupCardHtml).join('')
-        : '<div class="text-xs text-zinc-400 dark:text-zinc-600 text-center py-8 border-2 border-dashed border-zinc-200 dark:border-zinc-700 rounded-xl">No tasks here</div>';
+        : '<div class="text-xs text-zinc-400 dark:text-zinc-500 text-center px-3 py-8 border-2 border-dashed border-zinc-200 dark:border-zinc-700 rounded-xl">' + escapeHtml(emptyLine) + '</div>';
 
       return (
         '<div class="flex flex-col rounded-xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/70 dark:border-zinc-700 min-h-[200px] shrink-0 w-[88vw] snap-center sm:w-auto sm:shrink" data-column="' + status + '">' +
@@ -10825,6 +10902,7 @@
       );
     }).join('');
     attachBoardDnD();
+    flipPlay(container, '.task-card[data-task-id]', 'data-task-id', boardBefore);
   }
 
   function attachBoardDnD() {
@@ -12880,7 +12958,10 @@
       .filter(projectInTeamspace);
 
     if (!names.length) {
-      container.innerHTML = '<p class="text-sm text-zinc-400 dark:text-zinc-500 col-span-full text-center py-10">No projects yet.</p>';
+      container.innerHTML = '<div class="col-span-full flex flex-col items-center gap-3 text-center py-12">' +
+        '<p class="text-sm font-semibold text-zinc-700 dark:text-zinc-200">No projects yet</p>' +
+        '<p class="text-sm text-zinc-500 dark:text-zinc-400 max-w-sm">Add a task and give it a project name. The project shows up here with its tasks, time and deadline.</p>' +
+        '<button type="button" data-empty-add-task class="text-sm font-semibold px-3.5 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700">Add a task</button></div>';
       return;
     }
 
@@ -13565,7 +13646,7 @@
       .sort(function (a, b) { return new Date(b.archivedAt) - new Date(a.archivedAt); });
     if (!archived.length) {
       container.innerHTML = '<p class="lg:col-span-2 text-sm text-zinc-400 dark:text-zinc-500 text-center py-10">' +
-        (q ? 'No archived tasks match "' + escapeHtml(filters.search.trim()) + '".' : 'No archived tasks.') + '</p>';
+        (q ? 'No archived tasks match "' + escapeHtml(filters.search.trim()) + '".' : 'Nothing archived yet. Archived tasks wait here, and any of them can go back on the board.') + '</p>';
       return;
     }
     var html = '';
@@ -14929,6 +15010,12 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-07l', date: '2026-10-07', items: [
+      { type: 'new', title: 'Ctrl K to jump anywhere', text: "Press Ctrl K (or click the hint in the search box) and type a few letters to jump to any task, project, chat or page. Your next tasks are listed before you type anything.", tourTarget: '#cmdk-hint' },
+      { type: 'improved', title: 'Undo instead of "Are you sure?"', text: "Archiving a task or a whole project, archiving completed work, and removing a checklist step or a time entry now happen straight away, with an Undo button on the message. Deleting for good still asks first." },
+      { type: 'improved', title: 'Cards glide to their new place', text: "When a task moves to another column, including when a teammate moves it, it slides there so you can see where it went. Reordered checklist steps do the same." },
+      { type: 'improved', title: 'Friendlier empty spots', text: "Empty columns and pages now say what goes there, or that a filter is hiding things, instead of a plain 'No tasks here'." }
+    ] },
     { id: '2026-10-07k', date: '2026-10-07', items: [
       { type: 'improved', title: 'Shorter checklists when one person has the batch', text: "When every step due on the same day is for the same person, their name shows once next to the date instead of under every step." }
     ] },
@@ -15820,6 +15907,163 @@
     startTour('welcome');
   });
 
+  /* =========================================================
+     QUICK JUMP (Ctrl+K / Cmd+K) -- type a few letters, Enter to go to any page, task, project or
+     chat. Asked for as part of "more pleasant and delightful ... add to the usability": the fastest
+     way round a big board, with nothing on screen at rest except the "Ctrl K" hint in the search
+     box (which also opens it). Not on the phone layout, and not while a window is open (opening a
+     task from here would replace one being edited).
+  ========================================================= */
+  var cmdkEl = null, cmdkItems = [], cmdkActive = 0;
+  var CMDK_MAC = /Mac|iPhone|iPad/.test(navigator.platform || '');
+  function cmdkCanOpen() {
+    if (mActive() || document.getElementById('app').classList.contains('hidden')) return false;
+    return !document.querySelector('.modal-backdrop:not(.hidden)');
+  }
+  function cmdkBuild() {
+    cmdkEl = document.createElement('div');
+    cmdkEl.id = 'cmdk';
+    cmdkEl.className = 'fixed inset-0 z-[70] hidden items-start justify-center p-4 pt-[12vh] bg-zinc-900/40';
+    cmdkEl.setAttribute('role', 'dialog');
+    cmdkEl.setAttribute('aria-modal', 'true');
+    cmdkEl.setAttribute('aria-label', 'Quick jump');
+    cmdkEl.innerHTML = '<div class="panel-pop-in w-full max-w-xl rounded-xl bg-white dark:bg-zinc-800 shadow-pop border border-zinc-200 dark:border-zinc-700 overflow-hidden">' +
+      '<div class="flex items-center gap-2 px-4 border-b border-zinc-100 dark:border-zinc-700">' +
+        svgIcon('search', 'w-4 h-4 text-zinc-400 shrink-0') +
+        '<input id="cmdk-input" type="text" autocomplete="off" spellcheck="false" placeholder="Jump to a task, project, chat or page…" class="flex-1 min-w-0 py-3.5 text-sm bg-transparent text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none">' +
+        '<span class="text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 border border-zinc-200 dark:border-zinc-600 rounded px-1.5 py-0.5">Esc</span>' +
+      '</div>' +
+      '<div id="cmdk-list" class="max-h-[55vh] overflow-y-auto py-1.5" role="listbox"></div>' +
+    '</div>';
+    document.body.appendChild(cmdkEl);
+    var input = cmdkEl.querySelector('#cmdk-input');
+    input.addEventListener('input', function () { cmdkActive = 0; cmdkRender(); });
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); cmdkActive = Math.min(cmdkItems.length - 1, cmdkActive + 1); cmdkRender(true); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); cmdkActive = Math.max(0, cmdkActive - 1); cmdkRender(true); }
+      else if (e.key === 'Enter') { e.preventDefault(); cmdkGo(cmdkActive); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cmdkClose(); }
+    });
+    cmdkEl.addEventListener('mousedown', function (e) { if (e.target === cmdkEl) cmdkClose(); });
+    cmdkEl.querySelector('#cmdk-list').addEventListener('click', function (e) {
+      var row = e.target.closest('[data-cmdk-i]');
+      if (row) cmdkGo(parseInt(row.getAttribute('data-cmdk-i'), 10));
+    });
+    cmdkEl.querySelector('#cmdk-list').addEventListener('mousemove', function (e) {
+      var row = e.target.closest('[data-cmdk-i]');
+      if (!row) return;
+      var i = parseInt(row.getAttribute('data-cmdk-i'), 10);
+      if (i !== cmdkActive) { cmdkActive = i; cmdkRender(true); }
+    });
+  }
+  function cmdkOpen() {
+    if (!cmdkCanOpen()) return;
+    if (!cmdkEl) cmdkBuild();
+    ensureArchivedTasksListener();
+    cmdkEl.classList.remove('hidden');
+    cmdkEl.classList.add('flex');
+    var input = cmdkEl.querySelector('#cmdk-input');
+    input.value = '';
+    cmdkActive = 0;
+    cmdkRender();
+    input.focus();
+  }
+  function cmdkClose() {
+    if (!cmdkEl) return;
+    cmdkEl.classList.add('hidden');
+    cmdkEl.classList.remove('flex');
+  }
+  function cmdkMatch(q, hay) {
+    hay = String(hay || '').toLowerCase();
+    return q.split(/\s+/).filter(Boolean).every(function (w) { return hay.indexOf(w) !== -1; });
+  }
+  function cmdkResults(q) {
+    q = stripZwsp(q || '').trim().toLowerCase();
+    var me = myDisplayName();
+    var out = [], pageItems = [];
+    var pages = Object.keys(VIEW_LABELS).filter(function (v) { return document.querySelector('[data-view-btn="' + v + '"]'); });
+    pages.forEach(function (v) {
+      if (!q || cmdkMatch(q, VIEW_LABELS[v])) pageItems.push({ group: 'Pages', title: VIEW_LABELS[v], sub: '', go: function () { setView(v); } });
+    });
+    var taskList = activeTasks().filter(function (t) { return t.status !== 'Done'; });
+    var tasksFound = q
+      ? taskList.filter(function (t) { return cmdkMatch(q, [t.name, t.project, t.assignee].join(' ')); })
+          .sort(function (a, b) { var an = a.name.toLowerCase().indexOf(q) === 0, bn = b.name.toLowerCase().indexOf(q) === 0; return an === bn ? (a.deadline || '9999').localeCompare(b.deadline || '9999') : an ? -1 : 1; })
+      : taskList.filter(function (t) { return t.assignee === me; }).sort(function (a, b) { return (a.deadline || '9999').localeCompare(b.deadline || '9999'); });
+    tasksFound.slice(0, q ? 8 : 5).forEach(function (t) {
+      out.push({ group: q ? 'Tasks' : 'Your next tasks', title: t.name, sub: t.project + ' · ' + t.assignee + (t.deadline ? ' · ' + formatShortDate(t.deadline) : ''), go: function () { openTaskModal(t); } });
+    });
+    // Typing: pages first (short, exact names). Nothing typed: your next tasks first, pages after.
+    out = q ? pageItems.concat(out) : out.concat(pageItems);
+    if (q) {
+      var names = {};
+      tasks.concat(archivedTasks).forEach(function (t) { if (t.project) names[t.project] = true; });
+      projectDocs.forEach(function (pd) { if (pd.name && projectWipCategory(pd.name)) names[pd.name] = true; });
+      Object.keys(names).filter(function (n) { return cmdkMatch(q, n); }).slice(0, 5).forEach(function (n) {
+        out.push({ group: 'Projects', title: n, sub: 'Open on Projects', go: function () { cmdkOpenProject(n); } });
+      });
+      projectDocs.filter(function (pd) { return pd.name && Array.isArray(pd.chat) && cmdkMatch(q, pd.name); }).slice(0, 4).forEach(function (pd) {
+        out.push({ group: 'Chats', title: pd.name, sub: 'Group chat', go: function () { setView('chat'); selectChatProject(pd.name); } });
+      });
+    }
+    return out;
+  }
+  function cmdkOpenProject(name) {
+    projectExpanded[name] = true;
+    if (isProjectFullyArchived(name)) projectsCompletedOpen = true;
+    setView('projects');
+    setTimeout(function () {
+      var btn = Array.prototype.find.call(document.querySelectorAll('#projects-grid .project-expand-toggle'), function (b) { return b.getAttribute('data-project') === name; });
+      var card = btn && (btn.closest('.rounded-xl') || btn.parentNode);
+      if (card) {
+        card.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        card.classList.add('chat-message-jump-flash');
+        setTimeout(function () { card.classList.remove('chat-message-jump-flash'); }, 1600);
+      }
+    }, 60);
+  }
+  function cmdkRender(keepScroll) {
+    var q = cmdkEl.querySelector('#cmdk-input').value;
+    cmdkItems = cmdkResults(q);
+    var list = cmdkEl.querySelector('#cmdk-list');
+    if (!cmdkItems.length) {
+      list.innerHTML = '<p class="px-4 py-6 text-sm text-center text-zinc-400 dark:text-zinc-500">Nothing matches "' + escapeHtml(q) + '".</p>';
+      return;
+    }
+    var lastGroup = '';
+    list.innerHTML = cmdkItems.map(function (it, i) {
+      var head = it.group !== lastGroup ? '<div class="px-4 pt-2 pb-1 text-[10px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">' + escapeHtml(it.group) + '</div>' : '';
+      lastGroup = it.group;
+      var on = i === cmdkActive;
+      return head + '<div role="option" aria-selected="' + on + '" data-cmdk-i="' + i + '" class="mx-1.5 px-2.5 py-2 rounded-lg cursor-pointer ' + (on ? 'bg-brand-50 dark:bg-brand-500/15' : '') + '">' +
+        '<p class="text-sm font-medium truncate ' + (on ? 'text-brand-800 dark:text-brand-200' : 'text-zinc-800 dark:text-zinc-100') + '">' + projectNameHtml(it.title) + '</p>' +
+        (it.sub ? '<p class="text-xs truncate text-zinc-500 dark:text-zinc-400">' + escapeHtml(it.sub) + '</p>' : '') +
+      '</div>';
+    }).join('');
+    var activeRow = list.querySelector('[data-cmdk-i="' + cmdkActive + '"]');
+    if (activeRow && keepScroll) activeRow.scrollIntoView({ block: 'nearest' });
+  }
+  function cmdkGo(i) {
+    var it = cmdkItems[i];
+    if (!it) return;
+    cmdkClose();
+    it.go();
+  }
+  document.addEventListener('keydown', function (e) {
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && (e.key === 'k' || e.key === 'K')) {
+      if (cmdkEl && !cmdkEl.classList.contains('hidden')) { e.preventDefault(); cmdkClose(); return; }
+      if (!cmdkCanOpen()) return;
+      e.preventDefault();
+      cmdkOpen();
+    }
+  });
+  (function () {
+    var hint = document.getElementById('cmdk-hint');
+    if (!hint) return;
+    if (CMDK_MAC) hint.textContent = '⌘K';
+    hint.addEventListener('click', function () { cmdkOpen(); });
+  })();
+
   var VIEW_LABELS = { board: 'Board', gantt: 'Timeline', calendar: 'Calendar', people: 'People', projects: 'Projects', chat: 'Chat', wip: 'WIP Meeting', weekly: 'Monday Meeting', activity: 'Activity', suggestions: 'Suggestions', archived: 'Archived', updates: 'New Updates' };
 
   function setView(view) {
@@ -16076,13 +16320,7 @@
     }
     if (archiveTaskBtn) {
       var idAT = archiveTaskBtn.getAttribute('data-archive-task');
-      var tAT = tasks.find(function (x) { return x.id === idAT; });
-      openConfirm(
-        'Archive this task?',
-        '"' + (tAT ? tAT.name : 'This task') + '" will move to the Archived view, where you can restore it any time. Nothing is deleted.',
-        function () { archiveTask(idAT); },
-        { tone: 'question', confirmText: 'Archive', cancelText: 'Cancel' }
-      );
+      archiveTask(idAT);   // Undo on the toast instead of a confirm
       return;
     }
     if (unarchiveBtn) {
@@ -18296,7 +18534,7 @@
             '</div>' +
           '</button>';
         }).join('')
-      : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-8">No notifications yet.</p>';
+      : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-8">You\'re all caught up.</p>';
     mRefresh();
   }
 
@@ -18421,7 +18659,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-07T10:25:40Z";
+  var CURRENT_BUILD_VERSION = "2026-10-07T10:52:22Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
