@@ -7160,7 +7160,9 @@
     var end = d.toISOString().slice(0, 10).replace(/-/g, '');
     var taskName = document.getElementById('task-name').value.trim();
     var project = document.getElementById('task-project').value.trim();
-    var names = [currentAssigneeValue()].concat(currentInvolved || []);
+    // Guests: the step's own people when it has any (a "Briefing" for three invites those three,
+    // ready for the "Add Google Meet" click in Google's form), else the task owner and involved.
+    var names = stepPeople(item).length ? stepPeople(item) : [currentAssigneeValue()].concat(currentInvolved || []);
     var emails = [];
     names.forEach(function (n) {
       var person = teamPeople.find(function (p) { return p.name === n; });
@@ -7507,7 +7509,7 @@
     renderChecklistEditor();
     input.focus();
     // One calendar event for the batch, never one tab per item.
-    if (wantsCalendar) openChecklistInGoogleCalendar(added.length === 1 ? added[0] : { text: added.map(function (it) { return it.text; }).join(', '), due: due });
+    if (wantsCalendar) openChecklistInGoogleCalendar(added.length === 1 ? added[0] : { text: added.map(function (it) { return it.text; }).join(', '), due: due, assignees: stepPeople(added[0]) });
   }
 
   document.getElementById('task-checklist-add-btn').addEventListener('click', addChecklistItem);
@@ -14470,6 +14472,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-07e', date: '2026-10-07', items: [
+      { type: 'improved', title: 'Calendar invites go to the step\'s people', text: "Tick \"Calendar\" when adding a checklist step with people, like a Briefing, and the Google Calendar event now invites those people. To make it a video call, click \"Add Google Meet video conferencing\" in Google's form and set a time." }
+    ] },
     { id: '2026-10-07d', date: '2026-10-07', items: [
       { type: 'improved', title: 'Time logged for several people is one row', text: "Log a briefing for 3 people and Time Tracking shows one row, \"1h · 3 people · 3h\", with everyone named on hover. Click its pencil to add or remove people, including on time logged before steps had people." }
     ] },
@@ -17909,7 +17914,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-07T04:16:44Z";
+  var CURRENT_BUILD_VERSION = "2026-10-07T09:14:02Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

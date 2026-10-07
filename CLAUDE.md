@@ -725,8 +725,13 @@ to bottom:
        re-exportable). The add-item row carries link, date, TBD and Calendar fields on the
        same line (wrapping when narrow -- no disclosure; asked for directly), so all of it can be set before
        adding; a **TBD** option (item field `dueTbd`, a separate boolean -- never a non-date string in `due`, which every Timeline/WIP/import reader parses as a date) shows "Due TBD" and draws no marker; picking a date clears it; its calendar checkbox stays disabled until a date is chosen and opens the event on Add. It opens Google Calendar's
-       pre-filled event-template URL (all-day event, task deep link in the description, assignee and
-       "involved" emails as guests). **One-way and one-time by design** -- no API, no OAuth; changing
+       pre-filled event-template URL (all-day event, task deep link in the description; guests are
+       the step's own people when it has any, else the task owner and "involved" emails). **Google
+       Meet is added in Google's own form** ("Add Google Meet video conferencing", plus a time):
+       asked "can creating a date ... have the option of creating a Google Meet?", and the template
+       URL has no Meet parameter. A Project Manager button that creates the Meet and stores its link
+       needs the Calendar API with OAuth, so it was deferred; inviting the step's people was the part
+       worth building. **One-way and one-time by design** -- no API, no OAuth; changing
        the date here later does not update the event. A real two-way sync (Meet links, free/busy)
        was weighed and deferred; it would need a Google Cloud OAuth client and an optional time field.
      `due` is only set when valid because Firestore rejects `undefined` field values.
