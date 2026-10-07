@@ -2830,6 +2830,31 @@ with your recommendations". Three things that remove work rather than add it:
 - Import keeps all the new fields. Verified in Chromium (`tests/repeat-copy-rounds.test.js`, 33 checks,
   light and dark screenshots).
 
+### Dropdowns and the project's Drive folder (2026-10-08)
+
+- **One dropdown list everywhere** (reported from a screenshot of the Repeat menu: "Drop down menus
+  should be visually consistent"). `enhanceSelect` covers the toolbar and main task-form selects; every
+  other desktop `<select>` (Repeat, "+ Add" people pickers in the task window, step editor and time
+  row, brief rows, the admin's suggestion status, and any added later) now opens `#select-menu`
+  (`openSelectMenu`): the same look as the enhanced menus, on `<body>`, `position: fixed`, z-[70].
+  Document-level capture listeners: mousedown on a select opens it (and stops the native list),
+  Enter/Space/F4/Alt+Arrow open it from the keyboard, arrows move, Enter picks, Escape closes only the
+  list. **Focus stays on the select** (the menu's mousedown is prevented), so the step editor, which
+  saves on focusout, doesn't close mid-pick. Picking sets the value and fires input + change, so no
+  handler changed. Phones and touch screens (`pointer: coarse`) keep the native picker;
+  `data-native-select` opts one out. The involved "+ Add" now calls `openSelectMenu` instead of
+  `showPicker()`. The rule is in the shared `/design-check` checklist.
+- **The Drive folder is encouraged, by deriving it first** (asked: "drive folder link should be
+  encouraged"; Monday/Asana show an empty "+ Add" slot). `projectFolderFor(name)` finds the folder on
+  any other task in the project (matched like `canonicalProjectName`: case and spaces ignored); the
+  task window fills it in on open and as the project name is typed (`deriveProjectFolder`), marked
+  "from this project", and Save stores it on the task. A folder filled in that way follows the name;
+  one pasted or browsed by hand never changes; Remove means "no folder" for that visit. With no folder
+  anywhere in the project, the helper line is an "Add the Drive folder" button (the Drive picker)
+  plus "or paste its link above", instead of a grey hint. Phone quick add takes the project's folder
+  too. Still stored per task (`driveLink`); a project-level field would be the bigger "one fact, one
+  place" fix if it's ever needed.
+
 ### Mobile app (phones, below 768px)
 
 Asked: "The mobile view is horrible. Interfaces overlap each other, scrolling is a pain ... I don't

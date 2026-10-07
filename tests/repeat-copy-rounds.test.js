@@ -29,7 +29,7 @@ function seed() {
           comments: [{ id: 'c1', text: 'Sent last month', author: 'Deane Cheng', date: '2026-09-30T02:00:00Z' }],
           timeEntries: [{ minutes: 60, note: '', author: 'Deane Cheng', date: '2026-10-02T01:00:00.000Z', billable: true, overtime: false, checklistItemId: null }] }),
         w1: T({ name: 'Weekly post', project: 'Mediashock LinkedIn', status: 'In Progress', startDate: '2026-09-28', deadline: '2026-09-30', repeat: 'weekly', checklist: [] }),
-        src: T({ name: 'GWS video', project: 'Google GWS', status: 'In Progress', startDate: '2026-10-01', deadline: '2026-10-20',
+        src: T({ name: 'GWS video', project: 'Google GWS', status: 'In Progress', driveLink: 'https://drive.google.com/drive/folders/gws', startDate: '2026-10-01', deadline: '2026-10-20',
           checklist: [
             { id: 's1', text: 'Brief', due: '2026-10-10', done: true, link: 'https://docs.google.com/document/d/x' },
             { id: 's2', text: 'Draft', due: '2026-10-15', done: false, assignee: 'Zenon Kwok Ze Yong', assignees: ['Zenon Kwok Ze Yong'] },
@@ -100,6 +100,18 @@ async function newPage(browser, when) {
   await openTask('r1');
   check('task window shows the repeat', (await page.inputValue('#task-repeat')) === 'monthly');
   await page.screenshot({ path: 'mob2/repeat-window.png', clip: { x: 200, y: 0, width: 1040, height: 520 } });
+  // Every dropdown uses the app's list, not the browser's
+  await page.click('#task-repeat'); await page.waitForTimeout(200);
+  const menu = await page.evaluate(() => { var m = document.getElementById('select-menu'); return m && !m.hidden ? [...m.querySelectorAll('[role=option]')].map(o => o.textContent) : null; });
+  check("Repeat opens the app's own list", !!menu && menu.join('|') === "Doesn't repeat|Every week|Every 2 weeks|Every month", menu && menu.join('|'));
+  await page.screenshot({ path: 'mob2/repeat-menu.png', clip: { x: 600, y: 300, width: 640, height: 300 } });
+  await page.keyboard.press('Escape'); await page.waitForTimeout(150);
+  check('Escape closes only the list', await page.evaluate(() => document.getElementById('select-menu').hidden && !document.getElementById('task-modal').classList.contains('hidden')));
+  await page.click('#task-involved-add-btn'); await page.waitForTimeout(200);
+  const inv = await page.evaluate(() => { var m = document.getElementById('select-menu'); return m && !m.hidden ? m.textContent : ''; });
+  check('"+ Add people involved" opens the same list', /Zenon Kwok Ze Yong/.test(inv), inv.slice(0, 60));
+  await page.click('#select-menu [role=option]:has-text("Zenon")'); await page.waitForTimeout(200);
+  check('picking from it adds the person', /Zenon/.test(await page.textContent('#task-involved-chips')));
   await setStatus('Done'); await save();
   let d = await data();
   const n1 = d.tasks['r1-r1'];
@@ -136,7 +148,11 @@ async function newPage(browser, when) {
   await page.click('#btn-add-task'); await page.waitForTimeout(300);
   await page.fill('#task-name', 'Standup notes');
   await page.fill('#task-project', 'Internal');
-  await page.selectOption('#task-repeat', 'weekly');
+  await page.screenshot({ path: 'mob2/folder-ask.png', clip: { x: 200, y: 220, width: 560, height: 110 } });
+  check('a project with no folder asks for one', await page.isVisible('#task-project-add-folder') && !(await page.isVisible('#task-project-link-row')));
+  await page.click('#task-repeat'); await page.waitForTimeout(150);
+  await page.click('#select-menu [role=option]:has-text("Every week")'); await page.waitForTimeout(150);
+  check('picking from the list sets the repeat', (await page.inputValue('#task-repeat')) === 'weekly');
   await save();
   check('repeat without a deadline is stopped with a reason', /repeating task needs a deadline/.test(await page.evaluate(() => document.getElementById('task-deadline').parentElement.textContent)));
   await page.check('#task-deadline-tbd');
@@ -151,6 +167,13 @@ async function newPage(browser, when) {
   await page.evaluate(() => { var el = document.getElementById('task-assignee'); el.value = 'Deane Cheng'; el.dispatchEvent(new Event('change', { bubbles: true })); });
   await page.fill('#task-deadline', '2026-11-20');
   check('a task with no steps offers to copy them', !!(await page.$('#checklist-copy-btn')));
+  check("the project's Drive folder is filled in from its other tasks", (await page.inputValue('#task-drive')) === 'https://drive.google.com/drive/folders/gws' && await page.isVisible('#task-drive-derived') && !(await page.isVisible('#task-project-add-folder')));
+  await page.screenshot({ path: 'mob2/folder-derived.png', clip: { x: 200, y: 220, width: 560, height: 110 } });
+  await page.fill('#task-project', 'Google GWSX');
+  check('a folder filled in that way follows the name', (await page.inputValue('#task-drive')) === '' && await page.isVisible('#task-project-add-folder'));
+  await page.fill('#task-project', 'google  gws');
+  check('names match the way projects do (case, spaces)', (await page.inputValue('#task-drive')) === 'https://drive.google.com/drive/folders/gws');
+  await page.fill('#task-project', 'Google GWS');
   await page.click('#checklist-copy-btn'); await page.waitForTimeout(500);
   const rows = await page.$$eval('#checklist-copy-pop [data-copy-steps-from]', els => els.map(e => e.getAttribute('data-copy-steps-from')));
   check('same project listed first', rows[0] === 'src', rows.join());
@@ -171,6 +194,7 @@ async function newPage(browser, when) {
   const made = madeId && d.tasks[madeId];
   const dues = made ? made.checklist.map(c => c.due).join() : '';
   check('dates keep their distance from the deadline, weekends moved to Friday', dues === '2026-11-10,2026-11-13,2026-11-17', dues);
+  check('the folder is saved on the new task', made && made.driveLink === 'https://drive.google.com/drive/folders/gws');
   check('people come across, links do not', made && (made.checklist[1].assignees || []).join() === 'Zenon Kwok Ze Yong' && !made.checklist[0].link && made.checklist.every(c => !c.done));
   check('the step people are told on save', Object.values(d.notifications).some(n => n.recipient === 'Zenon Kwok Ze Yong' && n.taskId === madeId && n.type === 'checklist_assigned'));
 

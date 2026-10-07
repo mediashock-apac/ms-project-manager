@@ -1657,10 +1657,19 @@
                Still stored as its own `driveLink` task field, so existing tasks keep working. -->
           <input type="hidden" id="task-drive">
           <div class="mt-1 flex items-center gap-1.5 text-[11px] min-w-0">
-            <span id="task-project-hint" class="text-zinc-400 dark:text-zinc-500">Type a name, or paste a Drive folder link</span>
+            <!-- No folder yet: ask for one with a button (Monday/Asana-style empty "+ Add" slot) rather
+                 than a grey hint. Hidden once a folder is attached or found on the project's other tasks. -->
+            <span id="task-project-hint" class="items-center gap-1.5 min-w-0 text-zinc-500 dark:text-zinc-400">
+              <button type="button" id="task-project-add-folder" class="inline-flex items-center gap-1 shrink-0 font-semibold text-brand-800 dark:text-brand-300 hover:underline focus:outline-none focus:underline">
+                <svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2z"></path><line x1="12" y1="10" x2="12" y2="16"></line><line x1="9" y1="13" x2="15" y2="13"></line></svg>
+                Add the Drive folder
+              </button>
+              <span class="truncate">or paste its link above</span>
+            </span>
             <span id="task-project-link-row" class="hidden min-w-0 flex-1 items-center gap-1.5">
               <svg class="w-3 h-3 shrink-0 text-brand-600 dark:text-brand-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2z"></path></svg>
               <a id="task-drive-open" href="#" target="_blank" rel="noopener noreferrer" class="min-w-0 mr-auto truncate font-medium text-brand-600 dark:text-brand-400 hover:underline"></a>
+              <span id="task-drive-derived" class="hidden shrink-0 text-zinc-500 dark:text-zinc-400" title="The same folder as this project's other tasks">from this project</span>
               <button type="button" id="task-drive-copy" class="shrink-0 font-medium text-zinc-500 dark:text-zinc-400 hover:text-brand-600 dark:hover:text-brand-400">Copy</button>
               <button type="button" id="task-drive-remove" class="shrink-0 font-medium text-zinc-500 dark:text-zinc-400 hover:text-rose-500 dark:hover:text-rose-400">Remove</button>
             </span>
@@ -5621,6 +5630,8 @@
             var projectEl = document.getElementById('task-project');
             if (!projectEl.value.trim()) projectEl.value = picked.name;
             document.getElementById('task-drive').value = 'https://drive.google.com/drive/folders/' + picked.id;
+            driveLinkDerived = false;
+            driveLinkDismissed = false;
             syncDriveLinkButtons();
           }
         })
@@ -7054,7 +7065,9 @@
     syncRepeatSelect();
     renderReviewRoundsLine(task);
     document.getElementById('task-drive').value = task ? task.driveLink || '' : '';
-    syncDriveLinkButtons();
+    driveLinkDerived = false;
+    driveLinkDismissed = false;
+    deriveProjectFolder();
     document.getElementById('task-delete-btn').classList.toggle('hidden', !task);
     document.getElementById('task-copy-link-btn').classList.toggle('hidden', !task);
     // Makes every open task shareable via the address bar for free, not just through the
@@ -7170,12 +7183,40 @@
     // order -- same idiom the task modal itself uses.
     row.classList.toggle('hidden', !hasLink);
     row.classList.toggle('flex', hasLink);
-    document.getElementById('task-project-hint').classList.toggle('hidden', hasLink);
+    var hint = document.getElementById('task-project-hint');
+    hint.classList.toggle('hidden', hasLink);
+    hint.classList.toggle('flex', !hasLink);
+    document.getElementById('task-drive-derived').classList.toggle('hidden', !(hasLink && driveLinkDerived));
     openEl.href = hasLink ? normalizeUrl(url) : '#';
     openEl.textContent = hasLink ? url.replace(/^https?:\/\//i, '') : '';
     openEl.title = url;
     syncTaskBriefLink();   // creative brief (see CREATIVE BRIEFS)
   }
+
+  // Every task in a project shares its Drive folder, so the task window fills it in from the
+  // project's other tasks rather than asking again (derive, don't ask), matching names the way
+  // canonicalProjectName does. Asked: "drive folder link should be encouraged". A folder filled in
+  // this way follows the project name while it's being typed; one attached by hand never changes,
+  // and Remove means "no folder" for the rest of this visit.
+  var driveLinkDerived = false, driveLinkDismissed = false;
+  function projectFolderFor(name) {
+    var key = projectKey(name);
+    if (!key) return '';
+    var match = tasks.concat(archivedTasks || []).find(function (t) {
+      return t && t.id !== editingTaskId && t.driveLink && projectKey(t.project) === key;
+    });
+    return match ? match.driveLink : '';
+  }
+  function deriveProjectFolder() {
+    var driveEl = document.getElementById('task-drive');
+    if (driveLinkDismissed || (driveEl.value.trim() && !driveLinkDerived)) { syncDriveLinkButtons(); return; }
+    var url = projectFolderFor(document.getElementById('task-project').value);
+    driveEl.value = url;
+    driveLinkDerived = !!url;
+    syncDriveLinkButtons();
+  }
+  document.getElementById('task-project').addEventListener('input', deriveProjectFolder);
+  document.getElementById('task-project-add-folder').addEventListener('click', browseDriveForProject);
 
   // Pulls a link out of the Project field and parks it in task-drive, leaving whatever else
   // was typed as the project name. Runs on paste and on blur -- deliberately not on every
@@ -7188,6 +7229,7 @@
     // "folder: https://drive.google.com/…/1a2B3c." doesn't glue the period into the URL.
     var url = normalizeUrl(match[0].replace(/[.,;:!?)\]}'"]+$/, ''));
     document.getElementById('task-drive').value = url;
+    driveLinkDerived = false;
     projectEl.value = projectEl.value.replace(match[0], '').replace(/\s+/g, ' ').trim();
     syncDriveLinkButtons();
     if (projectEl.value) {
@@ -7206,6 +7248,8 @@
   document.getElementById('task-project-browse').addEventListener('click', browseDriveForProject);
   document.getElementById('task-drive-remove').addEventListener('click', function () {
     document.getElementById('task-drive').value = '';
+    driveLinkDerived = false;
+    driveLinkDismissed = true;
     syncDriveLinkButtons();
     document.getElementById('task-project').focus();
   });
@@ -8419,6 +8463,7 @@
       if (p && p !== exceptPanel) p.classList.add('hidden');
     });
     closeOtherEnhancedSelectMenus(null);
+    if (typeof closeSelectMenu === 'function') closeSelectMenu();
   }
 
   document.addEventListener('click', function (e) {
@@ -8592,6 +8637,125 @@
   var taskStatusPill = enhanceSelect('task-status');
   var taskAssigneePill = enhanceSelect('task-assignee');
 
+  /* ===== One dropdown list for every other <select> =====
+     enhanceSelect() covers the toolbar and the main task-form selects. The smaller ones (Repeat,
+     the "+ Add" people pickers, brief rows, the admin's suggestion status) were left native, so
+     their list was drawn by the browser: white in dark mode, system fonts (reported from a
+     screenshot: "Drop down menus should be visually consistent"). This swaps in the same list
+     enhanceSelect draws, for all of them at once and for any added later. Only the list changes:
+     the select stays the visible control and the source of truth, so every change handler works
+     as before. One menu on <body>, position: fixed, so a scrolling form can't clip it. Focus
+     stays on the select, so an editor that saves on focusout (the checklist step editor) doesn't
+     close mid-pick. Phones and touch screens keep the native picker, the better control there;
+     `data-native-select` opts a select out. */
+  var selectMenuEl = null, selectMenuFor = null, selectMenuActive = -1;
+  function selectMenuEligible(sel) {
+    return !!sel && sel.tagName === 'SELECT' && !sel.multiple && !sel.disabled &&
+      !sel.classList.contains('sr-only') && !sel.closest('#m-app') && !sel.hasAttribute('data-native-select') &&
+      !(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+  }
+  function selectMenuOptions(sel) { return Array.prototype.filter.call(sel.options, function (o) { return !o.hidden; }); }
+  function renderSelectMenu() {
+    var opts = selectMenuOptions(selectMenuFor);
+    selectMenuEl.innerHTML = opts.map(function (o, i) {
+      return '<div role="option" data-i="' + i + '" aria-selected="' + (o.selected ? 'true' : 'false') + '"' + (o.disabled ? ' aria-disabled="true"' : '') +
+        ' class="px-3 py-2 ' + (o.disabled ? 'opacity-50 cursor-default' : 'cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-700/60') +
+        (i === selectMenuActive ? ' bg-zinc-50 dark:bg-zinc-700/60' : '') + '">' + pillOptionHtml(o.value, o.textContent) + '</div>';
+    }).join('');
+    var act = selectMenuEl.querySelector('[data-i="' + selectMenuActive + '"]');
+    if (act && act.scrollIntoView) act.scrollIntoView({ block: 'nearest' });
+  }
+  function closeSelectMenu() {
+    if (!selectMenuEl || selectMenuEl.hidden) return;
+    selectMenuEl.hidden = true;
+    if (selectMenuFor) selectMenuFor.setAttribute('aria-expanded', 'false');
+    selectMenuFor = null;
+  }
+  function openSelectMenu(sel) {
+    if (!selectMenuEligible(sel)) { try { sel.showPicker(); } catch (err) { /* focus alone is fine */ } return; }
+    if (!selectMenuEl) {
+      selectMenuEl = document.createElement('div');
+      selectMenuEl.id = 'select-menu';
+      selectMenuEl.setAttribute('role', 'listbox');
+      selectMenuEl.hidden = true;
+      // Same look as enhanceSelect's menu. z-[70]: above the task window (z-50) and the pop-ups on it (z-60).
+      selectMenuEl.className = 'fixed z-[70] max-w-[min(20rem,calc(100vw-1rem))] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 max-h-60 overflow-y-auto panel-pop-in';
+      selectMenuEl.addEventListener('mousedown', function (e) { e.preventDefault(); });   // keep focus on the select
+      selectMenuEl.addEventListener('click', function (e) {
+        var row = e.target.closest('[data-i]');
+        if (row) pickSelectMenu(parseInt(row.getAttribute('data-i'), 10));
+      });
+      document.body.appendChild(selectMenuEl);
+    }
+    closeOtherHeaderPanels(null);   // one dropdown open at a time, enhanced ones included
+    selectMenuFor = sel;
+    var opts = selectMenuOptions(sel);
+    selectMenuActive = Math.max(0, opts.findIndex(function (o) { return o.selected; }));
+    renderSelectMenu();
+    selectMenuEl.hidden = false;
+    var r = sel.getBoundingClientRect();
+    selectMenuEl.style.minWidth = Math.max(r.width, 144) + 'px';
+    var w = selectMenuEl.offsetWidth, h = selectMenuEl.offsetHeight;
+    var top = r.bottom + 4;
+    if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 4);   // no room below: open upward
+    selectMenuEl.style.top = top + 'px';
+    selectMenuEl.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + 'px';
+    sel.setAttribute('aria-expanded', 'true');
+    if (document.activeElement !== sel) sel.focus();
+  }
+  function pickSelectMenu(i) {
+    var sel = selectMenuFor;
+    var o = sel && selectMenuOptions(sel)[i];
+    if (!o || o.disabled) return;
+    closeSelectMenu();
+    if (sel.value !== o.value) {
+      sel.value = o.value;
+      sel.dispatchEvent(new Event('input', { bubbles: true }));
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  }
+  function moveSelectMenu(step) {
+    var opts = selectMenuOptions(selectMenuFor);
+    var i = selectMenuActive;
+    for (var k = 0; k < opts.length; k++) {
+      i = Math.max(0, Math.min(opts.length - 1, i + step));
+      if (!opts[i].disabled) break;
+    }
+    selectMenuActive = i;
+    renderSelectMenu();
+  }
+  document.addEventListener('mousedown', function (e) {
+    if (e.button !== 0) return;
+    var sel = e.target.closest && e.target.closest('select');
+    if (sel && selectMenuEligible(sel)) {
+      e.preventDefault();   // stops the browser's own list
+      if (selectMenuFor === sel) closeSelectMenu(); else openSelectMenu(sel);
+      return;
+    }
+    if (selectMenuEl && !selectMenuEl.hidden && !selectMenuEl.contains(e.target)) closeSelectMenu();
+  }, true);
+  document.addEventListener('keydown', function (e) {
+    var t = e.target;
+    if (selectMenuFor && t === selectMenuFor) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); moveSelectMenu(e.key === 'ArrowDown' ? 1 : -1); }
+      else if (e.key === 'Home' || e.key === 'End') { e.preventDefault(); selectMenuActive = e.key === 'Home' ? -1 : 1e9; moveSelectMenu(e.key === 'Home' ? 1 : -1); }
+      else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pickSelectMenu(selectMenuActive); }
+      else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeSelectMenu(); }   // only the list, not the task window
+      else if (e.key === 'Tab') closeSelectMenu();
+      return;
+    }
+    if (t && t.tagName === 'SELECT' && selectMenuEligible(t) &&
+        (e.key === 'Enter' || e.key === ' ' || e.key === 'F4' || (e.altKey && (e.key === 'ArrowDown' || e.key === 'ArrowUp')))) {
+      e.preventDefault();
+      openSelectMenu(t);
+    }
+  }, true);
+  document.addEventListener('focusout', function (e) { if (selectMenuFor && e.target === selectMenuFor) closeSelectMenu(); }, true);
+  document.addEventListener('scroll', function (e) {
+    if (selectMenuEl && !selectMenuEl.hidden && !selectMenuEl.contains(e.target)) closeSelectMenu();
+  }, true);
+  window.addEventListener('resize', closeSelectMenu);
+
   // The people filter isn't an enhanceSelect() instance -- that helper drives a single hidden
   // <select>'s one value, and this is a checkbox multi-select with no <select> behind it at all
   // -- but it still needs to obey the same "only one header dropdown open at a time" rule as
@@ -8755,7 +8919,7 @@
     renderInvolved();
     var involvedSel = document.getElementById('task-involved-select');
     involvedSel.focus();
-    try { involvedSel.showPicker(); } catch (err) { /* older browsers: focus is enough */ }
+    openSelectMenu(involvedSel);
   });
   document.getElementById('task-involved-select').addEventListener('change', function (e) {
     var name = e.target.value;
@@ -15364,6 +15528,10 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-08b', date: '2026-10-08', items: [
+      { type: 'improved', title: 'Every dropdown looks the same', text: "The smaller dropdowns (Repeat, adding people, brief rows) now open the same list as Status and Priority, instead of the computer's own grey one that ignored dark mode." },
+      { type: 'improved', title: "Projects keep their Drive folder", text: "Once any task in a project has its Drive folder attached, every other task in that project picks it up automatically, on desktop and phone. A project with no folder yet shows an \"Add the Drive folder\" button under its name." }
+    ] },
     { id: '2026-10-08a', date: '2026-10-08', items: [
       { type: 'new', title: 'Tasks that repeat', text: "Next to Deadline in the task window, set a task to repeat every week, every 2 weeks or every month. When it's completed, the next one is made straight away with the same people and steps, dated ahead. A small loop icon marks it on the Board." },
       { type: 'new', title: 'Copy steps from a similar task', text: "A task with no steps yet offers \"copy steps from a similar task\". Pick any earlier job, archived ones included, and its steps come across with their people, each dated the same number of days before this task's deadline." },
@@ -18008,7 +18176,7 @@
     var now = new Date().toISOString();
     var data = {
       name: name, project: project, assignee: assignee, involved: [], priority: priority, status: 'Pipeline',
-      startDate: start, deadline: deadline, driveLink: '', checklist: [], timeEntries: [], dependsOn: [], reviewAudience: null,
+      startDate: start, deadline: deadline, driveLink: projectFolderFor(project), checklist: [], timeEntries: [], dependsOn: [], reviewAudience: null,
       updatedAt: now, createdAt: now, comments: [], createdBy: me
     };
     form.querySelector('[type="submit"]').disabled = true;
@@ -19026,7 +19194,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-07T16:08:02Z";
+  var CURRENT_BUILD_VERSION = "2026-10-07T16:33:01Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
