@@ -3860,6 +3860,39 @@ Off-roster current values stay selectable, same rule as the owner picker.
   transitions, picker, import, project departments, People-card rendering). No emulator in this
   environment, so the modal editor itself has not been clicked through.
 
+**Several people per step, and time logged for each of them (2026-10-07).** Asked: "can assigning
+members be included and when time is allocated to that checklist item (briefing), can the time be
+tracked automatically for each member included? So this adds to the total time spent for the
+project as well." Two decisions made with the user: **person-hours** (3 people at a 1h briefing =
+3h on the project) and **one person can log for everyone on the step**.
+- **Data:** `item.assignees` (array). `item.assignee` is still written as the first person, so any
+  reader that only looks at that field keeps working. Always read through `stepPeople(it)` (falls
+  back to the old single field) and write through `setStepPeople(it, names)`; `stepPeopleLabel(it)`
+  gives one full name or several first names. Every reader listed above (teamspace, People view,
+  notifications, Calendar v2 Mine, Monday board projects, WIP steps, Timeline labels, brief sync,
+  import, the phone layout) goes through these.
+- **Editor:** the step's pencil editor has a "People" row of chips with an x, plus a dashed
+  "+ Add" select (the old single select is gone). Adding/removing redraws only that row and puts
+  focus back on "+ Add", because the editor saves and closes when focus leaves it.
+- **Time:** when Time Tracking's note matches a step with people, a "For" row (`#task-time-people`,
+  `syncTimePeople`) appears with those people ticked, a "+ Add" for anyone else, and "1h each · 3h
+  total". Logging saves **one entry per ticked person**: `author` = who the time is for, `loggedBy`
+  = who entered it when that's someone else (shown in the avatar's tooltip in the log). Nobody
+  ticked logs for you. Editing an existing entry stays one entry, so the row hides in edit mode.
+  Project, task and billable totals already summed every entry, so nothing else had to change for
+  the hours to count.
+- **Still a step, not a half-task:** the people are notified and see it on their People card, but
+  it doesn't count toward workload, Focus or alerts, same line as before.
+- **Bug fixed on the way:** `openTaskModal` handed the task window the live task's own checklist
+  item objects, so edits changed the "before" list too and `notifyChecklistChanges` compared a
+  list with itself. "Assigned you a checklist item" and "finished a checklist item" had never been
+  sent from the task window. It now works on copies.
+- Verified in Chromium against the real page with the in-memory stand-in (20 checks: old single
+  person still shown, add/remove people without the editor closing, the For row and its totals,
+  one entry per person with `loggedBy`, a plain note logs once for you, saved data shape,
+  notifications to both new people, the project card showing 3h 30m, People view). The desktop
+  and phone suites still pass.
+
 **`update` is creator-OR-assignee-OR-admin** — the fourth shape this rule has taken. The board
 started fully open (`allow read, write: if isMediashock()`), moved to an ownership-scoped model
 once the team grew past five (admin → anything, assignee → their own task, everyone else →

@@ -1793,6 +1793,9 @@
           <button type="button" id="task-time-cancel-edit-btn" class="hidden shrink-0 text-sm font-medium px-3 py-2 rounded-lg text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">Cancel</button>
           <button type="button" id="task-time-add-btn" class="shrink-0 text-sm font-semibold px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">Log</button>
         </div>
+        <!-- "For" row: shown only when the time is for a checklist step that has people. No static
+             display class: JS toggles `flex` alongside `hidden` (see #chat-reply-preview). -->
+        <div id="task-time-people" class="hidden mt-2 flex-wrap items-center gap-1.5 text-xs"></div>
       </div>
 
       <div id="task-comments-section" class="hidden pt-1 border-t border-zinc-100 dark:border-zinc-700">
@@ -3106,9 +3109,32 @@
   // Suits member was still involved. Same people projectDepartments() counts, so a project and
   // its tasks can't disagree about which teamspace they're in. Workload/People counts stay
   // owner-only -- those are per person, not per teamspace.
+  // A checklist step's people. Asked for: "can assigning members be included" on a step like
+  // 'Briefing', with logged time counting for each of them. Stored as `assignees` (array); older
+  // steps only have `assignee`. `assignee` is still written as the first person, so anything that
+  // reads only that one field keeps working. A step is still a step, not a half-task: its people
+  // are notified and see it, but it doesn't count toward workload (see "Checklist items can be
+  // assigned" in CLAUDE.md).
+  function stepPeople(it) {
+    if (!it) return [];
+    if (Array.isArray(it.assignees) && it.assignees.length) return it.assignees.filter(Boolean);
+    return it.assignee ? [it.assignee] : [];
+  }
+  function setStepPeople(it, names) {
+    var list = [];
+    (names || []).forEach(function (n) { n = String(n || '').trim(); if (n && list.indexOf(n) === -1) list.push(n); });
+    if (list.length) { it.assignee = list[0]; it.assignees = list; } else { delete it.assignee; delete it.assignees; }
+  }
+  // One name in full; several as first names ("Deane, Mychelle, Arvind").
+  function stepPeopleLabel(it) {
+    var people = stepPeople(it);
+    return people.length === 1 ? people[0] : people.map(function (n) { return String(n).split(' ')[0]; }).join(', ');
+  }
+
   function taskTeamspacePeople(t) {
     if (!t) return [];
-    var checklistPeople = (t.checklist || []).map(function (it) { return it && it.assignee; }).filter(Boolean);
+    var checklistPeople = [];
+    (t.checklist || []).forEach(function (it) { checklistPeople = checklistPeople.concat(stepPeople(it)); });
     return [t.assignee].concat(Array.isArray(t.involved) ? t.involved : [], checklistPeople);
   }
 
@@ -5356,12 +5382,15 @@
       }).catch(function (e) { console.error('Failed to notify checklist change', e); });
     }
     (newList || []).forEach(function (it) {
-      if (!it || !it.assignee) return;
+      var people = stepPeople(it);
+      if (!people.length) return;
       var old = before[it.id];
-      if (!it.done && it.assignee !== myName && (!old || old.assignee !== it.assignee)) {
-        send(it.assignee, 'checklist_assigned', it);
-      }
-      if (it.done && old && !old.done && it.assignee !== task.assignee && task.assignee && task.assignee !== myName) {
+      var oldPeople = stepPeople(old);
+      // Everyone newly added to an open step hears about it; people already on it don't again.
+      if (!it.done) people.forEach(function (who) {
+        if (who !== myName && oldPeople.indexOf(who) === -1) send(who, 'checklist_assigned', it);
+      });
+      if (it.done && old && !old.done && people.indexOf(task.assignee) === -1 && task.assignee && task.assignee !== myName) {
         send(task.assignee, 'checklist_done', it);
       }
     });
@@ -5575,9 +5604,9 @@
     var dateText = item.due && parseDate(item.due) ? formatShortDate(item.due) : (item.dueTbd ? 'Due TBD' : 'No date');
     return (item.done ? svgIcon('checkTick', 'w-3 h-3 shrink-0 text-emerald-500') : '<span class="w-3 shrink-0"></span>') +
       '<span data-tooltip="' + escapeHtml(item.text || '') + '" class="tooltip-top truncate min-w-0 ' + (item.done ? 'text-zinc-400 dark:text-zinc-500' : 'text-zinc-700 dark:text-zinc-200') + '">' + escapeHtml(item.text || '') + '</span>' +
-      (item.assignee && !asNames ? ganttAvatarHtml(item.assignee, 'w-4 h-4', 'text-[8px]') : '') +
+      (!asNames ? stepPeople(item).slice(0, 3).map(function (n) { return ganttAvatarHtml(n, 'w-4 h-4', 'text-[8px]'); }).join('') : '') +
       '<span class="shrink-0 text-zinc-400 dark:text-zinc-500">' +
-        (item.assignee && asNames ? '· ' + escapeHtml(item.assignee) + ' · ' : '') +
+        (stepPeople(item).length && asNames ? '· ' + escapeHtml(stepPeopleLabel(item)) + ' · ' : '') +
         '<span class="' + (late ? 'text-rose-600 dark:text-rose-400 font-semibold' : '') + '">' + escapeHtml(dateText) + '</span>' +
       '</span>';
   }
@@ -6760,6 +6789,8 @@
     setBillableToggle(document.getElementById('task-time-billable'), true);
     setOvertimeToggle(document.getElementById('task-time-overtime'), false);
     exitTimeEntryEditMode();
+    timePeopleFor = null; timePeopleSelected = [];
+    syncTimePeople();
     currentTimeEntries = task && task.timeEntries ? task.timeEntries.slice() : [];
     // Backfills an `id` onto any checklist item saved before per-item time tracking existed,
     // so the "Working on" select in Time Tracking always has something stable to link against
@@ -6767,8 +6798,12 @@
     // the sibling Content Hub app for the same "fix it forward on load" pattern).
     checklistDoneOpen = false;
     checklistShownDone = {};
+    // A copy of each item, not the item itself. Editing used to change the live task's own items,
+    // so by Save the "before" list already matched the edit and notifyChecklistChanges compared a
+    // list with itself: "assigned you a checklist item" and "finished a checklist item" never sent
+    // from the task window (found while adding several people per step).
     currentChecklist = (task && task.checklist ? task.checklist.slice() : []).map(function (item) {
-      return item.id ? item : Object.assign({}, item, { id: uid() });
+      return Object.assign({}, item, item.id ? {} : { id: uid() });
     });
     renderChecklistEditor();
     resetChecklistExtras();
@@ -6960,17 +6995,35 @@
      Lives inside the item's existing pencil editor, not on the add row: the add row already
      carries text, link, date, TBD and Calendar, and most items are the owner's own. The name
      shows under the item text only once set. */
-  function checklistAssigneeSelectHtml(item) {
-    var names = teamRoster();
-    // Keep the current value selectable even if the roster lost them, or an edit silently
-    // unassigns the item -- same rule as the task owner picker.
-    if (item.assignee && names.indexOf(item.assignee) === -1) names = [item.assignee].concat(names);
-    return '<select class="checklist-assignee-input text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400 px-2 py-1" aria-label="Assign this item to">' +
-      '<option value="">No one assigned</option>' +
-      names.map(function (n) {
-        return '<option value="' + escapeHtml(n) + '"' + (n === item.assignee ? ' selected' : '') + '>' + escapeHtml(n) + '</option>';
-      }).join('') +
-      '</select>';
+  // Several people per step now (stepPeople): chips with a remove x, plus a dashed "+ Add" pill
+  // over the roster, the same shape as the task's "Also involved". Current people stay as chips
+  // even if the roster lost them, so an edit never silently drops someone.
+  function checklistPersonChipHtml(name) {
+    return '<span class="checklist-person-chip inline-flex items-center gap-1 pl-0.5 pr-1 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-600 text-xs text-zinc-700 dark:text-zinc-200" data-name="' + escapeHtml(name) + '">' +
+      avatarHtml(name, 'w-4 h-4 shrink-0', 'text-[8px]') + escapeHtml(name) +
+      '<button type="button" class="checklist-person-remove p-0.5 rounded-full text-zinc-400 hover:text-rose-500 dark:hover:text-rose-400" aria-label="Remove ' + escapeHtml(name) + '">' + svgIcon('x', 'w-2.5 h-2.5') + '</button></span>';
+  }
+  function checklistPeopleEditorHtml(people) {
+    var others = teamRoster().filter(function (n) { return people.indexOf(n) === -1; });
+    return '<div class="checklist-people flex flex-wrap items-center gap-1.5">' +
+      '<span class="text-xs text-zinc-500 dark:text-zinc-400">People</span>' +
+      people.map(checklistPersonChipHtml).join('') +
+      '<select class="checklist-person-add text-xs rounded-full border border-dashed border-zinc-300 dark:border-zinc-600 bg-transparent text-zinc-500 dark:text-zinc-400 pl-2 pr-1 py-0.5 focus:outline-none focus:ring-2 focus:ring-brand-500/40" aria-label="Add a person to this item">' +
+        '<option value="">+ Add</option>' + others.map(function (n) { return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('') +
+      '</select>' +
+    '</div>';
+  }
+  function checklistPeopleInBox(box) {
+    return Array.prototype.map.call(box.querySelectorAll('.checklist-person-chip'), function (c) { return c.getAttribute('data-name'); });
+  }
+  // Redraws just the people row and puts focus back on its "+ Add", so adding or removing a person
+  // doesn't count as leaving the editor (which would save and close it).
+  function redrawChecklistPeople(box, people) {
+    var row = box.querySelector('.checklist-people');
+    if (!row) return;
+    row.outerHTML = checklistPeopleEditorHtml(people);
+    var add = box.querySelector('.checklist-person-add');
+    if (add) add.focus();
   }
 
   function renderChecklistEditor() {
@@ -6989,14 +7042,14 @@
                       '<input type="text" class="checklist-link-input flex-1 min-w-[8rem] text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400 px-2 py-1" placeholder="Paste a link…" value="' + escapeHtml(item.link || '') + '">' +
                       '<input type="date" class="checklist-due-input text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400 px-2 py-1" value="' + escapeHtml(item.due || '') + '"' + (item.dueTbd && !item.due ? ' disabled' : '') + '>' +
                       '<label class="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400"><input type="checkbox" class="checklist-tbd-input brand-checkbox w-3.5 h-3.5 rounded border border-zinc-300 dark:border-zinc-600"' + (item.dueTbd && !item.due ? ' checked' : '') + '> TBD</label>' +
-                      checklistAssigneeSelectHtml(item) +
                       '<button type="button" class="checklist-edit-done text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">Done</button>' +
                     '</div>' +
+                    checklistPeopleEditorHtml(stepPeople(item)) +
                   '</div>'
                 : '<div class="flex-1 min-w-0">' +
                   '<span class="block text-sm ' + (item.done ? 'line-through text-zinc-400 dark:text-zinc-500' : 'text-zinc-700 dark:text-zinc-200') + '">' + escapeHtml(item.text) + '</span>' +
                   (item.link ? '<div>' + linkChipHtml(item.link) + '</div>' : '') +
-                  (item.assignee ? '<span class="flex items-center gap-1 text-[11px] text-zinc-500 dark:text-zinc-400">' + avatarHtml(item.assignee, 'w-3.5 h-3.5 shrink-0', 'text-[8px]') + escapeHtml(item.assignee) + '</span>' : '') +
+                  (stepPeople(item).length ? '<span class="flex items-center gap-1 text-[11px] text-zinc-500 dark:text-zinc-400">' + stepPeople(item).map(function (n) { return avatarHtml(n, 'w-3.5 h-3.5 shrink-0', 'text-[8px]'); }).join('') + escapeHtml(stepPeopleLabel(item)) + '</span>' : '') +
                   checklistDueLabelHtml(item, i) +
                 '</div>') +
               (itemMinutes ? '<span class="shrink-0 text-[10px] font-semibold text-zinc-400 dark:text-zinc-500" title="Time logged against this item">' + formatDuration(itemMinutes) + '</span>' : '') +
@@ -7072,8 +7125,7 @@
       delete item.due; delete item.dueTbd;
       if (due) item.due = due; else if (tbd) item.dueTbd = true;
       // Deleted rather than stored as '' when cleared, like due/dueTbd above.
-      var who = box.querySelector('.checklist-assignee-input').value;
-      if (who) item.assignee = who; else delete item.assignee;
+      setStepPeople(item, checklistPeopleInBox(box));
     }
     renderChecklistEditor();
   }
@@ -7096,6 +7148,13 @@
       return;
     }
     if (e.target.closest('.checklist-edit-done')) { commitChecklistEdit(); return; }
+    var personRemove = e.target.closest('.checklist-person-remove');
+    if (personRemove) {
+      var pBox = personRemove.closest('[data-checklist-editor-i]');
+      var gone = personRemove.closest('.checklist-person-chip').getAttribute('data-name');
+      redrawChecklistPeople(pBox, checklistPeopleInBox(pBox).filter(function (n) { return n !== gone; }));
+      return;
+    }
     if (e.target.closest('.checklist-done-toggle')) { checklistDoneOpen = !checklistDoneOpen; renderChecklistEditor(); return; }
     var checkbox = e.target.closest('.checklist-toggle');
     if (checkbox) {
@@ -7126,6 +7185,12 @@
     }
   });
   document.getElementById('task-checklist-editor').addEventListener('change', function (e) {
+    if (e.target.classList.contains('checklist-person-add')) {
+      var addBox = e.target.closest('[data-checklist-editor-i]');
+      var added = e.target.value;
+      if (addBox && added) redrawChecklistPeople(addBox, checklistPeopleInBox(addBox).concat([added]));
+      return;
+    }
     if (!e.target.classList.contains('checklist-tbd-input')) return;
     var box = e.target.closest('[data-checklist-editor-i]');
     var dateEl = box && box.querySelector('.checklist-due-input');
@@ -7313,7 +7378,7 @@
           var noteIsItem = linkedItem && note.toLowerCase() === String(linkedItem.text).trim().toLowerCase();
           var label = linkedItem ? (linkedItem.text + (note && !noteIsItem ? ' — ' + note : '')) : note;
           return '<div class="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-700/50">' +
-            avatarHtml(e.author || '', 'w-4 h-4 shrink-0', 'text-[9px]') +
+            '<span class="tooltip-top shrink-0 inline-flex" data-tooltip="' + escapeHtml((e.author || 'Unknown') + (e.loggedBy ? ' · logged by ' + e.loggedBy : '')) + '">' + avatarHtml(e.author || '', 'w-4 h-4 shrink-0', 'text-[9px]') + '</span>' +
             '<span class="shrink-0 w-14 text-sm font-semibold text-zinc-700 dark:text-zinc-200">' + formatDuration(e.minutes) + '</span>' +
             (label
               ? '<span class="min-w-0 flex-1 truncate text-sm text-zinc-600 dark:text-zinc-300" title="' + escapeHtml(label) + '">' + escapeHtml(label) + '</span>'
@@ -7350,6 +7415,7 @@
     var el = document.getElementById('task-time-hours');
     var val = Math.max(0, Math.round(((parseFloat(el.value) || 0) + delta) * 4) / 4);
     el.value = val ? val : '';
+    syncTimePeople();
   }
   document.getElementById('task-time-hours-dec').addEventListener('click', function () { adjustTimeHours(-0.25); });
   document.getElementById('task-time-hours-inc').addEventListener('click', function () { adjustTimeHours(0.25); });
@@ -7414,6 +7480,7 @@
     setOvertimeToggle(document.getElementById('task-time-overtime'), !!entry.overtime);
     document.getElementById('task-time-add-btn').textContent = 'Save';
     document.getElementById('task-time-cancel-edit-btn').classList.remove('hidden');
+    syncTimePeople();
     document.getElementById('task-time-hours').focus();
   }
 
@@ -7423,6 +7490,68 @@
     document.getElementById('task-time-note').value = '';
     setBillableToggle(document.getElementById('task-time-billable'), true);
     setOvertimeToggle(document.getElementById('task-time-overtime'), false);
+  });
+
+  // Time against a step with people is logged once and saved as one entry per person ticked in
+  // the "For" row (asked: time for "each member included" adds to the project total). 3 people
+  // at 1h = 3h, person-hours, decided with the user. Each entry's `author` is the person the
+  // time is for; `loggedBy` records who entered it when that's someone else. Editing an existing
+  // entry stays one entry, so the row hides in edit mode.
+  var timePeopleFor = null;      // checklist item id the "For" row was filled from
+  var timePeopleSelected = [];   // who a new entry is for
+  function timePeopleItem() {
+    if (timeEntryEditIndex !== null) return null;
+    var id = checklistItemIdForNote(document.getElementById('task-time-note').value.trim());
+    var item = id ? currentChecklist.find(function (x) { return x.id === id; }) : null;
+    return item && stepPeople(item).length ? item : null;
+  }
+  function syncTimePeople() {
+    var wrap = document.getElementById('task-time-people');
+    var item = timePeopleItem();
+    if (!item) {
+      timePeopleFor = null; timePeopleSelected = [];
+      wrap.innerHTML = '';
+      wrap.classList.add('hidden'); wrap.classList.remove('flex');
+      return;
+    }
+    var people = stepPeople(item);
+    if (timePeopleFor !== item.id) { timePeopleFor = item.id; timePeopleSelected = people.slice(); }
+    var shown = people.concat(timePeopleSelected.filter(function (n) { return people.indexOf(n) === -1; }));
+    var others = teamRoster().filter(function (n) { return shown.indexOf(n) === -1; });
+    var minutes = Math.round((parseFloat(document.getElementById('task-time-hours').value) || 0) * 60);
+    var count = timePeopleSelected.length;
+    var hint = !count ? 'Nobody ticked, so it logs for you'
+      : minutes ? formatDuration(minutes) + (count > 1 ? ' each · ' + formatDuration(minutes * count) + ' total' : '')
+      : (count > 1 ? 'Logged for each person ticked' : '');
+    wrap.innerHTML = '<span class="font-semibold text-zinc-500 dark:text-zinc-400 mr-0.5">For</span>' +
+      shown.map(function (n) {
+        var on = timePeopleSelected.indexOf(n) !== -1;
+        return '<button type="button" class="time-person-toggle inline-flex items-center gap-1 pl-0.5 pr-2 py-0.5 rounded-full border ' +
+          (on ? 'border-brand-300 bg-brand-50 text-brand-700 dark:border-brand-500/40 dark:bg-brand-500/15 dark:text-brand-300'
+              : 'border-zinc-200 text-zinc-400 line-through dark:border-zinc-700 dark:text-zinc-500') +
+          '" data-name="' + escapeHtml(n) + '" aria-pressed="' + (on ? 'true' : 'false') + '">' + avatarHtml(n, 'w-4 h-4 shrink-0', 'text-[8px]') + escapeHtml(n) + '</button>';
+      }).join('') +
+      (others.length ? '<select class="time-person-add rounded-full border border-dashed border-zinc-300 dark:border-zinc-600 bg-transparent text-zinc-500 dark:text-zinc-400 pl-2 pr-1 py-0.5 focus:outline-none focus:ring-2 focus:ring-brand-500/40" aria-label="Also log for">' +
+        '<option value="">+ Add</option>' + others.map(function (n) { return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('') + '</select>' : '') +
+      (hint ? '<span class="ml-1 text-zinc-400 dark:text-zinc-500">' + escapeHtml(hint) + '</span>' : '');
+    wrap.classList.remove('hidden'); wrap.classList.add('flex');
+  }
+  document.getElementById('task-time-people').addEventListener('click', function (e) {
+    var b = e.target.closest('.time-person-toggle');
+    if (!b) return;
+    var n = b.getAttribute('data-name');
+    var at = timePeopleSelected.indexOf(n);
+    if (at === -1) timePeopleSelected.push(n); else timePeopleSelected.splice(at, 1);
+    syncTimePeople();
+  });
+  document.getElementById('task-time-people').addEventListener('change', function (e) {
+    if (!e.target.classList.contains('time-person-add') || !e.target.value) return;
+    if (timePeopleSelected.indexOf(e.target.value) === -1) timePeopleSelected.push(e.target.value);
+    syncTimePeople();
+  });
+  ['input', 'change'].forEach(function (ev) {
+    document.getElementById('task-time-note').addEventListener(ev, syncTimePeople);
+    document.getElementById('task-time-hours').addEventListener(ev, syncTimePeople);
   });
 
   function commitTimeEntry(minutes, note, billable, overtime, checklistItemId) {
@@ -7439,13 +7568,22 @@
       existing.checklistItemId = checklistItemId || null;
     } else {
       var user = auth.currentUser;
-      currentTimeEntries.push({ minutes: minutes, note: sentenceCase(note), billable: billable, overtime: !!overtime, checklistItemId: checklistItemId || null, date: new Date().toISOString(), author: user ? (user.displayName || user.email) : null });
+      var me = user ? (user.displayName || user.email) : null;
+      var forPeople = checklistItemId && timePeopleFor === checklistItemId && timePeopleSelected.length ? timePeopleSelected.slice() : [me];
+      var at = new Date().toISOString();
+      forPeople.forEach(function (who) {
+        var entry = { minutes: minutes, note: sentenceCase(note), billable: billable, overtime: !!overtime, checklistItemId: checklistItemId || null, date: at, author: who };
+        if (who !== me && me) entry.loggedBy = me;
+        currentTimeEntries.push(entry);
+      });
     }
     hoursEl.value = '';
     noteEl.value = '';
     setBillableToggle(billableEl, true);
     setOvertimeToggle(overtimeEl, false);
     exitTimeEntryEditMode();
+    timePeopleFor = null; timePeopleSelected = [];
+    syncTimePeople();
     renderTimeEntriesEditor(currentTimeEntries, document.getElementById('task-time-log'), document.getElementById('task-time-total'));
     renderChecklistEditor();
   }
@@ -8550,11 +8688,11 @@
       var hit = list.find(function (it) { return (it.text || '').trim().toLowerCase() === r.a.toLowerCase(); });
       if (hit) {
         if (r.b && hit.due !== r.b) { hit.due = r.b; delete hit.dueTbd; changed++; }
-        if (r.c && hit.assignee !== r.c) { hit.assignee = r.c; changed++; }
+        if (r.c && stepPeople(hit)[0] !== r.c) { setStepPeople(hit, [r.c].concat(stepPeople(hit))); changed++; }
       } else {
         var item = { id: uid(), text: r.a, done: false };
         if (r.b) item.due = r.b;
-        if (r.c) item.assignee = r.c;
+        if (r.c) setStepPeople(item, [r.c]);
         list.push(item); changed++;
       }
     });
@@ -10726,8 +10864,9 @@
         push(from, { kind: 'deadline', title: t.name, project: t.project, who: t.assignee, taskId: t.id, late: true, lateFrom: t.deadline });
       }
       (t.checklist || []).forEach(function (it) {
-        var who = it.assignee || t.assignee;
-        if (mine && who !== me) return;
+        var stepWho = stepPeople(it);
+        var who = stepWho.length ? stepPeopleLabel(it) : t.assignee;
+        if (mine && (stepWho.length ? stepWho.indexOf(me) === -1 : t.assignee !== me)) return;
         if (carryLate && it.due && it.due < from && !it.done && t.status !== 'Done') {
           push(from, { kind: 'step', title: it.text, project: t.project, who: who, taskId: t.id, late: true, lateFrom: it.due });
           return;
@@ -10993,7 +11132,7 @@
       var owns = t.assignee === name;
       var involved = Array.isArray(t.involved) && t.involved.indexOf(name) !== -1;
       var steps = (t.checklist || []).filter(function (it) {
-        return it && !it.done && (it.assignee ? it.assignee === name : owns);
+        return it && !it.done && (stepPeople(it).length ? stepPeople(it).indexOf(name) !== -1 : owns);
       });
       if (!owns && !involved && !steps.length) return;
       var p = t.project || 'No project';
@@ -11661,7 +11800,7 @@
       checklistSource.forEach(function (t) {
         if (t.assignee === name) return;
         (t.checklist || []).forEach(function (it) {
-          if (!it || it.done || it.assignee !== name) return;
+          if (!it || it.done || stepPeople(it).indexOf(name) === -1) return;
           if (applySearch && q && String(it.text || '').toLowerCase().indexOf(q) === -1 && !taskMatchesSearch(t, q)) return;
           out.push({ task: t, item: it });
         });
@@ -11672,8 +11811,11 @@
     // assigning it. Same teamspace test as withWork: the step's task has to be in this teamspace.
     filtered.forEach(function (t) {
       (t.checklist || []).forEach(function (it) {
-        if (it && !it.done && it.assignee && it.assignee !== t.assignee && withWork.indexOf(it.assignee) === -1 &&
-            (!filters.assignees.length || filters.assignees.indexOf(it.assignee) !== -1)) withWork.push(it.assignee);
+        if (!it || it.done) return;
+        stepPeople(it).forEach(function (who) {
+          if (who !== t.assignee && withWork.indexOf(who) === -1 &&
+              (!filters.assignees.length || filters.assignees.indexOf(who) !== -1)) withWork.push(who);
+        });
       });
     });
     // ...but only while nothing is actively narrowing the board. Search/priority/project are
@@ -13104,7 +13246,7 @@
           '<span class="min-w-0 flex-1">' +
             '<span class="flex items-baseline gap-2">' +
               '<span class="min-w-0 truncate text-sm text-zinc-600 dark:text-zinc-300 group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(s.item.text || '') + '</span>' +
-              '<span class="shrink-0 ml-auto text-xs text-zinc-500 dark:text-zinc-400 truncate max-w-[9rem]">' + escapeHtml(s.item.assignee || s.t.assignee || 'Unassigned') + '</span>' +
+              '<span class="shrink-0 ml-auto text-xs text-zinc-500 dark:text-zinc-400 truncate max-w-[9rem]">' + escapeHtml(stepPeopleLabel(s.item) || s.t.assignee || 'Unassigned') + '</span>' +
             '</span>' +
             '<span class="hidden sm:block text-xs text-zinc-400 dark:text-zinc-500 break-words">Step in ' + escapeHtml(s.t.name) + ' · ' + projectNameHtml(s.t.project) + '</span>' +
           '</span>' +
@@ -13696,7 +13838,7 @@
           return '<div class="flex items-center gap-2 pl-4 text-xs">' +
             '<span class="w-1.5 h-1.5 rotate-45 shrink-0 ' + ganttItemDiamondColor(t, it) + '"></span>' +
             '<span class="min-w-0 truncate text-zinc-600 dark:text-zinc-300">' + escapeHtml(it.text || '') + '</span>' +
-            '<span class="shrink-0 text-zinc-400 dark:text-zinc-500">' + (it.assignee ? escapeHtml(it.assignee) + ' · ' : '') +
+            '<span class="shrink-0 text-zinc-400 dark:text-zinc-500">' + (stepPeople(it).length ? escapeHtml(stepPeopleLabel(it)) + ' · ' : '') +
               '<span class="' + (itLate ? 'text-rose-600 dark:text-rose-400 font-semibold' : '') + '">' + escapeHtml(when) + (itLate ? ' (overdue)' : '') + '</span></span>' +
           '</div>';
         }).join('') +
@@ -14043,6 +14185,11 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-07a', date: '2026-10-07', items: [
+      { type: 'new', title: 'Several people on a checklist step', text: "Open a step's pencil and add everyone involved, like the whole team on a Briefing. Each of them is told and sees the step on their People card." },
+      { type: 'new', title: "Log a step's time for everyone at once", text: "In Time Tracking, pick a step that has people and they're ticked under \"For\". Log 1 hour and everyone ticked gets 1 hour, so a 3-person briefing adds 3 hours to the project. Untick anyone who wasn't there." },
+      { type: 'fixed', title: 'Checklist notifications from the task window', text: "Assigning someone a step, or ticking off a step someone else owns, now sends its notification when you save the task. It didn't before." }
+    ] },
     { id: '2026-10-06zc', date: '2026-10-06', items: [
       { type: 'new', title: '@mentions on your phone', text: "In the phone app, type @ in a chat message or a comment to tag a teammate, just like on desktop." }
     ] },
@@ -15295,6 +15442,7 @@
       if (item && item.due && parseDate(item.due)) clean.due = String(item.due);
       else if (item && item.dueTbd === true) clean.dueTbd = true;
       if (item && typeof item.assignee === 'string' && item.assignee) clean.assignee = item.assignee.slice(0, 100);
+      if (item && Array.isArray(item.assignees)) setStepPeople(clean, item.assignees.filter(function (n) { return typeof n === 'string'; }).map(function (n) { return n.slice(0, 100); }).slice(0, 20));
       return clean;
     }).filter(function (item) { return item.text; });
   }
@@ -15328,7 +15476,8 @@
         overtime: !!(e && e.overtime),
         checklistItemId: (e && e.checklistItemId) ? String(e.checklistItemId) : null,
         date: date,
-        author: (e && e.author) ? String(e.author) : null
+        author: (e && e.author) ? String(e.author) : null,
+        loggedBy: (e && e.loggedBy) ? String(e.loggedBy) : null
       };
     }).filter(function (e) { return e.minutes > 0; });
   }
@@ -15977,7 +16126,7 @@
       mIcon('chev', 'm-chev') + '</button>';
   }
   function mStepRow(t, it, inTask) {
-    var who = it.assignee || '';
+    var who = stepPeopleLabel(it);
     var due = it.done ? { text: it.due ? formatShortDate(it.due) : '', cls: '' } : it.due ? mDue(it.due) : { text: it.dueTbd ? 'TBD' : '', cls: '' };
     var sub = inTask
       ? (who ? escapeHtml(who) : '') + (it.link ? (who ? ' · ' : '') + '<a href="' + escapeHtml(it.link) + '" target="_blank" rel="noopener" style="color:var(--m-brand);font-weight:600">' + escapeHtml(linkChipLabel(it.link)) + '</a>' : '')
@@ -16002,7 +16151,7 @@
       if (t.status === 'Done') return;
       (t.checklist || []).forEach(function (it) {
         if (!it || it.done || !it.due) return;
-        if ((it.assignee || t.assignee) !== me) return;
+        if (stepPeople(it).length ? stepPeople(it).indexOf(me) === -1 : t.assignee !== me) return;
         var n = daysUntil(it.due);
         if (n === null || n > days) return;
         out.push({ t: t, it: it, n: n });
@@ -16728,7 +16877,7 @@
     var steps = [];
     open.forEach(function (t) {
       if (t.assignee === name) return;
-      (t.checklist || []).forEach(function (it) { if (it && !it.done && it.assignee === name) steps.push({ t: t, it: it }); });
+      (t.checklist || []).forEach(function (it) { if (it && !it.done && stepPeople(it).indexOf(name) !== -1) steps.push({ t: t, it: it }); });
     });
     steps.sort(function (a, b) { return (a.it.due || '9999') < (b.it.due || '9999') ? -1 : 1; });
     var away = mAwayRows(30).filter(function (r) { return r.name === name; });
@@ -17465,7 +17614,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-06T16:01:53Z";
+  var CURRENT_BUILD_VERSION = "2026-10-07T03:21:26Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
