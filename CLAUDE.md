@@ -3905,9 +3905,24 @@ project as well." Two decisions made with the user: **person-hours** (3 people a
   `syncTimePeople`) appears with those people ticked, a "+ Add" for anyone else, and "1h each · 3h
   total". Logging saves **one entry per ticked person**: `author` = who the time is for, `loggedBy`
   = who entered it when that's someone else (shown in the avatar's tooltip in the log). Nobody
-  ticked logs for you. Editing an existing entry stays one entry, so the row hides in edit mode.
-  Project, task and billable totals already summed every entry, so nothing else had to change for
-  the hours to count.
+  ticked logs for you. Project, task and billable totals already summed every entry, so nothing
+  else had to change for the hours to count.
+- **Entries logged together are ONE row** (`timeEntryGroups`), asked: "If multiple people are
+  involved in briefing, then should time tracking reflect it?". Grouped by identical `date`
+  timestamp + minutes + note + step + billable + overtime; stored data is unchanged (still one
+  entry per person). The row: stacked avatars in a fixed `w-10` slot (so the duration column lines
+  up), the per-person duration, and "3 people · 3h" before the date; everyone named on hover.
+  - **Editing a row edits the group**: the "For" row appears with the row's people ticked, plus
+    the step's people unticked. Ticking adds an entry for that person with the row's original
+    timestamp (so it stays one row, `loggedBy` = you); unticking removes theirs; nobody ticked
+    leaves the people as they were. This is how an entry from before steps had people gains them.
+  - **Removing a group confirms with the count** ("Remove this time for all 3 people?") and says
+    how to remove one person instead.
+  - Never grouped: entries with no `date` (old imports), and a second entry for someone already
+    in the group (an edit keeps one entry per person, so grouping them would merge their time).
+  - **Old single entries are NOT converted automatically** (asked "can all past entries be updated
+    to the new UI?"): nothing records who else was there, and adding people would add hours
+    nobody logged. They show in the new layout as a group of one; the pencil adds people.
 - **People can be set on the add row too** (`#task-checklist-people-btn`, `checklistAddPeople`),
   asked once several items could be added at once ("add people in checklist is not done here?").
   **One fixed-size button, not a chip per person**: chips (the first version) grew with every name,

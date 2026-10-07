@@ -6663,6 +6663,7 @@
   // "Also involved" names (display names, like `assignee`). Never contains the assignee.
   var currentInvolved = [];
   var timeEntryEditIndex = null;
+  var timeEntryEditGroup = null;   // indices of the entries being edited together (see timeEntryGroups)
   // Set from openTaskModal() (carrying over an existing task's value) and updated live if the
   // status dropdown gets flipped to Review while the modal is open (see the #task-status change
   // listener below) -- read at save time rather than prompted for then, since promptReviewAudience
@@ -7574,29 +7575,64 @@
       : '<p class="text-xs text-zinc-400 dark:text-zinc-500">No comments yet.</p>';
   }
 
+  // Entries logged together for several people (one each, see commitTimeEntry) share the exact
+  // same `date` timestamp, minutes, note and step, so they're shown, edited and removed as ONE
+  // row: a three-person briefing is one line, "30m · 3 people · 1h 30m", not three identical ones
+  // (asked: "if multiple people are involved in briefing, should time tracking reflect it?").
+  // Totals still count every entry. A single entry is a group of one and looks as before.
+  function timeEntryGroups(list) {
+    var groups = [], byKey = {};
+    list.forEach(function (e, i) {
+      // No timestamp (old imports) never groups; nor does a second entry for someone already in
+      // the group, since editing a group keeps one entry per person.
+      var key = e.date ? [e.date, e.minutes, e.note || '', e.checklistItemId || '', !!e.billable, !!e.overtime].join('|') : null;
+      var g = key && byKey[key];
+      if (g && g.authors.indexOf(e.author || '') === -1) { g.idx.push(i); g.authors.push(e.author || ''); return; }
+      g = { idx: [i], e: e, authors: [e.author || ''] };
+      if (key && !byKey[key]) byKey[key] = g;
+      groups.push(g);
+    });
+    return groups;
+  }
+  function timeGroupAvatarsHtml(people) {
+    var shown = people.length > 3 ? people.slice(0, 2) : people;
+    return shown.map(function (n) {
+      return '<span class="rounded-full ring-2 ring-white dark:ring-zinc-800">' + avatarHtml(n || '', 'w-4 h-4', 'text-[8px]') + '</span>';
+    }).join('') +
+      (people.length > 3 ? '<span class="w-4 h-4 rounded-full ring-2 ring-white dark:ring-zinc-800 bg-zinc-200 dark:bg-zinc-600 text-[8px] font-bold text-zinc-600 dark:text-zinc-200 flex items-center justify-center">+' + (people.length - 2) + '</span>' : '');
+  }
+
   function renderTimeEntriesEditor(entries, logEl, totalEl) {
     var list = entries || [];
-    // One line per entry. The per-row Billable pill is only drawn when entries are MIXED -- when
-    // all of them are billable the total says "all billable" once instead of on every row.
+    // One line per entry, or per group of entries logged together (timeEntryGroups). The per-row
+    // Billable pill is only drawn when entries are MIXED -- when all of them are billable the total
+    // says "all billable" once instead of on every row.
     var allBillable = list.length > 0 && list.every(function (e) { return e.billable; });
     logEl.innerHTML = list.length
-      ? list.map(function (e, i) {
+      ? timeEntryGroups(list).map(function (g) {
+          var e = g.e;
+          var i = g.idx.join(',');
+          var people = g.idx.map(function (k) { return list[k].author || ''; });
+          var loggers = g.idx.map(function (k) { return list[k].loggedBy; }).filter(Boolean);
+          var who = people.map(function (n) { return n || 'Unknown'; }).join(', ') + (loggers.length ? ' · logged by ' + loggers[0] : '');
           var linkedItem = e.checklistItemId ? currentChecklist.find(function (item) { return item.id === e.checklistItemId; }) : null;
           var note = (e.note || '').trim();
           var noteIsItem = linkedItem && note.toLowerCase() === String(linkedItem.text).trim().toLowerCase();
           var label = linkedItem ? (linkedItem.text + (note && !noteIsItem ? ' — ' + note : '')) : note;
+          // Fixed-width avatar slot, so the duration column starts at the same x on every row.
           return '<div class="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-700/50">' +
-            '<span class="tooltip-top shrink-0 inline-flex" data-tooltip="' + escapeHtml((e.author || 'Unknown') + (e.loggedBy ? ' · logged by ' + e.loggedBy : '')) + '">' + avatarHtml(e.author || '', 'w-4 h-4 shrink-0', 'text-[9px]') + '</span>' +
+            '<span class="tooltip-top shrink-0 w-10 flex -space-x-1" data-tooltip="' + escapeHtml(who) + '">' + timeGroupAvatarsHtml(people) + '</span>' +
             '<span class="shrink-0 w-14 text-sm font-semibold text-zinc-700 dark:text-zinc-200">' + formatDuration(e.minutes) + '</span>' +
             (label
               ? '<span class="min-w-0 flex-1 truncate text-sm text-zinc-600 dark:text-zinc-300" title="' + escapeHtml(label) + '">' + escapeHtml(label) + '</span>'
               : '<span class="min-w-0 flex-1 truncate text-sm text-zinc-400 dark:text-zinc-500">General</span>') +
+            (people.length > 1 ? '<span class="shrink-0 text-xs text-zinc-500 dark:text-zinc-400">' + people.length + ' people · ' + formatDuration(e.minutes * people.length) + '</span>' : '') +
             (e.billable && !allBillable ? '<span class="shrink-0 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">Billable</span>' : '') +
             (e.overtime ? '<span class="shrink-0 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-400">Overtime</span>' : '') +
             '<span class="shrink-0 w-12 text-right text-xs text-zinc-400 dark:text-zinc-500">' + formatShortDate(localDateOf(e.date)) + '</span>' +
             '<div class="flex items-center gap-0.5 shrink-0">' +
-              '<button type="button" class="time-entry-edit p-1 text-zinc-300 dark:text-zinc-600 hover:text-brand-600 dark:hover:text-brand-400" data-i="' + i + '" aria-label="Edit time entry">' + svgIcon('pencil', 'w-3 h-3') + '</button>' +
-              '<button type="button" class="time-entry-remove p-1 text-zinc-300 dark:text-zinc-600 hover:text-rose-500 dark:hover:text-rose-400" data-i="' + i + '" aria-label="Remove time entry">' + svgIcon('x', 'w-3 h-3') + '</button>' +
+              '<button type="button" class="time-entry-edit p-1 text-zinc-300 dark:text-zinc-600 hover:text-brand-600 dark:hover:text-brand-400" data-i="' + i + '" aria-label="' + (people.length > 1 ? 'Edit this time for ' + people.length + ' people' : 'Edit time entry') + '">' + svgIcon('pencil', 'w-3 h-3') + '</button>' +
+              '<button type="button" class="time-entry-remove p-1 text-zinc-300 dark:text-zinc-600 hover:text-rose-500 dark:hover:text-rose-400" data-i="' + i + '" aria-label="' + (people.length > 1 ? 'Remove this time for ' + people.length + ' people' : 'Remove time entry') + '">' + svgIcon('x', 'w-3 h-3') + '</button>' +
             '</div>' +
           '</div>';
         }).join('')
@@ -7670,14 +7706,22 @@
 
   function exitTimeEntryEditMode() {
     timeEntryEditIndex = null;
+    timeEntryEditGroup = null;
     document.getElementById('task-time-add-btn').textContent = 'Log';
     document.getElementById('task-time-cancel-edit-btn').classList.add('hidden');
   }
 
-  function enterTimeEntryEditMode(idx) {
-    var entry = currentTimeEntries[idx];
+  // `idxs`: the entries of one row (a group logged together, or a single entry). The "For" row
+  // shows with their people ticked, so people can be added to or removed from time already logged
+  // -- including an old entry that was only ever logged for one person.
+  function enterTimeEntryEditMode(idxs) {
+    idxs = [].concat(idxs);
+    var entry = currentTimeEntries[idxs[0]];
     if (!entry) return;
-    timeEntryEditIndex = idx;
+    timeEntryEditIndex = idxs[0];
+    timeEntryEditGroup = idxs;
+    timePeopleFor = 'edit';
+    timePeopleSelected = idxs.map(function (k) { return currentTimeEntries[k].author; }).filter(Boolean);
     document.getElementById('task-time-hours').value = entry.minutes / 60;
     // Falls back to the linked item's own text when there's no separate note -- so re-opening
     // an entry that was logged by picking a checklist item (and nothing else) doesn't look like
@@ -7694,6 +7738,8 @@
 
   document.getElementById('task-time-cancel-edit-btn').addEventListener('click', function () {
     exitTimeEntryEditMode();
+    timePeopleFor = null; timePeopleSelected = [];
+    syncTimePeople();
     document.getElementById('task-time-hours').value = '';
     document.getElementById('task-time-note').value = '';
     setBillableToggle(document.getElementById('task-time-billable'), true);
@@ -7703,8 +7749,8 @@
   // Time against a step with people is logged once and saved as one entry per person ticked in
   // the "For" row (asked: time for "each member included" adds to the project total). 3 people
   // at 1h = 3h, person-hours, decided with the user. Each entry's `author` is the person the
-  // time is for; `loggedBy` records who entered it when that's someone else. Editing an existing
-  // entry stays one entry, so the row hides in edit mode.
+  // time is for; `loggedBy` records who entered it when that's someone else. Editing a row shows
+  // the same "For" row with that row's people ticked (timeEntryEditGroup).
   var timePeopleFor = null;      // checklist item id the "For" row was filled from
   var timePeopleSelected = [];   // who a new entry is for
   function timePeopleItem() {
@@ -7715,20 +7761,30 @@
   }
   function syncTimePeople() {
     var wrap = document.getElementById('task-time-people');
-    var item = timePeopleItem();
-    if (!item) {
+    var editing = timeEntryEditIndex !== null && !!timeEntryEditGroup;
+    var item = editing ? null : timePeopleItem();
+    if (!editing && !item) {
       timePeopleFor = null; timePeopleSelected = [];
       wrap.innerHTML = '';
       wrap.classList.add('hidden'); wrap.classList.remove('flex');
       return;
     }
-    var people = stepPeople(item);
-    if (timePeopleFor !== item.id) { timePeopleFor = item.id; timePeopleSelected = people.slice(); }
+    var people;
+    if (editing) {
+      // The row's own people, plus the step's people (unticked) if it's logged against one.
+      var editItemId = checklistItemIdForNote(document.getElementById('task-time-note').value.trim());
+      var editItem = editItemId ? currentChecklist.find(function (x) { return x.id === editItemId; }) : null;
+      people = timeEntryEditGroup.map(function (k) { return currentTimeEntries[k] && currentTimeEntries[k].author; }).filter(Boolean);
+      stepPeople(editItem).forEach(function (n) { if (people.indexOf(n) === -1) people.push(n); });
+    } else {
+      people = stepPeople(item);
+      if (timePeopleFor !== item.id) { timePeopleFor = item.id; timePeopleSelected = people.slice(); }
+    }
     var shown = people.concat(timePeopleSelected.filter(function (n) { return people.indexOf(n) === -1; }));
     var others = teamRoster().filter(function (n) { return shown.indexOf(n) === -1; });
     var minutes = Math.round((parseFloat(document.getElementById('task-time-hours').value) || 0) * 60);
     var count = timePeopleSelected.length;
-    var hint = !count ? 'Nobody ticked, so it logs for you'
+    var hint = !count ? (editing ? 'Nobody ticked, so it stays as it was' : 'Nobody ticked, so it logs for you')
       : minutes ? formatDuration(minutes) + (count > 1 ? ' each · ' + formatDuration(minutes * count) + ' total' : '')
       : (count > 1 ? 'Logged for each person ticked' : '');
     wrap.innerHTML = '<span class="font-semibold text-zinc-500 dark:text-zinc-400 mr-0.5">For</span>' +
@@ -7768,12 +7824,27 @@
     var billableEl = document.getElementById('task-time-billable');
     var overtimeEl = document.getElementById('task-time-overtime');
     if (timeEntryEditIndex !== null) {
-      var existing = currentTimeEntries[timeEntryEditIndex];
-      existing.minutes = minutes;
-      existing.note = sentenceCase(note);
-      existing.billable = billable;
-      existing.overtime = !!overtime;
-      existing.checklistItemId = checklistItemId || null;
+      // Rebuild the row's entries: one per ticked person, keeping each existing person's entry
+      // (and who logged it), adding entries for newly ticked people, dropping unticked ones. New
+      // entries share the row's timestamp so it stays one row. Nobody ticked keeps the people.
+      var group = (timeEntryEditGroup || [timeEntryEditIndex]).slice().sort(function (a, b) { return a - b; });
+      var first = currentTimeEntries[group[0]];
+      var editMe = auth.currentUser ? (auth.currentUser.displayName || auth.currentUser.email) : null;
+      var byAuthor = {};
+      group.forEach(function (k) { var x = currentTimeEntries[k]; if (x) byAuthor[x.author || ''] = x; });
+      var people = timePeopleSelected.length ? timePeopleSelected.slice() : group.map(function (k) { return currentTimeEntries[k].author; });
+      var rebuilt = people.map(function (who) {
+        var x = byAuthor[who || ''] ? Object.assign({}, byAuthor[who || '']) : { date: first.date || new Date().toISOString(), author: who };
+        if (!byAuthor[who || ''] && who !== editMe && editMe) x.loggedBy = editMe;
+        x.minutes = minutes;
+        x.note = sentenceCase(note);
+        x.billable = billable;
+        x.overtime = !!overtime;
+        x.checklistItemId = checklistItemId || null;
+        return x;
+      });
+      for (var g = group.length - 1; g >= 0; g--) currentTimeEntries.splice(group[g], 1);
+      Array.prototype.splice.apply(currentTimeEntries, [group[0], 0].concat(rebuilt));
     } else {
       var user = auth.currentUser;
       var me = user ? (user.displayName || user.email) : null;
@@ -7823,19 +7894,25 @@
   });
 
   document.getElementById('task-time-log').addEventListener('click', function (e) {
+    var rowIdx = function (btn) { return btn.dataset.i.split(',').map(function (x) { return parseInt(x, 10); }); };
     var editBtn = e.target.closest('.time-entry-edit');
     if (editBtn) {
-      enterTimeEntryEditMode(parseInt(editBtn.dataset.i, 10));
+      enterTimeEntryEditMode(rowIdx(editBtn));
       return;
     }
     var removeBtn = e.target.closest('.time-entry-remove');
     if (removeBtn) {
-      var idx = parseInt(removeBtn.dataset.i, 10);
-      var entry = currentTimeEntries[idx];
+      var idxs = rowIdx(removeBtn).sort(function (a, b) { return b - a; });
+      var entry = currentTimeEntries[idxs[0]];
       if (!entry) return;
-      openConfirm('Remove this time entry?', formatDuration(entry.minutes) + ' will be removed once you save this task.', function () {
-        currentTimeEntries.splice(idx, 1);
-        if (timeEntryEditIndex === idx) exitTimeEntryEditMode();
+      // A group asks about everyone in it, so nobody's hours disappear without saying so.
+      var title = idxs.length > 1 ? 'Remove this time for all ' + idxs.length + ' people?' : 'Remove this time entry?';
+      var body = idxs.length > 1
+        ? formatDuration(entry.minutes) + ' each, ' + formatDuration(entry.minutes * idxs.length) + ' in all, will be removed once you save this task. To remove one person, edit the row and untick them.'
+        : formatDuration(entry.minutes) + ' will be removed once you save this task.';
+      openConfirm(title, body, function () {
+        idxs.forEach(function (k) { currentTimeEntries.splice(k, 1); });
+        if (timeEntryEditIndex !== null) { exitTimeEntryEditMode(); timePeopleFor = null; timePeopleSelected = []; syncTimePeople(); }
         renderTimeEntriesEditor(currentTimeEntries, document.getElementById('task-time-log'), document.getElementById('task-time-total'));
         renderChecklistEditor();
       });
@@ -14393,6 +14470,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-07d', date: '2026-10-07', items: [
+      { type: 'improved', title: 'Time logged for several people is one row', text: "Log a briefing for 3 people and Time Tracking shows one row, \"1h · 3 people · 3h\", with everyone named on hover. Click its pencil to add or remove people, including on time logged before steps had people." }
+    ] },
     { id: '2026-10-07c', date: '2026-10-07', items: [
       { type: 'improved', title: 'People on new checklist items', text: "Click \"+ People\" on the add row and tick who's on the items before you add them. They go on every item you add in that go, and each person gets one notification listing their items." }
     ] },
@@ -17829,7 +17909,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-07T03:59:17Z";
+  var CURRENT_BUILD_VERSION = "2026-10-07T04:16:44Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
