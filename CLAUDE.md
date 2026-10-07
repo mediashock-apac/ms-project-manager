@@ -118,7 +118,16 @@ syncronisingly and not in separately"*, then *"make this a rule"*. For every cha
 
 ## Commands
 
-There is no build/lint/test tooling — it's static HTML/JS served as-is. Local development uses the
+**Browser tests: `node tests/run.mjs`** (see `tests/README.md`). 15 suites, ~210 checks, each loading
+the real `index.html` in Chromium with Firebase replaced by `tests/fbstub.js`. They run on every push to
+`main` and every weekday at 7am Singapore (`.github/workflows/tests.yml`); a failure is a red X plus
+GitHub's email. Asked for directly: "Constantly run checks as I did today to make sure everything is
+tight and functioning as it should be." **Change or add a suite in the same commit as the feature**, and
+when a New Updates item gets a `tourTarget`, add its `cl-<id>` to every suite's `toursSeen` seed.
+Locally, don't `npm install` into this Shared Drive folder; point `NODE_PATH` at a `node_modules` with
+Playwright 1.63.
+
+There is no build or lint tooling; it's static HTML/JS served as-is. Local development uses the
 Firebase Local Emulator Suite (Auth + Firestore + Storage):
 
 ```
@@ -4204,6 +4213,19 @@ Google OAuth restricted via `hd` custom param + client-side `isAllowedEmail` che
 Firestore-rules-level `isMediashock()` check (the real boundary — see rules file comments).
 `onAuthStateChanged` drives `startListeners`/`stopListeners` and toggles the whole
 auth-gate/app-root visibility.
+
+## Daily health check (the current routine, 2026-10-07)
+
+**"Project Manager daily health check"** (`https://claude.ai/code/routines/trig_01J7fz1tdrA7HHs2nfj2JRQn`,
+cron `30 0 * * 1-5` = 8:30am Singapore, Mon-Fri, Sonnet 5.5). Asked: "Constantly run checks as I did
+today to make sure everything is tight and functioning as it should be. Keep looking out for ways to
+improve the PM tool." Each run: syntax check, `node tests/run.mjs` (or, if it can't install Playwright,
+the latest result of the Tests workflow, which also runs at 7am), a review of the last 3 days' commits
+against the standing rules at the top of this file, and 1-3 improvement ideas that add no work or
+clutter. Report-only: one short push notification in plain language, no code changes, no issues (the
+GitHub connector can't create them; see below). Only the push-notification connector is attached.
+Implementing anything from a report is a normal interactive request ("fix the first problem from
+today's check"). The two older routines below are disabled and point at the pre-move repo addresses.
 
 ## Automated UI/UX optimization reviews
 

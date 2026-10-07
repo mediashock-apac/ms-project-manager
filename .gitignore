@@ -1,1 +1,4 @@
 graphify-out/
+tests/.out/
+tests/node_modules/
+tests/package-lock.json

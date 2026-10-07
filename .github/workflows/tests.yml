@@ -1,0 +1,46 @@
+name: Tests
+
+# Runs the browser tests in tests/ against index.html on every push. Like the syntax check, this
+# runs after the push, so it can't stop GitHub Pages from deploying; it makes a regression loud
+# (red X on the commit + GitHub's failure email) instead of silent.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'index.html'
+      - 'tests/**'
+      - '.github/workflows/tests.yml'
+  pull_request:
+    paths:
+      - 'index.html'
+      - 'tests/**'
+  workflow_dispatch:
+  schedule:
+    - cron: '0 23 * * 0-4'   # 7am Singapore, Mon-Fri: catches date-dependent breakage too
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install Playwright
+        working-directory: tests
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Syntax check
+        run: node scripts/check-syntax.mjs
+      - name: Browser tests
+        run: node tests/run.mjs
+      - name: Keep screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: tests/.out
+          retention-days: 7
