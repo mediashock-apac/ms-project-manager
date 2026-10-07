@@ -116,9 +116,18 @@ syncronisingly and not in separately"*, then *"make this a rule"*. For every cha
   the project doc follows a renamed project).
 - Before building, list what else reads or writes the same data and wire it in the same change.
 
+## Standing rule: learn from the reference tools
+
+Stated directly (2026-10-08): *"always take references from these tools when building new features and
+giving recommendations"* (TeamGantt, Monday, Notion and equivalents: Asana, Linear, Basecamp, ClickUp,
+Slack for chat). Before proposing or building, check how they handle it (search when unsure or when
+recency matters), name the source in the proposal and in the note here, then filter it through the two
+rules above and the clutter rule. Borrow the mechanic, not the product: things already built and removed
+here (dependencies, Gantt grouping, the progress column) stay out even when a reference tool has them.
+
 ## Commands
 
-**Browser tests: `node tests/run.mjs`** (see `tests/README.md`). 15 suites, ~210 checks, each loading
+**Browser tests: `node tests/run.mjs`** (see `tests/README.md`). 16 suites, ~245 checks, each loading
 the real `index.html` in Chromium with Firebase replaced by `tests/fbstub.js`. They run on every push to
 `main` and every weekday at 7am Singapore (`.github/workflows/tests.yml`); a failure is a red X plus
 GitHub's email. Asked for directly: "Constantly run checks as I did today to make sure everything is
@@ -2784,6 +2793,42 @@ Each item had to help at the moment of use and add nothing at rest.
   "Nothing here with the current filters" when filters/teamspace narrow the board; Projects (with an "Add a
   task" button), Archived, the bell ("You're all caught up."), task-window steps and comments.
 - Verified in Chromium (17 checks) plus the earlier suites.
+
+### Repeats, copied steps and review rounds (2026-10-08)
+
+Asked to compare against TeamGantt, Monday, Notion and the like ("what else can be learnt?"), then "go
+with your recommendations". Three things that remove work rather than add it:
+
+- **Repeating tasks** (Asana/Monday/Todoist "repeat when completed"). `task.repeat` = weekly |
+  fortnightly | monthly, set from a quiet select in the Deadline label row (`#task-repeat`; TBD clears and
+  disables it; a repeat needs a deadline). **No scheduler**: completing the task makes the next one, inside
+  `statusTransitionEffects` (5th arg `taskNow`), so the Board drag, the task window and the phone all do
+  it. The next task (`repeatNextTask`) copies name, project, owner, involved, priority, link and steps
+  (unticked, dates shifted by the same amount), status Pipeline, none of the history; its deadline is the
+  next date in the series that is today or later (finishing late never makes an overdue task); monthly
+  keeps the day (`repeatDay`: 31 Jan, 28 Feb, 31 Mar). **Written in the same batch as the completion**, so
+  the "project complete" celebration and the archive prompt never see the project as finished (and
+  `willFinishProject` is false for a repeat). The completed task's `repeat` becomes null, so moving it
+  out of Done and back makes nothing; the id is fixed per series (`<root>-r<n>`), so two people
+  completing it at once write one task. Toast with Undo (deletes the next, restores the repeat); logged as
+  `task_created`. No "assigned you" notifications for it. Loop icon on the Board row, "Repeats …" chip on
+  the phone.
+- **Copy steps from a similar task** (task templates, but any earlier task is the template, so nothing to
+  set up or maintain). Offered from the checklist's empty state only (`#checklist-copy-btn` opens
+  `#checklist-copy-pop`, on body like the people list). Same project first, then most recent; archived
+  tasks load on open; a repeating series is listed once. Steps keep their people and their distance from
+  this task's deadline (from the start date if there's no deadline yet); weekend dates move back to
+  Friday; links are not copied. Undo on the toast. People are notified on Save as for any step.
+- **Review rounds** (agency proofing tools). Every move into Review appends `{at, audience}` to
+  `task.reviewRounds` (in `statusTransitionEffects`); the client/internal answer is filed on the latest
+  round through `setReviewAudience` (Board drop, phone, the card label) or the task-window save, so
+  changing the label corrects a round instead of adding one. **Client and internal are counted apart.**
+  The label reads "Client review" for round 1 and "Client round 2" from the second
+  (`reviewAudienceLabel`; also the phone chip and WIP's stuck-in-review line); the task window shows
+  "Review rounds so far: 3 client, 1 internal" once either reaches 2. Counting starts now; older tasks
+  have no history.
+- Import keeps all the new fields. Verified in Chromium (`tests/repeat-copy-rounds.test.js`, 33 checks,
+  light and dark screenshots).
 
 ### Mobile app (phones, below 768px)
 

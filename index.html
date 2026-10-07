@@ -1736,6 +1736,7 @@
             </select>
             <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
           </div>
+          <p id="task-review-rounds" class="hidden mt-1 text-[11px] font-medium text-zinc-500 dark:text-zinc-400"></p>
         </div>
       </div>
 
@@ -1747,10 +1748,23 @@
         <div>
           <div class="flex items-center justify-between mb-1">
             <label class="block text-xs font-semibold text-zinc-600 dark:text-zinc-400">Deadline</label>
-            <label class="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 cursor-pointer">
-              <input type="checkbox" id="task-deadline-tbd" class="brand-checkbox w-3.5 h-3.5 rounded border border-zinc-300 dark:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500/40 cursor-pointer">
-              TBD
-            </label>
+            <div class="flex items-center gap-3">
+              <!-- Repeat (as in Asana/Monday/Todoist): completing the task makes the next one. A native
+                   select styled as quiet text in the label row, so it costs no extra line. -->
+              <label id="task-repeat-wrap" class="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 cursor-pointer">
+                <svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m17 2 4 4-4 4"></path><path d="M3 11v-1a4 4 0 0 1 4-4h14"></path><path d="m7 22-4-4 4-4"></path><path d="M21 13v1a4 4 0 0 1-4 4H3"></path></svg>
+                <select id="task-repeat" aria-label="Repeat" class="appearance-none bg-transparent text-[11px] font-medium cursor-pointer rounded focus:outline-none focus:ring-2 focus:ring-brand-500/40 disabled:cursor-not-allowed [color-scheme:light] dark:[color-scheme:dark]">
+                  <option value="">Doesn't repeat</option>
+                  <option value="weekly">Every week</option>
+                  <option value="fortnightly">Every 2 weeks</option>
+                  <option value="monthly">Every month</option>
+                </select>
+              </label>
+              <label class="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 cursor-pointer">
+                <input type="checkbox" id="task-deadline-tbd" class="brand-checkbox w-3.5 h-3.5 rounded border border-zinc-300 dark:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500/40 cursor-pointer">
+                TBD
+              </label>
+            </div>
           </div>
           <input id="task-deadline" type="date" class="w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400 [color-scheme:light] dark:[color-scheme:dark] disabled:opacity-50 disabled:cursor-not-allowed">
           <p class="field-error text-xs text-rose-500 dark:text-rose-400 mt-1 hidden"></p>
@@ -1914,6 +1928,13 @@
 <div id="checklist-people-pop" hidden class="fixed z-[60] w-64 bg-white dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 rounded-xl shadow-pop overflow-hidden panel-pop-in" role="dialog" aria-label="People on the new items">
   <div class="p-2 border-b border-zinc-100 dark:border-zinc-600"><input type="search" placeholder="Find someone…" aria-label="Find someone" class="w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-500 bg-white dark:bg-zinc-600 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-400 px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500/40"></div>
   <div class="checklist-people-list max-h-64 overflow-y-auto py-1"></div>
+</div>
+<!-- "Copy steps from a similar task": task templates the Asana/Monday way, except any earlier task
+     is the template. On <body> for the same reason as the people list above. -->
+<div id="checklist-copy-pop" hidden class="fixed z-[60] w-[22rem] max-w-[calc(100vw-1rem)] bg-white dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 rounded-xl shadow-pop overflow-hidden panel-pop-in" role="dialog" aria-label="Copy steps from a similar task">
+  <div class="p-2 border-b border-zinc-100 dark:border-zinc-600"><input type="search" placeholder="Find a task, project or step…" aria-label="Find a task" class="w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-500 bg-white dark:bg-zinc-600 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-400 px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500/40"></div>
+  <div class="checklist-copy-list max-h-72 overflow-y-auto py-1"></div>
+  <p class="px-3 py-2 border-t border-zinc-100 dark:border-zinc-600 text-[11px] text-zinc-500 dark:text-zinc-300">Steps keep their people and their distance from the deadline. Links stay with the old task.</p>
 </div>
 
 <div id="toast-container" class="fixed bottom-4 right-4 z-[60] flex flex-col gap-2 items-end"></div>
@@ -5943,7 +5964,8 @@
     checkTick: '<polyline points="20 6 9 17 4 12"></polyline>',
     checkTickDouble: '<path d="M18 6 7 17l-5-5"></path><path d="m22 10-7.5 7.5L13 16"></path>',
     chevronDown: '<polyline points="6 9 12 15 18 9"></polyline>',
-    moreHorizontal: '<circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle>'
+    moreHorizontal: '<circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle>',
+    repeat: '<path d="m17 2 4 4-4 4"></path><path d="M3 11v-1a4 4 0 0 1 4-4h14"></path><path d="m7 22-4-4 4-4"></path><path d="M21 13v1a4 4 0 0 1-4 4H3"></path>'
   };
 
   function svgIcon(name, cls) {
@@ -6238,6 +6260,9 @@
     if (oldTask.deadline !== data.deadline) changes.push('deadline ' + formatShortDate(oldTask.deadline) + ' → ' + formatShortDate(data.deadline));
     if (oldTask.startDate !== data.startDate) changes.push('start date ' + formatShortDate(oldTask.startDate) + ' → ' + formatShortDate(data.startDate));
     if ((oldTask.driveLink || '') !== (data.driveLink || '')) changes.push(data.driveLink ? 'Drive link updated' : 'Drive link removed');
+    // Completing a repeating task clears its repeat (the next task carries it); that isn't "stopped repeating".
+    var handedOn = data.status === 'Done' && oldTask.status !== 'Done' && !data.repeat;
+    if ((oldTask.repeat || null) !== (data.repeat || null) && !handedOn) changes.push(data.repeat ? 'repeats ' + repeatLabel(data.repeat) : 'stopped repeating');
     var oldChecklist = oldTask.checklist || [];
     var newChecklist = data.checklist || [];
     if (oldChecklist.length !== newChecklist.length) {
@@ -6857,7 +6882,7 @@
       name: task.name || '', project: task.project || '', assignee: task.assignee || '',
       involved: JSON.stringify(Array.isArray(task.involved) ? task.involved : []),
       priority: task.priority || '', status: task.status || '', startDate: task.startDate || '',
-      deadline: task.deadline || '', driveLink: task.driveLink || '',
+      deadline: task.deadline || '', driveLink: task.driveLink || '', repeat: task.repeat || '',
       reviewAudience: task.status === 'Review' ? (task.reviewAudience || null) : null
     };
   }
@@ -6885,6 +6910,8 @@
       document.getElementById('task-deadline-tbd').checked = !v;
     });
     field('driveLink', document.getElementById('task-drive').value, function (v) { document.getElementById('task-drive').value = v; syncDriveLinkButtons(); });
+    field('repeat', document.getElementById('task-repeat').value, function (v) { document.getElementById('task-repeat').value = REPEAT_OPTIONS[v] ? v : ''; syncRepeatSelect(); });
+    renderReviewRoundsLine(fresh);
     field('assignee', currentAssigneeValue(), function (v) { renderAssigneeOptions(v); involvedPrevAssignee = currentAssigneeValue(); });
     field('involved', JSON.stringify(currentInvolved), function (v) { currentInvolved = JSON.parse(v); renderInvolved(); });
     // Lists: not while an item or an entry is being edited here (the re-render would close it);
@@ -6904,7 +6931,7 @@
     }
     // A change that arrived from elsewhere isn't an unsaved change of yours.
     var base = JSON.parse(formBaseline);
-    ['name', 'project', 'priority', 'status', 'startDate', 'deadline', 'driveLink', 'assignee'].forEach(function (k) { base[k] = b[k]; });
+    ['name', 'project', 'priority', 'status', 'startDate', 'deadline', 'driveLink', 'repeat', 'assignee'].forEach(function (k) { base[k] = b[k]; });
     base.involved = JSON.parse(b.involved);
     base.checklist = b.checklist;
     base.timeEntries = b.time;
@@ -6922,6 +6949,7 @@
       startDate: document.getElementById('task-start').value,
       deadline: document.getElementById('task-deadline').value,
       driveLink: document.getElementById('task-drive').value,
+      repeat: document.getElementById('task-repeat').value,
       checklist: currentChecklist,
       timeEntries: currentTimeEntries,
       // A typed-but-not-yet-Added comment previously fell straight through this whole mechanism:
@@ -7022,6 +7050,9 @@
     document.getElementById('task-deadline').value = task ? (task.deadline || '') : '';
     document.getElementById('task-deadline').disabled = !hasDeadline;
     document.getElementById('task-deadline-tbd').checked = !hasDeadline;
+    document.getElementById('task-repeat').value = task && REPEAT_OPTIONS[task.repeat] ? task.repeat : '';
+    syncRepeatSelect();
+    renderReviewRoundsLine(task);
     document.getElementById('task-drive').value = task ? task.driveLink || '' : '';
     syncDriveLinkButtons();
     document.getElementById('task-delete-btn').classList.toggle('hidden', !task);
@@ -7104,6 +7135,7 @@
     taskModal.classList.remove('flex');
     editingTaskId = null;
     taskOpenBase = null;
+    closeChecklistCopyPop();
     taskForm.reset();
     if (location.hash.indexOf('#task=') === 0) history.replaceState(null, '', location.pathname + location.search);
   }
@@ -7403,7 +7435,7 @@
     var stepsBefore = flipCapture(el, '[data-flip]', 'data-flip');
     el.innerHTML = currentChecklist.length
       ? openRows.join('') + doneToggle + (checklistDoneOpen ? doneRows.join('') : '')
-      : '<p class="text-xs text-zinc-400 dark:text-zinc-500">No steps yet. Break the work into steps below; each can have a date and people.</p>';
+      : '<p class="text-xs text-zinc-500 dark:text-zinc-400">No steps yet. Add them below, or <button type="button" id="checklist-copy-btn" aria-haspopup="dialog" class="font-semibold text-brand-800 dark:text-brand-300 hover:underline focus:outline-none focus:underline">copy steps from a similar task</button>.</p>';
     flipPlay(el, '[data-flip]', 'data-flip', stepsBefore);
     if (checklistEditIndex !== null) {
       var textInput = el.querySelector('.checklist-text-input');
@@ -7706,9 +7738,158 @@
     closeChecklistPeoplePop(true);
   }, true);
 
+  /* ===== Copy steps from a similar task (task templates) =====
+     Asana, Monday and TeamGantt all have task templates whose steps are dated relative to the due
+     date. Here any earlier task is the template, so there is nothing to set up or keep current
+     (the "no added work" rule): pick a similar job and its steps come across, each the same number
+     of days from this task's deadline as it was from that one's (from the start date while there's
+     no deadline yet). A date landing on a weekend moves to the Friday before. People come too (the
+     same team usually does the same steps; they're notified on Save as for any step); links don't,
+     since they point at the old job's files. Offered only while a task has no steps. */
+  function checklistCopySources() {
+    var here = projectKey(document.getElementById('task-project').value);
+    var seen = {};
+    function when(t) { return t.archivedAt || t.updatedAt || t.createdAt || ''; }
+    return tasks.concat(archivedTasks || []).filter(function (t) {
+      if (!t || seen[t.id] || t.id === editingTaskId) return false;
+      seen[t.id] = true;
+      return (t.checklist || []).some(function (it) { return it && String(it.text || '').trim(); });
+    }).sort(function (a, b) {
+      // Same project first (the likeliest template), then the most recent.
+      var sa = here && projectKey(a.project) === here ? 1 : 0, sb = here && projectKey(b.project) === here ? 1 : 0;
+      if (sa !== sb) return sb - sa;
+      var wa = when(a), wb = when(b);
+      return wb < wa ? -1 : wb > wa ? 1 : 0;
+    }).filter(function (t) {
+      // A repeating series is one template: list only its latest task.
+      var key = "series:" + (t.repeatRoot || t.id);
+      if (seen[key]) return false;
+      seen[key] = true;
+      return true;
+    });
+  }
+  function renderChecklistCopyPop() {
+    var pop = document.getElementById('checklist-copy-pop');
+    var q = pop.querySelector('input[type="search"]').value.trim().toLowerCase();
+    var shown = checklistCopySources().filter(function (t) {
+      if (!q) return true;
+      return [t.name, t.project].concat((t.checklist || []).map(function (it) { return it && it.text; })).some(function (v) { return String(v || '').toLowerCase().indexOf(q) !== -1; });
+    }).slice(0, 40);
+    pop.querySelector('.checklist-copy-list').innerHTML = shown.length
+      ? shown.map(function (t) {
+          var n = (t.checklist || []).filter(function (it) { return it && String(it.text || '').trim(); }).length;
+          return '<button type="button" data-copy-steps-from="' + escapeHtml(t.id) + '" class="w-full text-left px-3 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-600 focus:outline-none focus:bg-zinc-50 dark:focus:bg-zinc-600">' +
+            '<span class="block text-sm font-semibold text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(t.name) + '</span>' +
+            '<span class="block text-xs text-zinc-500 dark:text-zinc-300 truncate">' + projectNameHtml(t.project || '') + ' · ' + n + (n === 1 ? ' step' : ' steps') + (t.archivedAt ? ' · archived' : '') + '</span>' +
+          '</button>';
+        }).join('')
+      : '<p class="px-3 py-2 text-sm text-zinc-500 dark:text-zinc-300">' + (q ? 'No task matches.' : 'No other task has steps yet.') + '</p>';
+  }
+  function openChecklistCopyPop() {
+    var pop = document.getElementById('checklist-copy-pop');
+    var btn = document.getElementById('checklist-copy-btn');
+    if (!btn) return;
+    pop.querySelector('input[type="search"]').value = '';
+    renderChecklistCopyPop();
+    pop.hidden = false;
+    var r = btn.getBoundingClientRect();
+    var w = pop.offsetWidth, h = pop.offsetHeight;
+    var top = r.bottom + 6;
+    if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 6);   // no room below: open upward
+    pop.style.top = top + 'px';
+    pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + 'px';
+    btn.setAttribute('aria-expanded', 'true');
+    pop.querySelector('input[type="search"]').focus();
+    // Finished, archived jobs are often the best templates; they load on demand.
+    withArchivedTasksReady(function () { if (!pop.hidden) renderChecklistCopyPop(); });
+  }
+  function closeChecklistCopyPop() {
+    var pop = document.getElementById('checklist-copy-pop');
+    if (!pop || pop.hidden) return;
+    pop.hidden = true;
+    var btn = document.getElementById('checklist-copy-btn');
+    if (btn) btn.setAttribute('aria-expanded', 'false');
+  }
+  // Same distance from the anchor date; a weekend date moves back to the Friday before.
+  function copiedStepDue(srcDue, srcAnchor, dstAnchor) {
+    var s = parseDate(srcDue), a = parseDate(srcAnchor), b = parseDate(dstAnchor);
+    if (!s || !a || !b) return '';
+    var d = addDays(b, daysBetween(a, s));
+    if (d.getDay() === 6) d = addDays(d, -1); else if (d.getDay() === 0) d = addDays(d, -2);
+    return toDateInputValue(d);
+  }
+  function copyChecklistStepsFrom(src) {
+    var steps = (src.checklist || []).filter(function (it) { return it && String(it.text || '').trim(); });
+    if (!steps.length) return;
+    var dl = document.getElementById('task-deadline').value;
+    var st = document.getElementById('task-start').value;
+    var latestDue = steps.reduce(function (m, it) { return it.due && it.due > m ? it.due : m; }, '');
+    var srcEnd = src.deadline || latestDue;
+    var pair = dl && srcEnd ? [srcEnd, dl, 'deadline'] : (st && src.startDate ? [src.startDate, st, 'start'] : null);
+    var dated = 0;
+    var added = steps.map(function (it) {
+      var c = { id: uid(), text: String(it.text).trim(), done: false };
+      var due = pair && it.due ? copiedStepDue(it.due, pair[0], pair[1]) : '';
+      if (due) { c.due = due; dated++; } else if (it.dueTbd && !it.due) c.dueTbd = true;
+      setStepPeople(c, stepPeople(it));
+      return c;
+    });
+    currentChecklist = currentChecklist.concat(added);
+    closeChecklistCopyPop();
+    renderChecklistEditor();
+    var ids = added.map(function (c) { return c.id; });
+    var openFor = editingTaskId;
+    var msg = 'Copied ' + added.length + (added.length === 1 ? ' step' : ' steps') +
+      (dated ? (pair[2] === 'deadline' ? ', dated from this deadline' : ', dated from the start date (no deadline yet)') : '');
+    showToast(msg, 'success', { action: { label: 'Undo', onClick: function () {
+      if (taskModal.classList.contains('hidden') || editingTaskId !== openFor) return;
+      currentChecklist = currentChecklist.filter(function (c) { return ids.indexOf(c.id) === -1; });
+      renderChecklistEditor();
+    } } });
+  }
+  document.addEventListener('click', function (e) {
+    if (e.target.closest('#checklist-copy-btn')) {
+      if (document.getElementById('checklist-copy-pop').hidden) openChecklistCopyPop(); else closeChecklistCopyPop();
+      return;
+    }
+    var pick = e.target.closest('[data-copy-steps-from]');
+    if (!pick) return;
+    var id = pick.getAttribute('data-copy-steps-from');
+    var src = tasks.concat(archivedTasks || []).find(function (t) { return t.id === id; });
+    if (src) copyChecklistStepsFrom(src); else closeChecklistCopyPop();
+  });
+  document.getElementById('checklist-copy-pop').addEventListener('input', function (e) {
+    if (e.target.type === 'search') renderChecklistCopyPop();
+  });
+  document.getElementById('checklist-copy-pop').addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' || e.target.type !== 'search') return;
+    e.preventDefault();
+    var first = document.querySelector('#checklist-copy-pop [data-copy-steps-from]');
+    if (first) first.click();
+  });
+  document.addEventListener('mousedown', function (e) {
+    var pop = document.getElementById('checklist-copy-pop');
+    if (pop.hidden || pop.contains(e.target) || e.target.closest('#checklist-copy-btn')) return;
+    closeChecklistCopyPop();
+  });
+  document.addEventListener('scroll', function (e) {
+    var pop = document.getElementById('checklist-copy-pop');
+    if (!pop.hidden && !pop.contains(e.target)) closeChecklistCopyPop();
+  }, true);
+  document.addEventListener('keydown', function (e) {
+    var pop = document.getElementById('checklist-copy-pop');
+    if (e.key !== 'Escape' || pop.hidden) return;
+    e.preventDefault();
+    e.stopPropagation();
+    closeChecklistCopyPop();
+    var b = document.getElementById('checklist-copy-btn');
+    if (b) b.focus();
+  }, true);
+
   function resetChecklistExtras() {
     checklistAddPeople = [];
     closeChecklistPeoplePop();
+    closeChecklistCopyPop();
     renderChecklistAddPeople();
     document.getElementById('task-checklist-link-input').value = '';
     document.getElementById('task-checklist-due-input').value = '';
@@ -9336,7 +9517,8 @@
   document.getElementById('task-deadline-tbd').addEventListener('change', function (e) {
     var deadlineEl = document.getElementById('task-deadline');
     deadlineEl.disabled = e.target.checked;
-    if (e.target.checked) deadlineEl.value = '';
+    if (e.target.checked) { deadlineEl.value = ''; document.getElementById('task-repeat').value = ''; }
+    syncRepeatSelect();
   });
   // Fires on a real change event, including the one enhanceSelect()'s custom pill dispatches on
   // the real (sr-only) <select> when an item is clicked -- so this fires the same way whether
@@ -9408,6 +9590,8 @@
     var status = document.getElementById('task-status').value;
     var startDate = startEl.value || toDateInputValue(todayMidnight());
     var deadline = deadlineEl.value;
+    var repeatEl = document.getElementById('task-repeat');
+    var repeat = REPEAT_OPTIONS[repeatEl.value] ? repeatEl.value : null;
     var driveLink = normalizeUrl(driveEl.value);
 
     var hasError = false;
@@ -9417,6 +9601,7 @@
     // can pull it out -- the name that's left over still has to be a sane length.
     else if (project.length > 60) { setFieldError(projectEl, 'Keep the project name under 60 characters.'); hasError = true; }
     if (!assignee) { setFieldError(assigneeEl, 'Owner is required.'); hasError = true; }
+    if (repeat && !deadline) { setFieldError(deadlineEl, 'A repeating task needs a deadline to count from.'); hasError = true; }
     if (deadline && startDate && parseDate(startDate) > parseDate(deadline)) {
       setFieldError(deadlineEl, 'Deadline must be on or after the start date.');
       hasError = true;
@@ -9440,7 +9625,7 @@
     var full = {
       name: name, project: project, assignee: assignee,
       involved: currentInvolved.filter(function (n) { return n !== assignee; }),
-      priority: priority, status: status, startDate: startDate, deadline: deadline, driveLink: driveLink,
+      priority: priority, status: status, startDate: startDate, deadline: deadline, driveLink: driveLink, repeat: repeat,
       checklist: b ? mergeChecklist(currentChecklist, b.checklist, oldTask.checklist || []) : currentChecklist,
       timeEntries: b ? mergeTimeEntries(currentTimeEntries, b.time, oldTask.timeEntries || []) : currentTimeEntries,
       // Overridden back to null by statusEffect.patch below on the leaving-Review path -- this
@@ -9460,14 +9645,19 @@
       if (untouched('startDate', startEl.value)) full.startDate = oldTask.startDate;
       if (untouched('deadline', deadline)) full.deadline = oldTask.deadline || '';
       if (untouched('driveLink', driveEl.value)) full.driveLink = oldTask.driveLink || '';
+      if (untouched('repeat', repeatEl.value)) full.repeat = oldTask.repeat || null;
       if (full.status === oldTask.status && pendingReviewAudience === b.reviewAudience) full.reviewAudience = oldTask.reviewAudience || null;
     }
     // Same completion effects (completedAt, card pulse, whole-project celebration) as dragging a
     // card to Done on the Board -- this is the other way a task's status changes, and it used to
     // skip all of it since this save goes through setDoc, not updateTaskStatus. A brand-new task
     // saved with status Done straight away counts as "entering Done" too (oldStatus is null).
-    var statusEffect = statusTransitionEffects(id, full.project, oldTask ? oldTask.status : null, full.status);
+    var statusEffect = statusTransitionEffects(id, full.project, oldTask ? oldTask.status : null, full.status, Object.assign({}, oldTask || {}, full, { id: id }));
     Object.assign(full, statusEffect.patch);
+    // Still in Review with a different client/internal answer: that corrects the current round.
+    if (oldTask && oldTask.status === 'Review' && full.status === 'Review' && (full.reviewAudience || null) !== (oldTask.reviewAudience || null)) {
+      full.reviewRounds = reviewRoundsWith(oldTask, full.reviewAudience, false);
+    }
     var taskData;
     if (oldTask) {
       // Only the fields that actually differ from the server.
@@ -9498,7 +9688,14 @@
     saveBtn.textContent = 'Saving…';
 
     var ref = doc(tasksCol, id);
-    var savePromise = setDoc(ref, taskData, { merge: true });
+    var savePromise;
+    if (statusEffect.repeatNext) {
+      // Same single write as on the Board (see updateTaskStatus).
+      var saveBatch = writeBatch(db);
+      saveBatch.set(ref, taskData, { merge: true });
+      saveBatch.set(doc(tasksCol, statusEffect.repeatNext.id), statusEffect.repeatNext.data);
+      savePromise = saveBatch.commit();
+    } else savePromise = setDoc(ref, taskData, { merge: true });
 
     savePromise.then(function () {
       showToast(isEditing ? 'Task updated' : 'Task added', 'success');
@@ -9520,6 +9717,7 @@
       if (isEditing && oldTask.project !== full.project) carryProjectDocOnRename(oldTask.project, full.project, id);
       if (statusEffect.willFinishProject) celebrateProjectComplete(statusEffect.projectName);
       else if (statusEffect.enteringDone) spawnConfetti();
+      announceRepeatNext(statusEffect.repeatNext, id);
       closeTaskModal();
     }).catch(function (err) {
       showToast('Could not save this task: ' + writeErrorMessage(err, oldTask || { assignee: assignee }), 'error');
@@ -9673,7 +9871,8 @@
   // setDoc call, not updateTaskStatus. oldStatus is passed rather than an old-task object so a
   // brand-new task saved with status Done straight away (no old task to compare against) can
   // still go through this the same way, treating "didn't exist yet" as "wasn't Done."
-  function statusTransitionEffects(taskId, taskProject, oldStatus, newStatus) {
+  // taskNow: the task as it will be after this change (repeat and review rounds read it).
+  function statusTransitionEffects(taskId, taskProject, oldStatus, newStatus, taskNow) {
     var enteringDone = newStatus === 'Done' && oldStatus !== 'Done';
     var leavingDone = oldStatus === 'Done' && newStatus !== 'Done';
     // Checked against the current local state, before the write goes out -- this is what
@@ -9699,8 +9898,19 @@
     // Setting it happens elsewhere (promptReviewAudience(), fired from wherever a task actually
     // enters Review), not here -- this function is synchronous and the choice needs a person.
     if (newStatus !== 'Review' && oldStatus === 'Review') patch.reviewAudience = null;
+    // A repeating task hands the series on: the next task is made (by the caller, once this write
+    // has gone through) and this one stops repeating, so moving it out of Done and back can't make
+    // a second one.
+    var repeatNext = null;
+    if (enteringDone && taskNow) {
+      repeatNext = repeatNextTask(Object.assign({}, taskNow, { id: taskId }));
+      if (repeatNext) { patch.repeat = null; willFinishProject = false; }   // the work goes on: no "project complete"
+    }
+    if (newStatus === 'Review' && oldStatus !== 'Review' && taskNow) {
+      patch.reviewRounds = reviewRoundsWith(taskNow, taskNow.status === 'Review' ? taskNow.reviewAudience : null, true);
+    }
 
-    return { patch: patch, enteringDone: enteringDone, willFinishProject: willFinishProject, projectName: taskProject };
+    return { patch: patch, enteringDone: enteringDone, willFinishProject: willFinishProject, projectName: taskProject, repeatNext: repeatNext };
   }
 
   // Firestore reports a rules denial as a bare "Missing or insufficient permissions", which
@@ -9726,18 +9936,161 @@
   function updateTaskStatus(id, newStatus) {
     var t = tasks.find(function (x) { return x.id === id; });
     if (!t || t.status === newStatus) return;
-    var effect = statusTransitionEffects(id, t.project, t.status, newStatus);
+    var effect = statusTransitionEffects(id, t.project, t.status, newStatus, t);
     var patch = Object.assign({ status: newStatus, updatedAt: new Date().toISOString() }, effect.patch);
 
-    updateDoc(doc(tasksCol, id), patch).then(function () {
+    var write;
+    if (effect.repeatNext) {
+      // One write: the completed task and its next one land together, so nothing (the "project
+      // complete" check, the archive prompt) ever sees the project as finished in between.
+      var batch = writeBatch(db);
+      batch.update(doc(tasksCol, id), patch);
+      batch.set(doc(tasksCol, effect.repeatNext.id), effect.repeatNext.data);
+      write = batch.commit();
+    } else write = updateDoc(doc(tasksCol, id), patch);
+    write.then(function () {
       logActivity('task_moved', 'Moved "' + t.name + '" from ' + (STATUS_LABELS[t.status] || t.status) + ' to ' + (STATUS_LABELS[newStatus] || newStatus), { taskId: t.id });
       if (effect.willFinishProject) celebrateProjectComplete(effect.projectName);
       else if (effect.enteringDone) spawnConfetti();
+      announceRepeatNext(effect.repeatNext, id);
     }).catch(function (err) {
       showToast('Could not move task: ' + writeErrorMessage(err, t), 'error');
       mRefresh();   // the phone's status buttons move before the write; put them back
     });
   }
+
+  /* =========================================================
+     REPEATING TASKS and REVIEW ROUNDS (2026-10-07)
+     Repeat is Asana/Monday/Todoist's "repeat when completed": no scheduler, the next task is made
+     the moment this one is completed, on any path (Board drag, task window, phone), because it
+     rides on statusTransitionEffects. Review rounds are what agency proofing tools count: every
+     move into Review is a round, counted from the status changes, never typed, and filed as client
+     or internal by the existing "who is this review for?" answer. See CLAUDE.md "Repeats, copied
+     steps and review rounds".
+  ========================================================= */
+  var REPEAT_OPTIONS = {
+    weekly: { label: 'every week', days: 7 },
+    fortnightly: { label: 'every 2 weeks', days: 14 },
+    monthly: { label: 'every month', months: 1 }
+  };
+  function repeatLabel(key) { return REPEAT_OPTIONS[key] ? REPEAT_OPTIONS[key].label : ''; }
+  function lastDayOfMonth(d) { return new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(); }
+  function repeatStep(dateStr, key, anchorDay) {
+    var d = parseDate(dateStr), opt = REPEAT_OPTIONS[key];
+    if (!d || !opt) return '';
+    if (opt.days) return toDateInputValue(addDays(d, opt.days));
+    var first = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+    return toDateInputValue(new Date(first.getFullYear(), first.getMonth(), Math.min(anchorDay, lastDayOfMonth(first))));
+  }
+  // The day of the month a monthly series aims for. The stored one only counts while the deadline
+  // sits on a short month's last day (31 Jan, 28 Feb, back to 31 Mar); a deadline moved by hand wins.
+  function repeatAnchorDay(t) {
+    var d = parseDate(t.deadline);
+    if (!d) return 1;
+    return (t.repeatDay && t.repeatDay > d.getDate() && d.getDate() === lastDayOfMonth(d)) ? t.repeatDay : d.getDate();
+  }
+  // The next date in the series that is today or later, so finishing late never makes a task
+  // that is already overdue.
+  function repeatNextDeadline(t) {
+    var anchor = repeatAnchorDay(t);
+    var today = toDateInputValue(todayMidnight());
+    var next = repeatStep(t.deadline, t.repeat, anchor), guard = 0;
+    while (next && next < today && guard++ < 600) next = repeatStep(next, t.repeat, anchor);
+    return next;
+  }
+  // The next task in a series: same work, people, link and steps (unticked, dates moved by the same
+  // amount), none of the history (comments, time, status lines, review rounds). Its id is fixed per
+  // series and number, so two people completing it at the same moment write one task, not two.
+  function repeatNextTask(t) {
+    if (!t || !REPEAT_OPTIONS[t.repeat] || !parseDate(t.deadline)) return null;
+    var next = repeatNextDeadline(t);
+    var delta = daysBetween(parseDate(t.deadline), parseDate(next));
+    function shift(ds) { var d = parseDate(ds); return d ? toDateInputValue(addDays(d, delta)) : ''; }
+    var root = t.repeatRoot || t.id, n = (t.repeatIndex || 0) + 1;
+    var now = new Date().toISOString();
+    var me = auth.currentUser ? (auth.currentUser.displayName || auth.currentUser.email) : null;
+    return { id: root + '-r' + n, data: {
+      name: t.name, project: t.project, assignee: t.assignee,
+      involved: Array.isArray(t.involved) ? t.involved.slice() : [],
+      priority: t.priority || 'Medium', status: 'Pipeline',
+      startDate: shift(t.startDate) || toDateInputValue(todayMidnight()), deadline: next,
+      driveLink: t.driveLink || '',
+      checklist: (t.checklist || []).filter(function (it) { return it && String(it.text || '').trim(); }).map(function (it) {
+        var c = deepCopy(it);
+        c.id = uid();
+        c.done = false;
+        if (c.due) c.due = shift(c.due);
+        return c;
+      }),
+      timeEntries: [], comments: [], statusUpdates: [], dependsOn: [], reviewAudience: null, completedAt: null,
+      repeat: t.repeat, repeatRoot: root, repeatIndex: n, repeatDay: repeatAnchorDay(t),
+      createdAt: now, updatedAt: now, createdBy: me
+    } };
+  }
+  // The next task is written in the same batch as the completion (updateTaskStatus,
+  // commitTaskSave); this only logs it and offers Undo. No "assigned you" notifications: the
+  // people already know the work repeats, and the usual deadline reminder and "you're up" handoff
+  // reach them when there's something to do.
+  function announceRepeatNext(rn, fromTaskId) {
+    if (!rn) return;
+    Promise.resolve().then(function () {
+      logActivity('task_created', 'Next "' + rn.data.name + '" made, due ' + formatShortDate(rn.data.deadline) + ' (repeats ' + repeatLabel(rn.data.repeat) + ')', { taskId: rn.id });
+      showToast('Next "' + rn.data.name + '" is due ' + formatShortDate(rn.data.deadline), 'success', { action: { label: 'Undo', onClick: function () {
+        deleteDoc(doc(tasksCol, rn.id)).then(function () {
+          return updateDoc(doc(tasksCol, fromTaskId), { repeat: rn.data.repeat });
+        }).catch(function (err) { showToast('Could not undo: ' + err.message, 'error'); });
+      } } });
+    });
+  }
+
+  // Each move into Review appends a round; the client/internal answer is filed on the latest one,
+  // so changing the label later corrects that round instead of adding another. Client and
+  // internal rounds are counted separately.
+  function reviewRoundsWith(t, audience, entering) {
+    var list = deepCopy(Array.isArray(t.reviewRounds) ? t.reviewRounds : []);
+    if (!entering && t.status === 'Review' && list.length) list[list.length - 1].audience = audience || null;
+    else list.push({ at: new Date().toISOString(), audience: audience || null });
+    return list;
+  }
+  function reviewRoundCount(t, audience) {
+    return (Array.isArray(t.reviewRounds) ? t.reviewRounds : []).filter(function (r) { return r && r.audience === audience; }).length;
+  }
+  // "Client review" for the first round, "Client round 3" from the second: only extra rounds are news.
+  function reviewAudienceLabel(t) {
+    var a = t.reviewAudience;
+    if (a !== 'client' && a !== 'internal') return '';
+    var n = reviewRoundCount(t, a);
+    return (a === 'client' ? 'Client' : 'Internal') + (n >= 2 ? ' round ' + n : ' review');
+  }
+  function reviewRoundsSummary(t) {
+    var c = reviewRoundCount(t, 'client'), i = reviewRoundCount(t, 'internal');
+    if (c < 2 && i < 2) return '';
+    return 'Review rounds so far: ' + [c ? c + ' client' : '', i ? i + ' internal' : ''].filter(Boolean).join(', ');
+  }
+  // The one way the client/internal answer is saved (Board drop, phone, the label on a card).
+  function setReviewAudience(taskId, audience) {
+    var t = tasks.find(function (x) { return x.id === taskId; }) || { id: taskId };
+    return updateDoc(doc(tasksCol, taskId), { reviewAudience: audience, reviewRounds: reviewRoundsWith(t, audience, false) });
+  }
+  function renderReviewRoundsLine(t) {
+    var el = document.getElementById('task-review-rounds');
+    if (!el) return;
+    var text = t ? reviewRoundsSummary(t) : '';
+    el.textContent = text;
+    el.classList.toggle('hidden', !text);
+  }
+  function syncRepeatSelect() {
+    var sel = document.getElementById('task-repeat');
+    var wrap = document.getElementById('task-repeat-wrap');
+    var on = !!sel.value;
+    var tbd = document.getElementById('task-deadline-tbd').checked;
+    sel.disabled = tbd;
+    wrap.classList.toggle('opacity-50', tbd);
+    ['text-brand-800', 'dark:text-brand-300'].forEach(function (c) { wrap.classList.toggle(c, on); });
+    ['text-zinc-500', 'dark:text-zinc-400'].forEach(function (c) { wrap.classList.toggle(c, !on); });
+    wrap.title = tbd ? 'Set a deadline to make this repeat' : 'When this task is completed, the next one is made for the next date';
+  }
+  document.getElementById('task-repeat').addEventListener('change', syncRepeatSelect);
 
   // The explicit toast is reserved for finishing a whole project (every active task in it now
   // Done), not for every single card move, so it stays a real moment instead of becoming
@@ -10714,7 +11067,7 @@
       : audience === 'internal'
         ? 'bg-zinc-100 text-zinc-600 ring-1 ring-inset ring-zinc-200 dark:bg-zinc-700 dark:text-zinc-300 dark:ring-zinc-600'
         : 'border border-dashed border-zinc-300 dark:border-zinc-600 text-zinc-400 dark:text-zinc-500';
-    var label = audience === 'client' ? 'Client review' : audience === 'internal' ? 'Internal review' : 'Set review type';
+    var label = reviewAudienceLabel(t) || 'Set review type';
     // A <button>, not a <span> -- editable, per direct follow-up request, so a wrong or missing
     // answer doesn't require dragging the card back out of Review and in again to fix. Checked
     // ahead of data-open-task in the click delegation below, same ordering as edit/delete/archive,
@@ -10789,6 +11142,7 @@
           '<div class="flex items-center gap-2 mt-1.5 flex-wrap">' +
             '<span class="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + badgeCls + '">' + (isDone ? 'Completed' : t.priority) + '</span>' +
             '<span class="flex items-center gap-1 text-xs ' + dateClass + '">' + svgIcon('calendar', 'w-3 h-3') + (t.deadline ? formatShortDate(t.deadline) : 'TBD') + '</span>' +
+            (REPEAT_OPTIONS[t.repeat] ? '<span class="flex items-center text-zinc-500 dark:text-zinc-400" title="Repeats ' + repeatLabel(t.repeat) + '" aria-label="Repeats ' + repeatLabel(t.repeat) + '">' + svgIcon('repeat', 'w-3 h-3') + '</span>' : '') +
             (timeMinutes ? '<span class="flex items-center gap-1 text-xs text-zinc-500 dark:text-zinc-400" title="' + formatDuration(timeMinutes) + ' logged">' + svgIcon('clock', 'w-3 h-3') + formatDuration(timeMinutes) + '</span>' : '') +
             (overdue ? '<span class="text-[10px] font-bold text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/15 px-1.5 py-0.5 rounded">OVERDUE</span>' : '') +
             (dueSoon ? '<span class="text-[10px] font-bold text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-500/15 px-1.5 py-0.5 rounded">' + (days === 0 ? 'DUE TODAY' : 'DUE TOMORROW') + '</span>' : '') +
@@ -10949,7 +11303,7 @@
         // can always set it properly afterward via the label itself.
         if (enteringReview) {
           promptReviewAudience(function (audience) {
-            updateDoc(doc(tasksCol, idDropped), { reviewAudience: audience }).catch(function () { /* see comment above -- deliberately silent */ });
+            setReviewAudience(idDropped, audience).catch(function () { /* see comment above -- deliberately silent */ });
           });
         }
       });
@@ -13898,7 +14252,7 @@
       out.push({
         overdue: false, date: today, kind: 'In review', tone: 'purple',
         title: t.name + ' has been in review ' + waiting + ' days',
-        detail: (t.reviewAudience === 'client' ? 'Client review' : t.reviewAudience === 'internal' ? 'Internal review' : 'Review type not set') + ' · ' + t.project + ' · ' + t.assignee,
+        detail: (reviewAudienceLabel(t) || 'Review type not set') + ' · ' + t.project + ' · ' + t.assignee,
         taskId: t.id
       });
     });
@@ -15010,6 +15364,11 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-08a', date: '2026-10-08', items: [
+      { type: 'new', title: 'Tasks that repeat', text: "Next to Deadline in the task window, set a task to repeat every week, every 2 weeks or every month. When it's completed, the next one is made straight away with the same people and steps, dated ahead. A small loop icon marks it on the Board." },
+      { type: 'new', title: 'Copy steps from a similar task', text: "A task with no steps yet offers \"copy steps from a similar task\". Pick any earlier job, archived ones included, and its steps come across with their people, each dated the same number of days before this task's deadline." },
+      { type: 'new', title: 'Review rounds are counted', text: "Every time a task goes into Review is counted, client and internal separately. From the second time, the label reads \"Client round 2\" (or \"Internal round 2\"), so extra rounds of changes are easy to spot. The task window shows the totals." }
+    ] },
     { id: '2026-10-07l', date: '2026-10-07', items: [
       { type: 'new', title: 'Ctrl K to jump anywhere', text: "Press Ctrl K (or click the hint in the search box) and type a few letters to jump to any task, project, chat or page. Your next tasks are listed before you type anything.", tourTarget: '#cmdk-hint' },
       { type: 'improved', title: 'Undo instead of "Are you sure?"', text: "Archiving a task or a whole project, archiving completed work, and removing a checklist step or a time entry now happen straight away, with an Undo button on the message. Deleting for good still asks first." },
@@ -16308,7 +16667,7 @@
       // assignee-or-admin explanation every other restricted task edit in this app already gives.
       var tRA = tasks.find(function (x) { return x.id === idRA; });
       promptReviewAudience(function (audience) {
-        updateDoc(doc(tasksCol, idRA), { reviewAudience: audience }).catch(function (err) {
+        setReviewAudience(idRA, audience).catch(function (err) {
           showToast(writeErrorMessage(err, tRA), 'error');
         });
       });
@@ -16544,6 +16903,13 @@
               // Kept so the Done column's 'N today' and Review labels survive a round trip.
               completedAt: (t.status === 'Done' && t.completedAt && !isNaN(new Date(t.completedAt).getTime())) ? t.completedAt : null,
               reviewAudience: (t.status === 'Review' && (t.reviewAudience === 'client' || t.reviewAudience === 'internal')) ? t.reviewAudience : null,
+              repeat: REPEAT_OPTIONS[t.repeat] ? t.repeat : null,
+              repeatRoot: typeof t.repeatRoot === 'string' ? t.repeatRoot.slice(0, 120) : null,
+              repeatIndex: (Number.isInteger(t.repeatIndex) && t.repeatIndex > 0) ? t.repeatIndex : null,
+              repeatDay: (Number.isInteger(t.repeatDay) && t.repeatDay >= 1 && t.repeatDay <= 31) ? t.repeatDay : null,
+              reviewRounds: Array.isArray(t.reviewRounds) ? t.reviewRounds.filter(function (r) { return r && !isNaN(new Date(r.at).getTime()); }).slice(-50).map(function (r) {
+                return { at: r.at, audience: (r.audience === 'client' || r.audience === 'internal') ? r.audience : null };
+              }) : [],
               // Preserved like every other ownership-relevant field on an import round-trip --
               // dropping it would silently move a re-imported task into the "no createdBy, falls
               // back to assignee" bucket firestore.rules' isCreator() treats as legacy data.
@@ -17494,7 +17860,8 @@
         (pm ? '<span class="text-xs font-bold px-2.5 py-1 rounded-full ' + pm.badge + '">' + escapeHtml(t.status === 'Done' ? 'Completed' : t.priority) + '</span>' : '') +
         (t.deadline ? '<span class="m-chip ' + due.cls + '">' + mIcon('clock', 'w-3.5 h-3.5') + escapeHtml(due.text === formatShortDate(t.deadline) ? 'Due ' + due.text : due.text + ' · ' + formatShortDate(t.deadline)) + '</span>' : '<span class="m-chip">No deadline</span>') +
         (isReadyForReview(t) ? '<span class="text-xs font-bold px-2.5 py-1 rounded-full ' + READY_FOR_REVIEW_META.badge + '">Ready for review</span>' : '') +
-        (t.status === 'Review' && t.reviewAudience ? '<span class="m-chip">' + escapeHtml(t.reviewAudience === 'client' ? 'Client review' : 'Internal review') + '</span>' : '') +
+        (t.status === 'Review' && t.reviewAudience ? '<span class="m-chip">' + escapeHtml(reviewAudienceLabel(t)) + '</span>' : '') +
+        (REPEAT_OPTIONS[t.repeat] ? '<span class="m-chip">Repeats ' + escapeHtml(repeatLabel(t.repeat)) + '</span>' : '') +
       '</div>';
 
     html += '<div class="m-section"><div class="m-section-head"><span>Status</span></div>' +
@@ -18064,7 +18431,7 @@
       // Same as dragging a card into Review on the Board: ask who the review is for.
       if (s === 'Review') {
         promptReviewAudience(function (audience) {
-          updateDoc(doc(tasksCol, taskId), { reviewAudience: audience }).catch(function () { /* silent, as on the Board */ });
+          setReviewAudience(taskId, audience).catch(function () { /* silent, as on the Board */ });
         });
       }
       return;
@@ -18659,7 +19026,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-07T10:52:22Z";
+  var CURRENT_BUILD_VERSION = "2026-10-07T16:08:02Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
