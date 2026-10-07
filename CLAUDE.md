@@ -3860,6 +3860,33 @@ Off-roster current values stay selectable, same rule as the owner picker.
   transitions, picker, import, project departments, People-card rendering). No emulator in this
   environment, so the modal editor itself has not been clicked through.
 
+**Adding several items at once, and grouping by due date (2026-10-07).** Asked: "Should checklist
+items be allowed to be entered using multiple lines ... to perhaps group the items together that are
+due on the same day same time?" (six ad sizes due together). **Decided: keep one item per thing, not
+one multi-line item** — a merged item can't be ticked, dated, assigned or time-tracked per size,
+draws one Timeline diamond instead of six, and hides a late size inside the batch. Built instead:
+- **`#task-checklist-input` is a textarea.** Enter adds; Shift+Enter or a pasted list adds one item
+  per line (`checklistLinesFromInput`: blank lines skipped, "- " / "• " / "1. " markers stripped,
+  50 max), all taking the row's date/TBD/link. "Calendar" opens one event for the batch, never one
+  tab per item. It grows to about 6 lines (`autosizeChecklistInput`).
+- **Open items group under a heading per due date** (`checklistIsGrouped`, `checklistGroupKey`,
+  `checklistGroupHeadHtml`): dates in order, then Due TBD, then No date, with a count when 2+.
+  **Only once a date is shared by 2+ open items**; a milestone list where every item has its own
+  date stays a flat list with each row's own "Due" line (otherwise a heading over every row). Rows in a group
+  drop their own "Due …" line; the heading carries it, rose when overdue, amber when after the task
+  deadline. Items keep their own order inside a group. The folded "N done" rows are not grouped.
+- **Dragging an item into another date's group gives it that date** (in the drop handler);
+  otherwise it would jump straight back to its old group. A toast always says so ("... is now due
+  Oct 9"), so a drag meant only to reorder never changes a date silently.
+- **The Add button says "Add 6"** once the box holds several lines, so a paragraph pasted by
+  mistake shows what it would do before it's done.
+- The last three were found by a usability check the owner had to ask for before pushing ("I
+  should not need to remind"): run that check before proposing any UI change.
+- Verified in Chromium, light and dark, and at phone width (12 checks: Add N label, Shift+Enter,
+  no headings for one dated item or all-different dates, the box growing and shrinking, the drag toast,
+  bullet stripping, 7 items saved, headings and counts, no repeated Due lines, drag taking the
+  date, saved dates). The task-window and desktop suites still pass.
+
 **Several people per step, and time logged for each of them (2026-10-07).** Asked: "can assigning
 members be included and when time is allocated to that checklist item (briefing), can the time be
 tracked automatically for each member included? So this adds to the total time spent for the

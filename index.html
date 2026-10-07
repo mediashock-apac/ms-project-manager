@@ -1759,8 +1759,10 @@
       <div class="pt-1 border-t border-zinc-100 dark:border-zinc-700">
         <label class="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mt-3 mb-1.5">Checklist</label>
         <div id="task-checklist-editor" class="flex flex-col gap-1.5 mb-2"></div>
-        <div class="flex flex-wrap items-center gap-2">
-          <input type="text" id="task-checklist-input" placeholder="Add a checklist item…" class="flex-[2] min-w-[9rem] text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+        <div class="flex flex-wrap items-start gap-2">
+          <!-- A textarea so several items can go in at once, one per line (typed with Shift+Enter or
+               pasted). Enter adds them all. -->
+          <textarea id="task-checklist-input" rows="1" placeholder="Add a checklist item (one per line for several)" title="Enter adds. Shift+Enter or pasting several lines adds one item per line, all with the date and link set here." class="flex-[2] min-w-[9rem] text-sm leading-5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 resize-none overflow-y-auto max-h-40 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400"></textarea>
           <input type="text" id="task-checklist-link-input" placeholder="Paste a link…" class="flex-1 min-w-[8rem] text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
           <input type="date" id="task-checklist-due-input" class="text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
           <label class="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400"><input type="checkbox" id="task-checklist-tbd-check" class="brand-checkbox w-3.5 h-3.5 rounded border border-zinc-300 dark:border-zinc-600"> TBD</label>
@@ -7026,9 +7028,39 @@
     if (add) add.focus();
   }
 
+  function checklistGroupKey(item) { return item.due ? item.due : (item.dueTbd ? 'tbd' : 'none'); }
+  // Only when a date is actually shared by two or more open items. A milestone list where every
+  // item has its own date (Brief 7th, Draft 9th, Final 12th) would otherwise get a heading over
+  // every single row: more lines for the same information. Then it stays a flat list with each
+  // row's own "Due" line, as before.
+  function checklistIsGrouped() {
+    var seen = {};
+    return currentChecklist.some(function (it, i) {
+      var open = !it.done || checklistShownDone[it.id] || checklistEditIndex === i;
+      if (!open || !it.due) return false;
+      if (seen[it.due]) return true;
+      seen[it.due] = true;
+      return false;
+    });
+  }
+  function checklistGroupHeadHtml(key, members) {
+    var count = members.length > 1 ? ' · ' + members.length : '';
+    var label, cls = 'text-zinc-500 dark:text-zinc-400', note = '';
+    if (key === 'none') label = 'No date';
+    else if (key === 'tbd') label = 'Due TBD';
+    else {
+      label = 'Due ' + parseDate(key).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' });
+      var taskDeadline = document.getElementById('task-deadline').value;
+      var anyOpen = members.some(function (x) { return !x.item.done; });
+      if (anyOpen && parseDate(key) < todayMidnight()) { cls = 'text-rose-600 dark:text-rose-400'; note = ' · overdue'; }
+      else if (taskDeadline && key > taskDeadline) { cls = 'text-amber-700 dark:text-amber-400'; note = ' · after the task deadline'; }
+    }
+    return '<div class="checklist-group-head px-2 pt-2 first:pt-0 text-[11px] font-bold ' + cls + '">' + escapeHtml(label + note) + '<span class="font-semibold text-zinc-400 dark:text-zinc-500">' + count + '</span></div>';
+  }
+
   function renderChecklistEditor() {
     var el = document.getElementById('task-checklist-editor');
-    function rowHtml(item, i) {
+    function rowHtml(item, i, inGroup) {
           var editing = checklistEditIndex === i;
           var itemMinutes = checklistItemMinutes(item.id);
           return '<div class="checklist-item-row rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-700/50' + (justCheckedItemIds[item.id] ? ' checklist-just-checked' : '') + '" data-checklist-i="' + i + '">' +
@@ -7050,7 +7082,7 @@
                   '<span class="block text-sm ' + (item.done ? 'line-through text-zinc-400 dark:text-zinc-500' : 'text-zinc-700 dark:text-zinc-200') + '">' + escapeHtml(item.text) + '</span>' +
                   (item.link ? '<div>' + linkChipHtml(item.link) + '</div>' : '') +
                   (stepPeople(item).length ? '<span class="flex items-center gap-1 text-[11px] text-zinc-500 dark:text-zinc-400">' + stepPeople(item).map(function (n) { return avatarHtml(n, 'w-3.5 h-3.5 shrink-0', 'text-[8px]'); }).join('') + escapeHtml(stepPeopleLabel(item)) + '</span>' : '') +
-                  checklistDueLabelHtml(item, i) +
+                  (inGroup ? '' : checklistDueLabelHtml(item, i)) +
                 '</div>') +
               (itemMinutes ? '<span class="shrink-0 text-[10px] font-semibold text-zinc-400 dark:text-zinc-500" title="Time logged against this item">' + formatDuration(itemMinutes) + '</span>' : '') +
               '<button type="button" class="checklist-edit-toggle shrink-0 p-1 text-zinc-300 dark:text-zinc-600 hover:text-zinc-500 dark:hover:text-zinc-400" data-checklist-i="' + i + '" title="Edit item" aria-label="Edit item">' + svgIcon('pencil', 'w-3.5 h-3.5') + '</button>' +
@@ -7058,11 +7090,30 @@
             '</div>' +
           '</div>';
     }
-    var openRows = [], doneRows = [];
+    var openItems = [], doneRows = [];
     currentChecklist.forEach(function (item, i) {
       var inOpen = !item.done || checklistShownDone[item.id] || checklistEditIndex === i;
-      (inOpen ? openRows : doneRows).push(rowHtml(item, i));
+      if (inOpen) openItems.push({ item: item, i: i }); else doneRows.push(rowHtml(item, i));
     });
+    // Open items sit under a heading per due date, so a batch due together reads as one batch
+    // (asked: items "due on the same day same time"). Only once something has a date or TBD; a
+    // checklist with no dates looks as before. Items keep their own order inside a group, and the
+    // heading carries the date, so rows in a dated group don't repeat it.
+    var grouped = checklistIsGrouped();
+    var openRows = [];
+    if (!grouped) {
+      openItems.forEach(function (x) { openRows.push(rowHtml(x.item, x.i)); });
+    } else {
+      var groups = {};
+      openItems.forEach(function (x) { var k = checklistGroupKey(x.item); (groups[k] = groups[k] || []).push(x); });
+      Object.keys(groups).sort(function (a, b) {
+        var rank = function (k) { return k === 'none' ? '~2' : k === 'tbd' ? '~1' : k; };
+        return rank(a) < rank(b) ? -1 : 1;
+      }).forEach(function (k) {
+        openRows.push(checklistGroupHeadHtml(k, groups[k]));
+        groups[k].forEach(function (x) { openRows.push(rowHtml(x.item, x.i, true)); });
+      });
+    }
     var doneToggle = doneRows.length
       ? '<button type="button" class="checklist-done-toggle self-start flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-brand-600 dark:hover:text-brand-400">' +
           svgIcon('chevronDown', 'w-3.5 h-3.5 transition-transform' + (checklistDoneOpen ? '' : ' -rotate-90')) +
@@ -7244,6 +7295,16 @@
     var fromIndex = draggedChecklistIndex;
     draggedChecklistIndex = null;
     if (targetIndex === fromIndex) { row.classList.remove('drag-over'); return; }
+    // Grouped by date: dropping into another date's group means "this one is due then too", or the
+    // item would just jump back to its old group.
+    var dropTarget = currentChecklist[targetIndex];
+    var dragged = currentChecklist[fromIndex];
+    if (checklistIsGrouped() && dropTarget && dragged && checklistGroupKey(dropTarget) !== checklistGroupKey(dragged)) {
+      delete dragged.due; delete dragged.dueTbd;
+      if (dropTarget.due) dragged.due = dropTarget.due; else if (dropTarget.dueTbd) dragged.dueTbd = true;
+      // Never change a date silently: someone only meaning to reorder should see that it moved.
+      showToast('"' + dragged.text + '" ' + (dragged.due ? 'is now due ' + formatShortDate(dragged.due) : dragged.dueTbd ? 'is now due TBD' : 'no longer has a date'), 'info');
+    }
     var moved = currentChecklist.splice(fromIndex, 1)[0];
     currentChecklist.splice(targetIndex, 0, moved);
     // Editing-state indices point at array positions that just shifted -- rather than
@@ -7283,29 +7344,53 @@
     });
   });
 
+  // Several lines add several items (asked: grouping items "due on the same day same time", e.g.
+  // six ad sizes). Kept as separate items, not one multi-line item, so each is still ticked, dated,
+  // assigned and time-tracked on its own; the date, TBD and link set on this row apply to them all.
+  // Common list markers a pasted list carries ("- ", "• ", "1. ") are dropped.
+  function checklistLinesFromInput(value) {
+    return String(value || '').split(/\r?\n/).map(function (line) {
+      return line.replace(/^\s*(?:[-*\u2022\u00b7]|\d+[.)])\s+/, '').trim();
+    }).filter(Boolean).slice(0, 50);
+  }
+  function autosizeChecklistInput() {
+    var input = document.getElementById('task-checklist-input');
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight + 2, 160) + 'px';
+    // "Add 6" before a pasted list becomes six items, so a paragraph pasted by mistake shows up
+    // as what it would do before it's done.
+    var n = checklistLinesFromInput(input.value).length;
+    document.getElementById('task-checklist-add-btn').textContent = n > 1 ? 'Add ' + n : 'Add';
+  }
   function addChecklistItem() {
     var input = document.getElementById('task-checklist-input');
-    var text = input.value.trim();
-    if (!text) return;
-    var item = { id: uid(), text: sentenceCase(text), done: false };
+    var lines = checklistLinesFromInput(input.value);
+    if (!lines.length) return;
     var link = document.getElementById('task-checklist-link-input').value.trim();
-    if (link) item.link = normalizeUrl(link);
     var due = document.getElementById('task-checklist-due-input').value;
-    if (due) item.due = due;
-    else if (document.getElementById('task-checklist-tbd-check').checked) item.dueTbd = true;
+    var tbd = !due && document.getElementById('task-checklist-tbd-check').checked;
+    var added = lines.map(function (text) {
+      var item = { id: uid(), text: sentenceCase(text), done: false };
+      if (link) item.link = normalizeUrl(link);
+      if (due) item.due = due; else if (tbd) item.dueTbd = true;
+      return item;
+    });
     var wantsCalendar = !!due && document.getElementById('task-checklist-gcal-check').checked;
-    currentChecklist.push(item);
+    added.forEach(function (item) { currentChecklist.push(item); });
     input.value = '';
+    autosizeChecklistInput();
     resetChecklistExtras();
     renderChecklistEditor();
     input.focus();
-    if (wantsCalendar) openChecklistInGoogleCalendar(item);
+    // One calendar event for the batch, never one tab per item.
+    if (wantsCalendar) openChecklistInGoogleCalendar(added.length === 1 ? added[0] : { text: added.map(function (it) { return it.text; }).join(', '), due: due });
   }
 
   document.getElementById('task-checklist-add-btn').addEventListener('click', addChecklistItem);
   document.getElementById('task-checklist-input').addEventListener('keydown', function (e) {
-    if (e.key === 'Enter') { e.preventDefault(); addChecklistItem(); }
+    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); addChecklistItem(); }
   });
+  document.getElementById('task-checklist-input').addEventListener('input', autosizeChecklistInput);
 
   // Comments stay a flat array in storage -- always appended via arrayUnion for atomic,
   // race-free adds (a full reorder would mean rewriting the whole array instead, reopening the
@@ -14185,6 +14270,10 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-07b', date: '2026-10-07', items: [
+      { type: 'new', title: 'Add several checklist items at once', text: "Paste a list into \"Add a checklist item\", or use Shift+Enter between lines, and each line becomes its own item. The date and link you set apply to all of them." },
+      { type: 'improved', title: 'Checklists grouped by due date', text: "When several items are due the same day, the checklist groups them under a heading per day, like \"Due Fri, Oct 9 · 6\", instead of repeating the date on every row. Drag an item into another day's group to give it that date; you'll see a note saying so." }
+    ] },
     { id: '2026-10-07a', date: '2026-10-07', items: [
       { type: 'new', title: 'Several people on a checklist step', text: "Open a step's pencil and add everyone involved, like the whole team on a Briefing. Each of them is told and sees the step on their People card." },
       { type: 'new', title: "Log a step's time for everyone at once", text: "In Time Tracking, pick a step that has people and they're ticked under \"For\". Log 1 hour and everyone ticked gets 1 hour, so a 3-person briefing adds 3 hours to the project. Untick anyone who wasn't there." },
@@ -17614,7 +17703,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-07T03:21:26Z";
+  var CURRENT_BUILD_VERSION = "2026-10-07T03:39:19Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
