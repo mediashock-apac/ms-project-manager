@@ -2198,6 +2198,8 @@
       : type === 'review_stale' ? 'Still waiting on a review'
       : type === 'leave_clash' ? 'A deadline clashes with your leave'
       : type === 'weekly_reminder' ? 'Your Monday update is due'
+      : type === 'time_nudge' ? 'Log this week\'s time'
+      : type === 'dates_missing' ? 'Some of your work has no dates'
       : null;
   }
 
@@ -2218,6 +2220,7 @@
       : notif.type === 'suggestion_fixed' ? (notif.author + ' marked your suggestion as fixed')
       : notif.type === 'checklist_assigned' ? (notif.author + ' assigned you ' + checklistCountWords(notif.count))
       : notif.type === 'checklist_done' ? (notif.author + ' finished ' + checklistCountWords(notif.count))
+      : notif.type === 'step_up' ? (notif.author + ' ticked off a step: you\'re up')
       : (notif.author + ' commented');
     // A project chat mention carries `chatProject` instead of `taskName` (see
     // notifyOnProjectChat) -- named here the same way, so the popup says which chat before
@@ -5380,7 +5383,7 @@
     (oldList || []).forEach(function (it) { if (it && it.id) before[it.id] = it; });
     // One notification per person per save, listing the items, not one per item: adding six ad
     // sizes for someone in one go would otherwise send them six identical notifications.
-    function send(recipient, type, items) {
+    function send(recipient, type, items, snippet) {
       var texts = items.map(function (it) { return String(it.text || ''); });
       var data = {
         recipient: recipient,
@@ -5389,7 +5392,7 @@
         taskName: task.name,
         chatProject: null,
         author: myName || 'unknown',
-        snippet: (items.length > 1 ? items.length + ' items: ' + texts.join(', ') : texts[0]).slice(0, 140),
+        snippet: (snippet || (items.length > 1 ? items.length + ' items: ' + texts.join(', ') : texts[0])).slice(0, 140),
         at: new Date().toISOString(),
         read: false
       };
@@ -5410,8 +5413,54 @@
         (finished[task.assignee] = finished[task.assignee] || []).push(it);
       }
     });
+    // Handoff (see HELPERS): a step ticked off tells the people on the next open step they're up.
+    // Someone just added to that step already hears "assigned you", and a task owner who is also
+    // next gets this one instead of "finished", since it says both.
+    var upNext = {};
+    if (HELPERS.handoff) {
+      var order = checklistHandoffOrder(newList || [], before);
+      order.forEach(function (it, pos) {
+        var old = before[it.id];
+        if (!it.done || !old || old.done) return;
+        var next = null;
+        for (var k = pos + 1; k < order.length; k++) { if (!order[k].done) { next = order[k]; break; } }
+        if (!next) return;
+        stepPeople(next).forEach(function (who) {
+          if (who === myName || (assigned[who] && assigned[who].indexOf(next) !== -1)) return;
+          var list = upNext[who] = upNext[who] || [];
+          if (!list.some(function (x) { return x.next === next; })) list.push({ done: it, next: next });
+        });
+      });
+    }
+    Object.keys(upNext).forEach(function (who) {
+      if (finished[who] && finished[who].every(function (it) { return upNext[who].some(function (x) { return x.done === it; }); })) delete finished[who];
+    });
     Object.keys(assigned).forEach(function (who) { send(who, 'checklist_assigned', assigned[who]); });
     Object.keys(finished).forEach(function (who) { send(who, 'checklist_done', finished[who]); });
+    Object.keys(upNext).forEach(function (who) {
+      var hand = upNext[who];
+      var snippet = hand.length === 1
+        ? '"' + hand[0].done.text + '" is done. Next: ' + hand[0].next.text
+        : 'Next: ' + hand.map(function (x) { return x.next.text; }).join(', ');
+      send(who, 'step_up', hand.map(function (x) { return x.next; }), snippet);
+    });
+  }
+  // The order the task window shows steps in, so "next" means the step below on screen: by due
+  // date when the list is grouped (a date shared by 2+ open steps, as checklistIsGrouped decides
+  // there), otherwise the list's own order. Steps open before this save count as open.
+  function checklistHandoffOrder(list, before) {
+    var seen = {}, grouped = false;
+    list.forEach(function (it) {
+      var wasOpen = !it.done || (before[it.id] && !before[it.id].done);
+      if (!wasOpen || !it.due || grouped) return;
+      if (seen[it.due]) grouped = true;
+      seen[it.due] = true;
+    });
+    if (!grouped) return list.slice();
+    var rank = function (it) { return it.due ? '0' + it.due : (it.dueTbd ? '1' : '2'); };
+    return list.map(function (it, i) { return { it: it, i: i }; })
+      .sort(function (a, b) { var ra = rank(a.it), rb = rank(b.it); return ra < rb ? -1 : ra > rb ? 1 : a.i - b.i; })
+      .map(function (x) { return x.it; });
   }
   function checklistCountWords(count) {
     return count > 1 ? count + ' checklist items' : 'a checklist item';
@@ -9987,7 +10036,119 @@
     checkDeadlineReminders();
     checkStaleReviews();
     checkLeaveClashes();
+    checkMissingDates();
+    checkFridayHelpers();
   }
+
+  /* =========================================================
+     HELPERS -- rule-based nudges (asked: "what can I build agents for in PM?", then "Build the
+     rule-based helpers"). Same limits as the automations above: no server, and each nudge is
+     worked out in the browser of the person it's for, so exactly one client sends it.
+     Held to the standing rule "this tool should not add more work to people": each one saves a
+     chase or keeps data accurate. A Friday "add a status line to each task" nudge was built and
+     removed before shipping for that reason -- the Monday update already covers it per project.
+       handoff -- ticking a step tells the people on the next open step they're up
+                  (notifyChecklistChanges, at save time, like "finished a checklist item").
+       time    -- Friday from 3pm: tasks you're on (owner, involved or on a step) that you
+                  edited, moved, ticked a step on or posted a status line on this week, with no
+                  time logged by you this week. A comment alone doesn't count.
+       dates   -- an In Progress task of yours with no start date or deadline, so it isn't on the
+                  Timeline. Once per task ever: a deadline left TBD on purpose is nudged once.
+     Each is ONE notification listing the tasks, never one per task, and nothing is sent when
+     there's nothing to say. The Friday one (3pm, an hour before the Monday update reminder) is
+     recorded on your own people doc (helpersSent) so a reload or a second tab doesn't resend. Switch any of them off here.
+  ========================================================= */
+  var HELPERS = { handoff: true, time: true, dates: true };
+  var HELPER_DATES_GRACE_DAYS = 3;   // a task this new isn't nagged about dates yet
+  var missingDatesWarned = {};
+  function helperListSnippet(list, one, many) {
+    var names = list.map(function (t) { return t.name; });
+    return (list.length === 1 ? one.replace('{name}', function () { return '"' + names[0] + '"'; }) : many.replace('{n}', String(list.length)) + ': ' + names.join(', ')).slice(0, 200);
+  }
+  function checkMissingDates() {
+    if (!HELPERS.dates) return;
+    var cutoff = Date.now() - HELPER_DATES_GRACE_DAYS * 86400000;
+    var list = activeTasks().filter(function (t) {
+      if (t.status !== 'In Progress' || (t.startDate && t.deadline) || !isOwnNotification(t.assignee)) return false;
+      if (missingDatesWarned[t.id]) return false;
+      if ((notificationDedupByTaskId[t.id] || {}).missingDatesFor) { missingDatesWarned[t.id] = true; return false; }
+      var created = new Date(t.createdAt || 0).getTime();
+      return !(created > cutoff);
+    });
+    if (!list.length) return;
+    list.forEach(function (t) { missingDatesWarned[t.id] = true; });
+    setDoc(doc(notificationsCol), {
+      recipient: list[0].assignee,
+      type: 'dates_missing',
+      taskId: list[0].id,
+      taskName: list[0].name,
+      chatProject: null,
+      author: 'Project Manager',
+      snippet: helperListSnippet(list, '{name} has no start date or deadline, so it isn\'t on the Timeline.', '{n} tasks have no start date or deadline'),
+      at: new Date().toISOString(),
+      read: false
+    }).catch(function (e) { console.error('Failed to notify missing dates', e); });
+    list.forEach(function (t) {
+      setDoc(doc(notificationDedupCol, t.id), { missingDatesFor: true }, { merge: true })
+        .catch(function (e) { console.error('Failed to persist missing-dates dedup', e); });
+    });
+  }
+
+  var helperSession = {};
+  function checkFridayHelpers() {
+    var me = myPersonDoc();
+    var name = weeklyMe();
+    if (!me || !name || !tasks.length) return;
+    var now = new Date();
+    var day = now.getDay(), hr = now.getHours();
+    var weekend = day === 6 || day === 0;
+    var monday = weeklyMondayOf(now);
+    var weekKey = toDateInputValue(monday);
+    var mondayIso = monday.toISOString();
+    if (isOnLeave(name, toDateInputValue(now))) return;
+    // What's saved on your doc plus what this tab sent but the roster snapshot hasn't brought back
+    // yet -- otherwise a second run before that snapshot overwrote the first slot's record.
+    var sent = (Array.isArray(me.helpersSent) ? me.helpersSent : []).concat(Object.keys(helperSession))
+      .filter(function (t, i, a) { return a.indexOf(t) === i; });
+    function sendOnce(kind, type, list, one, many) {
+      var tag = weekKey + '|' + kind;
+      if (!list.length || sent.indexOf(tag) !== -1 || helperSession[tag]) return;
+      helperSession[tag] = true;
+      sent = sent.concat([tag]).slice(-12);
+      setDoc(doc(peopleCol, me.id), { helpersSent: sent }, { merge: true }).then(function () {
+        return setDoc(doc(notificationsCol), {
+          recipient: name,
+          type: type,
+          taskId: list[0].id,
+          taskName: list[0].name,
+          chatProject: null,
+          author: 'Project Manager',
+          snippet: helperListSnippet(list, one, many),
+          at: now.toISOString(),
+          read: false
+        });
+      }).catch(function (e) { console.error('helper nudge failed', e); });
+    }
+    var since = function (iso) { return !!iso && String(iso) >= mondayIso; };
+    if (HELPERS.time && (weekend || (day === 5 && hr >= 15))) {
+      var touched = {};
+      // Edits, moves and step ticks (Activity) and your own status lines count as work; creating,
+      // archiving or only commenting doesn't. And only on tasks you're on, so an admin tidying
+      // someone else's task isn't asked to log time for it.
+      activityLog.forEach(function (a) { if (a.user === name && a.taskId && since(a.at) && /^task_(updated|moved)$/.test(a.type || '')) touched[a.taskId] = true; });
+      var noTime = activeTasks().filter(function (t) {
+        var onIt = t.assignee === name || (t.involved || []).indexOf(name) !== -1
+          || (t.checklist || []).some(function (it) { return stepPeople(it).indexOf(name) !== -1; });
+        if (!onIt) return false;
+        var did = touched[t.id]
+          || (t.statusUpdates || []).some(function (u) { return u.author === name && since(u.at); });
+        if (!did) return false;
+        return !(t.timeEntries || []).some(function (e) { return e.author === name && since(e.date); });
+      });
+      sendOnce('time', 'time_nudge', noTime, 'You updated {name} this week but logged no time on it.', 'You updated {n} tasks this week but logged no time on them');
+    }
+  }
+  setInterval(checkFridayHelpers, 10 * 60 * 1000);
 
   function archiveTask(id) {
     var t = tasks.find(function (x) { return x.id === id; });
@@ -14472,6 +14633,11 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-07f', date: '2026-10-07', items: [
+      { type: 'new', title: '"You\'re up" when a step is done', text: "Tick off a checklist step and the people on the next step get a notification that it's their turn. No more chasing." },
+      { type: 'new', title: 'A Friday reminder to log time', text: "If you worked on a task this week but logged no time on it, you'll get one reminder on Friday afternoon listing them. Nothing comes if you're all caught up." },
+      { type: 'new', title: 'A heads-up about missing dates', text: "If one of your tasks in progress has no start date or deadline, you'll get one reminder so it shows on the Timeline. Only once per task." }
+    ] },
     { id: '2026-10-07e', date: '2026-10-07', items: [
       { type: 'improved', title: 'Calendar invites go to the step\'s people', text: "Tick \"Calendar\" when adding a checklist step with people, like a Briefing, and the Google Calendar event now invites those people. To make it a video call, click \"Add Google Meet video conferencing\" in Google's form and set a time." }
     ] },
@@ -17665,6 +17831,7 @@
       // (that one included) is open.
       maybeStartTour();
       checkWeeklyReminder();
+      checkFridayHelpers();
       // Full re-render (renderAll -> renderCurrentSecondaryView already covers the Chat tab's
       // online strip too, so a heartbeat write shows up there immediately, not just on the 30s
       // aging-out tick): this collection now carries personal leave as well as the roster, and
@@ -17746,7 +17913,7 @@
     var subject = n.chatProject ? ('the "' + escapeHtml(n.chatProject) + '" group chat') : ('"' + escapeHtml(n.taskName) + '"');
     var verb = n.chatProject
       ? (n.type === 'chat_post' ? 'posted in' : n.type === 'chat_reaction' ? 'reacted to your message in' : 'mentioned you in')
-      : (n.type === 'mention' ? 'mentioned you on' : n.type === 'assigned' ? 'made you the owner of' : n.type === 'involved' ? 'added you to' : n.type === 'checklist_assigned' ? 'assigned you ' + checklistCountWords(n.count) + ' on' : n.type === 'checklist_done' ? 'finished ' + checklistCountWords(n.count) + ' on' : 'commented on');
+      : (n.type === 'mention' ? 'mentioned you on' : n.type === 'assigned' ? 'made you the owner of' : n.type === 'involved' ? 'added you to' : n.type === 'checklist_assigned' ? 'assigned you ' + checklistCountWords(n.count) + ' on' : n.type === 'checklist_done' ? 'finished ' + checklistCountWords(n.count) + ' on' : n.type === 'step_up' ? 'ticked off a step, so you\'re up on' : 'commented on');
     return systemHeadline
       ? escapeHtml(systemHeadline)
       : n.type === 'suggestion_fixed'
@@ -17914,7 +18081,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-07T09:14:02Z";
+  var CURRENT_BUILD_VERSION = "2026-10-07T09:31:20Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

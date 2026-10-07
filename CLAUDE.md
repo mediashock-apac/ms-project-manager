@@ -84,6 +84,21 @@ Concrete checks, each learned from one of the above:
 - **Two chips must never carry the same word.** "Admin" the department and "Admin" the role were
   briefly both on one card; the role became "Admin rights".
 
+## Standing rule: the tool must not add work
+
+Stated directly (2026-10-07): *"this PM tool should not add more work to people. It should be easy
+to use, accurate and fuss free. Make this a rule."* Check every change against it, next to the
+clutter rule above:
+
+- **Ask "what new work does this create, and for whom?"** If any, cut it, or it must replace
+  something people already do (a sheet, a chase, a Doc).
+- **Never ask for the same information twice.** A Friday "add a status line to each task" nudge
+  was built and dropped before shipping: the Monday update already covers status per project.
+- **Reminders: one per person per event, only when there's something to do, never repeated.**
+  Count only real signals, so a nudge is never wrong (an admin editing someone else's task is not
+  asked to log time on it).
+- **Derive rather than ask; default rather than choose.**
+
 ## Commands
 
 There is no build/lint/test tooling — it's static HTML/JS served as-is. Local development uses the
@@ -3956,6 +3971,29 @@ project as well." Two decisions made with the user: **person-hours** (3 people a
   one entry per person with `loggedBy`, a plain note logs once for you, saved data shape,
   notifications to both new people, the project card showing 3h 30m, People view). The desktop
   and phone suites still pass.
+
+**Helpers: three rule-based nudges (2026-10-07).** Asked "what can I build agents for in PM?",
+then "Build the rule-based helpers". The `HELPERS` section in index.html (`HELPERS = {handoff,
+time, dates}`, each switchable). All client-side like the automations above, each worked out in
+the browser of the person it's for. Held to "the tool must not add work" (see the standing rule).
+- **"You're up" handoff** (`step_up`, in `notifyChecklistChanges`): ticking a step tells the
+  people on the next open step. "Next" is the step below on screen: by due date when the list is
+  grouped, else list order (`checklistHandoffOrder`). Not sent to whoever ticked it, nor to
+  someone just added to that step (they get "assigned you"). A task owner who is also next gets
+  this instead of "finished a checklist item". Works from the task window and the phone.
+- **Friday time reminder** (`time_nudge`, `checkFridayHelpers`, Friday from 3pm or the weekend):
+  tasks you're on (owner, involved, or on a step) that you edited, moved, ticked a step on or
+  posted a status line on this week, with no time logged by you this week. A comment alone, a
+  created task, or someone else's task doesn't count. One notification, recorded in your own
+  `people/{uid}.helpersSent` so it isn't resent; skipped while you're on leave.
+- **Missing dates** (`dates_missing`, `checkMissingDates`, in `runTaskAutomations`): your In
+  Progress tasks over 3 days old with no start date or deadline (so not on the Timeline). Once per
+  task ever (`notificationDedup.missingDatesFor`), so a deadline left TBD on purpose is nudged once.
+- **Dropped before shipping:** a Friday "add a status line to each task" nudge. It would have added
+  a weekly chore per task, duplicating the Monday update.
+- Verified in Chromium with the in-memory stand-in and a fixed clock (13 checks: who gets "you're
+  up" incl. grouped order and the owner merge, Friday timing, no resend, what counts as work,
+  missing dates once and not for new or Pipeline tasks, bell headlines).
 
 **`update` is creator-OR-assignee-OR-admin** — the fourth shape this rule has taken. The board
 started fully open (`allow read, write: if isMediashock()`), moved to an ownership-scoped model
