@@ -428,6 +428,12 @@ to bottom:
        increase, close enough that a named step reads better than a bespoke number. No other
        layout change needed — the modal's own `p-2 sm:p-4` outer padding and the form's existing
        `sm:grid-cols-2` field pairs already respond to the wider container correctly on their own.
+   - **How a notification reads (desktop popup, bell, phone)**: asked "can desktop notifications be better presented?" from
+     a screenshot where the reader's own "@Deane Cheng" and a two-line Frame.io address filled the popup. The popup is
+     three parts: title = first name + action ("Zenon mentioned you"), first body line = the task or chat, then the
+     message. `notificationSnippetText` (shared with the bell and the phone list) drops your own @mention, turns links
+     into the site's name ("Frame.io link", via `linkChipLabel`), collapses spaces and cuts at a word. System alerts
+     keep their headline and message unchanged. Stored snippets are untouched; this is display only.
    - **Desktop popups**: an opt-in toggle in the user menu (`btn-desktop-notif-toggle`,
      `localStorage` key `flowboard_desktop_notif`) fires a native `Notification` from the
      `notifications` `onSnapshot` listener in `startListeners` for anything added *after* the

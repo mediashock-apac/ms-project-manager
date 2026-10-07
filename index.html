@@ -2203,6 +2203,21 @@
       : null;
   }
 
+  // The message part of a notification, as shown everywhere (desktop popup, bell, phone). Asked
+  // "can desktop notifications be better presented?" from a screenshot where the reader's own
+  // "@Deane Cheng" and a two-line Frame.io address took most of the popup. So: your own @mention
+  // is dropped (being notified already says it), a link becomes the site's name ("Frame.io
+  // link"), spaces collapse, and a long one is cut at a word.
+  function notificationSnippetText(n, max) {
+    var me = auth.currentUser ? (auth.currentUser.displayName || auth.currentUser.email) : '';
+    var text = String((n && n.snippet) || '');
+    if (me) text = text.split('@' + me).join('');
+    text = text.replace(/https?:\/\/[^\s)]+/g, function (u) { return linkChipLabel(u) + ' link'; })
+      .replace(/\s+/g, ' ').replace(/^[\s,:;\-]+/, '').trim();
+    if (max && text.length > max) text = text.slice(0, max).replace(/\s+\S*$/, '') + '…';
+    return text;
+  }
+
   function fireDesktopNotification(notif) {
     if (!desktopNotifActive() || firedDesktopNotifIds[notif.id]) return;
     firedDesktopNotifIds[notif.id] = true;
@@ -2210,27 +2225,28 @@
     // notifyOnProjectChat) -- worded as "posted in", not "mentioned you", for the same reason
     // the bell panel's own verb branches on it. `chat_reaction` (see notifyOnChatReaction) is
     // its own wording again -- reacting isn't posting or mentioning.
+    // Three short parts, so it reads at a glance: WHO did WHAT (title, first name), WHERE (the task
+    // or chat, its own line), then the message. System alerts keep their one-line headline, and
+    // their message already names the task.
     var systemHeadline = systemAlertHeadline(notif.type);
+    var who = String(notif.author || 'Someone').split(' ')[0];
     var title = systemHeadline ? systemHeadline
-      : (notif.type === 'mention' || notif.type === 'chat_mention') ? (notif.author + ' mentioned you')
-      : notif.type === 'chat_post' ? (notif.author + ' posted in ' + (notif.chatProject ? '"' + notif.chatProject + '"' : 'a group chat'))
-      : notif.type === 'chat_reaction' ? (notif.author + ' reacted to your message')
-      : notif.type === 'assigned' ? (notif.author + ' made you the owner of a task')
-      : notif.type === 'involved' ? (notif.author + ' added you to a task')
-      : notif.type === 'suggestion_fixed' ? (notif.author + ' marked your suggestion as fixed')
-      : notif.type === 'checklist_assigned' ? (notif.author + ' assigned you ' + checklistCountWords(notif.count))
-      : notif.type === 'checklist_done' ? (notif.author + ' finished ' + checklistCountWords(notif.count))
-      : notif.type === 'step_up' ? (notif.author + ' ticked off a step: you\'re up')
-      : (notif.author + ' commented');
-    // A project chat mention carries `chatProject` instead of `taskName` (see
-    // notifyOnProjectChat) -- named here the same way, so the popup says which chat before
-    // it's even clicked, same reasoning taskName is prefixed for a task notification. Skipped
-    // for `chat_post` and for every system alert (`systemHeadline` truthy) -- in both cases the
-    // body (`snippet`) already names the task/project on its own, so repeating it here would
-    // just be the same name twice in one popup.
-    var subjectName = (notif.type === 'chat_post' || systemHeadline) ? '' : (notif.chatProject || notif.taskName);
+      : (notif.type === 'mention') ? (who + ' mentioned you')
+      : notif.type === 'chat_mention' ? (who + ' mentioned you in a chat')
+      : notif.type === 'chat_post' ? (who + ' posted in a chat')
+      : notif.type === 'chat_reaction' ? (who + ' reacted to your message')
+      : notif.type === 'assigned' ? (who + ' made you the owner')
+      : notif.type === 'involved' ? (who + ' added you to a task')
+      : notif.type === 'suggestion_fixed' ? (who + ' fixed your suggestion')
+      : notif.type === 'checklist_assigned' ? (who + ' assigned you ' + checklistCountWords(notif.count))
+      : notif.type === 'checklist_done' ? (who + ' finished ' + checklistCountWords(notif.count))
+      : notif.type === 'step_up' ? (who + ' finished a step: you\'re up')
+      : (who + ' commented');
+    var where = systemHeadline ? '' : (notif.chatProject || notif.taskName || '');
+    if (where.length > 70) where = where.slice(0, 69) + '…';
+    var message = notificationSnippetText(notif, 140);
     var n = new Notification(title, {
-      body: (subjectName ? subjectName + ': ' : '') + (notif.snippet || ''),
+      body: (where ? where + (message ? '\n' : '') : '') + message,
       icon: 'favicon.png',
       tag: notif.id,
       // Stays on screen until clicked (n.onclick below calls n.close()) instead of
@@ -14865,6 +14881,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-07h', date: '2026-10-07', items: [
+      { type: 'improved', title: 'Clearer desktop notifications', text: "Pop-ups now read in three short parts: who did what (\"Zenon mentioned you\"), which task or chat, then the message. Your own @name is left out, and links show as the site's name, like \"Frame.io link\", instead of a long web address. The bell list tidies messages the same way." }
+    ] },
     { id: '2026-10-07g', date: '2026-10-07', items: [
       { type: 'fixed', title: 'Saving a task no longer undoes other people\'s changes', text: "If someone ticked a step, moved the status or logged time while you had the task open, saving used to put the old values back. Now their changes appear in your open window as they happen, and saving only changes what you changed." },
       { type: 'fixed', title: 'Renaming a project keeps its chat and brief', text: "Change a project's name on its tasks and its group chat, brief, deadline and WIP entry move to the new name. A name typed with different capitals or spacing joins the existing project instead of starting a new one." },
@@ -17392,7 +17411,7 @@
       return '<button type="button" class="m-row" data-m-notif="' + n.id + '" style="align-items:flex-start">' +
         '<span style="width:8px;height:8px;border-radius:4px;margin-top:7px;flex-shrink:0;background:' + (n.read ? 'transparent' : 'var(--m-brand)') + '"></span>' +
         '<span class="m-row-main"><span class="m-row-title" style="font-weight:' + (n.read ? '400;color:var(--m-sub)' : '600') + '">' + notificationHeadlineHtml(n) + '</span>' +
-          (n.snippet ? '<span class="m-row-note">' + escapeHtml(n.snippet) + '</span>' : '') +
+          (n.snippet ? '<span class="m-row-note">' + escapeHtml(notificationSnippetText(n)) + '</span>' : '') +
           '<span class="m-row-sub">' + escapeHtml(mAgo(n.at)) + '</span></span></button>';
     }).join('')) + '</div>';
   }
@@ -18210,7 +18229,7 @@
             '<span class="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ' + (isUnread ? 'bg-brand-500' : 'bg-transparent') + '"></span>' +
             '<div class="min-w-0 flex-1">' +
               '<p class="text-xs ' + (isUnread ? 'text-zinc-800 dark:text-zinc-100 font-semibold' : 'text-zinc-500 dark:text-zinc-400') + '">' + headlineHtml + '</p>' +
-              '<p class="text-xs text-zinc-400 dark:text-zinc-500 truncate mt-0.5">' + escapeHtml(n.snippet) + '</p>' +
+              '<p class="text-xs text-zinc-400 dark:text-zinc-500 truncate mt-0.5">' + escapeHtml(notificationSnippetText(n)) + '</p>' +
             '</div>' +
           '</button>';
         }).join('')
@@ -18339,7 +18358,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-07T10:00:34Z";
+  var CURRENT_BUILD_VERSION = "2026-10-07T10:08:49Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
