@@ -3908,6 +3908,16 @@ project as well." Two decisions made with the user: **person-hours** (3 people a
   ticked logs for you. Editing an existing entry stays one entry, so the row hides in edit mode.
   Project, task and billable totals already summed every entry, so nothing else had to change for
   the hours to count.
+- **People can be set on the add row too** (`#task-checklist-add-people`, `checklistAddPeople`),
+  asked once several items could be added at once ("add people in checklist is not done here?"):
+  a narrow dashed "+ People" select, first-name chips (full name on hover) so the row stays one
+  line, applied to every item added in that go and cleared after, like the date. All controls on
+  that row sit at the text box's 38px line.
+- **One notification per person per save** (`notifyChecklistChanges` groups by recipient):
+  `snippet` = "6 items: A, B, …" and a `count` field, which the bell, the phone list and the
+  desktop popup read through `checklistCountWords` ("assigned you 6 checklist items on …").
+  Found by checking the add-row change before building it: six ad sizes for one person would
+  otherwise have sent six notifications.
 - **Still a step, not a half-task:** the people are notified and see it on their People card, but
   it doesn't count toward workload, Focus or alerts, same line as before.
 - **Bug fixed on the way:** `openTaskModal` handed the task window the live task's own checklist

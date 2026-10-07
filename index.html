@@ -1765,8 +1765,9 @@
           <textarea id="task-checklist-input" rows="1" placeholder="Add a checklist item (one per line for several)" title="Enter adds. Shift+Enter or pasting several lines adds one item per line, all with the date and link set here." class="flex-[2] min-w-[9rem] text-sm leading-5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 resize-none overflow-y-auto max-h-40 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400"></textarea>
           <input type="text" id="task-checklist-link-input" placeholder="Paste a link…" class="flex-1 min-w-[8rem] text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
           <input type="date" id="task-checklist-due-input" class="text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
-          <label class="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400"><input type="checkbox" id="task-checklist-tbd-check" class="brand-checkbox w-3.5 h-3.5 rounded border border-zinc-300 dark:border-zinc-600"> TBD</label>
-          <label title="Add to Google Calendar once a date is set" id="task-checklist-gcal-label" class="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 opacity-50"><input type="checkbox" id="task-checklist-gcal-check" disabled class="brand-checkbox w-3.5 h-3.5 rounded border border-zinc-300 dark:border-zinc-600"> Calendar</label>
+          <label class="h-[38px] flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400"><input type="checkbox" id="task-checklist-tbd-check" class="brand-checkbox w-3.5 h-3.5 rounded border border-zinc-300 dark:border-zinc-600"> TBD</label>
+          <div id="task-checklist-add-people" class="min-h-[38px] flex flex-wrap items-center gap-1.5"></div>
+          <label title="Add to Google Calendar once a date is set" id="task-checklist-gcal-label" class="h-[38px] flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 opacity-50"><input type="checkbox" id="task-checklist-gcal-check" disabled class="brand-checkbox w-3.5 h-3.5 rounded border border-zinc-300 dark:border-zinc-600"> Calendar</label>
           <button type="button" id="task-checklist-add-btn" class="shrink-0 text-sm font-semibold px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">Add</button>
         </div>
       </div>
@@ -2208,8 +2209,8 @@
       : notif.type === 'assigned' ? (notif.author + ' made you the owner of a task')
       : notif.type === 'involved' ? (notif.author + ' added you to a task')
       : notif.type === 'suggestion_fixed' ? (notif.author + ' marked your suggestion as fixed')
-      : notif.type === 'checklist_assigned' ? (notif.author + ' assigned you a checklist item')
-      : notif.type === 'checklist_done' ? (notif.author + ' finished a checklist item')
+      : notif.type === 'checklist_assigned' ? (notif.author + ' assigned you ' + checklistCountWords(notif.count))
+      : notif.type === 'checklist_done' ? (notif.author + ' finished ' + checklistCountWords(notif.count))
       : (notif.author + ' commented');
     // A project chat mention carries `chatProject` instead of `taskName` (see
     // notifyOnProjectChat) -- named here the same way, so the popup says which chat before
@@ -5370,19 +5371,25 @@
     var myName = user ? (user.displayName || user.email) : null;
     var before = {};
     (oldList || []).forEach(function (it) { if (it && it.id) before[it.id] = it; });
-    function send(recipient, type, it) {
-      setDoc(doc(notificationsCol), {
+    // One notification per person per save, listing the items, not one per item: adding six ad
+    // sizes for someone in one go would otherwise send them six identical notifications.
+    function send(recipient, type, items) {
+      var texts = items.map(function (it) { return String(it.text || ''); });
+      var data = {
         recipient: recipient,
         type: type,
         taskId: task.id,
         taskName: task.name,
         chatProject: null,
         author: myName || 'unknown',
-        snippet: String(it.text || '').slice(0, 140),
+        snippet: (items.length > 1 ? items.length + ' items: ' + texts.join(', ') : texts[0]).slice(0, 140),
         at: new Date().toISOString(),
         read: false
-      }).catch(function (e) { console.error('Failed to notify checklist change', e); });
+      };
+      if (items.length > 1) data.count = items.length;
+      setDoc(doc(notificationsCol), data).catch(function (e) { console.error('Failed to notify checklist change', e); });
     }
+    var assigned = {}, finished = {};
     (newList || []).forEach(function (it) {
       var people = stepPeople(it);
       if (!people.length) return;
@@ -5390,12 +5397,17 @@
       var oldPeople = stepPeople(old);
       // Everyone newly added to an open step hears about it; people already on it don't again.
       if (!it.done) people.forEach(function (who) {
-        if (who !== myName && oldPeople.indexOf(who) === -1) send(who, 'checklist_assigned', it);
+        if (who !== myName && oldPeople.indexOf(who) === -1) (assigned[who] = assigned[who] || []).push(it);
       });
       if (it.done && old && !old.done && people.indexOf(task.assignee) === -1 && task.assignee && task.assignee !== myName) {
-        send(task.assignee, 'checklist_done', it);
+        (finished[task.assignee] = finished[task.assignee] || []).push(it);
       }
     });
+    Object.keys(assigned).forEach(function (who) { send(who, 'checklist_assigned', assigned[who]); });
+    Object.keys(finished).forEach(function (who) { send(who, 'checklist_done', finished[who]); });
+  }
+  function checklistCountWords(count) {
+    return count > 1 ? count + ' checklist items' : 'a checklist item';
   }
 
   // Tells a suggestion's author it was marked Fixed -- asked for directly ("when a suggestion is
@@ -7317,7 +7329,44 @@
   // Optional link / due date / TBD / "add to Google Calendar" for a NEW item, on the same row as
   // the item text and set before it is added.
   function setChecklistExtrasOpen() {}
+  // People for new items, set on the add row like the date and link, applied to every item added
+  // in that go (asked: "add people in checklist is not done here?", once several items could be
+  // added at once). A dashed "+ People" pill, chips once someone is picked, the same look as the
+  // item editor's People row. Clears after each add, like the date.
+  var checklistAddPeople = [];
+  function renderChecklistAddPeople() {
+    var wrap = document.getElementById('task-checklist-add-people');
+    var others = teamRoster().filter(function (n) { return checklistAddPeople.indexOf(n) === -1; });
+    // First names on this row (full name on hover): it shares one line with the text box, link and
+    // date, and full names pushed Calendar and Add onto a second line.
+    wrap.innerHTML = checklistAddPeople.map(function (n) {
+      return '<span class="checklist-person-chip inline-flex items-center gap-1 pl-0.5 pr-1 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-600 text-xs text-zinc-700 dark:text-zinc-200" data-name="' + escapeHtml(n) + '" title="' + escapeHtml(n) + '">' +
+        avatarHtml(n, 'w-4 h-4 shrink-0', 'text-[8px]') + escapeHtml(String(n).split(' ')[0]) +
+        '<button type="button" class="checklist-person-remove p-0.5 rounded-full text-zinc-400 hover:text-rose-500 dark:hover:text-rose-400" aria-label="Remove ' + escapeHtml(n) + '">' + svgIcon('x', 'w-2.5 h-2.5') + '</button></span>';
+    }).join('') +
+      '<select class="checklist-add-person w-[5.75rem] text-xs rounded-full border border-dashed border-zinc-300 dark:border-zinc-600 bg-transparent text-zinc-500 dark:text-zinc-400 pl-2 pr-1 py-1 focus:outline-none focus:ring-2 focus:ring-brand-500/40" aria-label="People on the new items">' +
+        '<option value="">' + (checklistAddPeople.length ? '+ Add' : '+ People') + '</option>' +
+        others.map(function (n) { return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('') +
+      '</select>';
+  }
+  document.getElementById('task-checklist-add-people').addEventListener('change', function (e) {
+    if (!e.target.classList.contains('checklist-add-person') || !e.target.value) return;
+    checklistAddPeople.push(e.target.value);
+    renderChecklistAddPeople();
+    var sel = document.querySelector('#task-checklist-add-people .checklist-add-person');
+    if (sel) sel.focus();
+  });
+  document.getElementById('task-checklist-add-people').addEventListener('click', function (e) {
+    var x = e.target.closest('.checklist-person-remove');
+    if (!x) return;
+    var gone = x.closest('.checklist-person-chip').getAttribute('data-name');
+    checklistAddPeople = checklistAddPeople.filter(function (n) { return n !== gone; });
+    renderChecklistAddPeople();
+  });
+
   function resetChecklistExtras() {
+    checklistAddPeople = [];
+    renderChecklistAddPeople();
     document.getElementById('task-checklist-link-input').value = '';
     document.getElementById('task-checklist-due-input').value = '';
     document.getElementById('task-checklist-gcal-check').checked = false;
@@ -7373,6 +7422,7 @@
       var item = { id: uid(), text: sentenceCase(text), done: false };
       if (link) item.link = normalizeUrl(link);
       if (due) item.due = due; else if (tbd) item.dueTbd = true;
+      if (checklistAddPeople.length) setStepPeople(item, checklistAddPeople);
       return item;
     });
     var wantsCalendar = !!due && document.getElementById('task-checklist-gcal-check').checked;
@@ -14270,6 +14320,10 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-07c', date: '2026-10-07', items: [
+      { type: 'improved', title: 'People on new checklist items', text: "The add row now has \"+ People\". Pick who's on the items before you add them, and they go on every item you add in that go." },
+      { type: 'improved', title: 'Fewer checklist notifications', text: "Adding or ticking several items for someone in one save now sends them one notification listing the items, not one each." }
+    ] },
     { id: '2026-10-07b', date: '2026-10-07', items: [
       { type: 'new', title: 'Add several checklist items at once', text: "Paste a list into \"Add a checklist item\", or use Shift+Enter between lines, and each line becomes its own item. The date and link you set apply to all of them." },
       { type: 'improved', title: 'Checklists grouped by due date', text: "When several items are due the same day, the checklist groups them under a heading per day, like \"Due Fri, Oct 9 · 6\", instead of repeating the date on every row. Drag an item into another day's group to give it that date; you'll see a note saying so." }
@@ -17535,7 +17589,7 @@
     var subject = n.chatProject ? ('the "' + escapeHtml(n.chatProject) + '" group chat') : ('"' + escapeHtml(n.taskName) + '"');
     var verb = n.chatProject
       ? (n.type === 'chat_post' ? 'posted in' : n.type === 'chat_reaction' ? 'reacted to your message in' : 'mentioned you in')
-      : (n.type === 'mention' ? 'mentioned you on' : n.type === 'assigned' ? 'made you the owner of' : n.type === 'involved' ? 'added you to' : n.type === 'checklist_assigned' ? 'assigned you a checklist item on' : n.type === 'checklist_done' ? 'finished a checklist item on' : 'commented on');
+      : (n.type === 'mention' ? 'mentioned you on' : n.type === 'assigned' ? 'made you the owner of' : n.type === 'involved' ? 'added you to' : n.type === 'checklist_assigned' ? 'assigned you ' + checklistCountWords(n.count) + ' on' : n.type === 'checklist_done' ? 'finished ' + checklistCountWords(n.count) + ' on' : 'commented on');
     return systemHeadline
       ? escapeHtml(systemHeadline)
       : n.type === 'suggestion_fixed'
@@ -17703,7 +17757,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-07T03:39:19Z";
+  var CURRENT_BUILD_VERSION = "2026-10-07T03:51:10Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
