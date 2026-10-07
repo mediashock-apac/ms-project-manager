@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const STUBS = require('./fbstub.js');
 const REPO = path.resolve(__dirname, '..');
-const OUT = __dirname;
+const OUT = process.cwd();   // tests/.out when run by run.mjs
 
 const results = [];
 function check(name, ok, extra) { results.push((ok ? 'PASS ' : 'FAIL ') + name + (extra ? '  [' + extra + ']' : '')); }
