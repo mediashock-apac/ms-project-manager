@@ -2311,7 +2311,54 @@
   // store for the group chat's `chat`/`links` fields (see PROJECT GROUP CHAT below). Kept as
   // one lookup rather than a second one, since it's the same "find by name" either way.
   function projectDeadlineDoc(name) {
-    return projectDocs.find(function (p) { return p.name === name; }) || null;
+    var exact = projectDocs.find(function (p) { return p.name === name; });
+    if (exact) return exact;
+    // Same project typed with other capitals or spacing (see canonicalProjectName).
+    var k = projectKey(name);
+    return k ? (projectDocs.find(function (p) { return projectKey(p.name) === k; }) || null) : null;
+  }
+
+  // Project names link everything (tasks, chat, brief, deadline, WIP entry, Monday rows), so one
+  // project must have one spelling. A name typed with other capitals or spacing ("acme rebrand"
+  // for "Acme Rebrand") snaps to the spelling already in use. `exceptTaskId`/`oldName` leave
+  // out the task being edited, so fixing the capitals on a project's only task is a rename (and
+  // carryProjectDocOnRename moves its chat, brief and WIP entry along), not snapped back.
+  function projectKey(name) { return stripZwsp(String(name || '')).toLowerCase().replace(/\s+/g, ''); }
+  function canonicalProjectName(name, exceptTaskId, oldName) {
+    var clean = stripZwsp(String(name || '')).trim().replace(/\s+/g, ' ');
+    if (!clean) return clean;
+    var k = projectKey(clean);
+    var others = tasks.concat(archivedTasks).filter(function (t) { return t.id !== exceptTaskId && t.project; });
+    if (others.some(function (t) { return t.project === clean; })) return clean;
+    var hit = others.find(function (t) { return projectKey(t.project) === k; });
+    if (hit) return hit.project;
+    var d = projectDocs.find(function (p) { return p.name && p.name !== oldName && projectKey(p.name) === k; });
+    return d ? d.name : clean;
+  }
+
+  // A project renamed on its tasks keeps its chat, brief, deadline and WIP entry: once no task
+  // (active or archived) uses the old name, the old name's project doc takes the new name. If the
+  // new name already has its own doc, both are left as they are rather than guessing a merge.
+  // Your own chat read/favourite/mute marks move too; other people's reset on their next visit.
+  function carryProjectDocOnRename(oldName, newName, movedTaskId) {
+    if (!oldName || !newName || oldName === newName) return;
+    withArchivedTasksReady(function () {
+      var stillUsed = tasks.concat(archivedTasks).some(function (t) { return t.id !== movedTaskId && t.project === oldName; });
+      var oldDoc = projectDocs.find(function (p) { return p.name === oldName; });
+      if (stillUsed || !oldDoc || projectDocs.some(function (p) { return p.name === newName; })) return;
+      updateDoc(doc(projectsCol, oldDoc.id), { name: newName }).then(function () {
+        logActivity('project_renamed', 'Renamed project ' + oldName + ' to ' + newName);
+        var me = myPersonDoc();
+        if (!me) return;
+        var patch = {};
+        if (Array.isArray(me.favoriteChats) && me.favoriteChats.indexOf(oldName) !== -1) patch.favoriteChats = me.favoriteChats.map(function (n) { return n === oldName ? newName : n; });
+        if (Array.isArray(me.mutedChats) && me.mutedChats.indexOf(oldName) !== -1) patch.mutedChats = me.mutedChats.map(function (n) { return n === oldName ? newName : n; });
+        if (Array.isArray(me.chatLastRead) && me.chatLastRead.some(function (r) { return r && r.project === oldName; })) {
+          patch.chatLastRead = me.chatLastRead.map(function (r) { return r && r.project === oldName ? Object.assign({}, r, { project: newName }) : r; });
+        }
+        if (Object.keys(patch).length) return setDoc(doc(peopleCol, me.id), patch, { merge: true });
+      }).catch(function (e) { console.error('Could not carry the project over to its new name', e); });
+    });
   }
 
   // ISO date string, or '' when this project has no deadline of its own.
@@ -2592,7 +2639,7 @@
   // (allProjectNames), not from projectDocs. A name that matches an existing project simply puts
   // that project in the category instead of making a second one.
   function addWipEntry(name, key, firstDeliverable) {
-    name = stripZwsp(name).trim();
+    name = canonicalProjectName(name);
     var patch = { wipCategory: key };
     if (firstDeliverable) patch.wipDeliverables = arrayUnion({ id: uid(), text: firstDeliverable, status: [], next: '' });
     return ensureProjectDoc(name).then(function (id) {
@@ -5630,9 +5677,12 @@
       }).map(function (x) { return x.item; });
   }
 
-  function ganttItemLate(t, item) {
-    return !!(item.due && parseDate(item.due) && !item.done && t.status !== 'Done' && parseDate(item.due) < todayMidnight());
+  // THE rule for a late checklist step (Timeline, WIP Behind, Calendar, brief key dates, phone):
+  // open, on a task that isn't Completed, due before today.
+  function stepIsLate(t, item) {
+    return !!(item && item.due && parseDate(item.due) && !item.done && t.status !== 'Done' && parseDate(item.due) < todayMidnight());
   }
+  function ganttItemLate(t, item) { return stepIsLate(t, item); }
 
   function ganttItemDiamondColor(t, item) {
     return item.done ? 'bg-emerald-500' : (ganttItemLate(t, item) ? 'bg-rose-600' : 'bg-zinc-500 dark:bg-zinc-300');
@@ -6721,6 +6771,111 @@
   // Snapshot of the whole form as of modal-open time, used to detect unsaved edits so an
   // accidental backdrop click / Escape / Cancel doesn't silently discard in-progress work.
   var formBaseline = '{}';
+  // What each field and list looked like in this window when it opened (or when the server last
+  // changed it while open). Lets a live change made elsewhere -- a step ticked on a phone, a
+  // status moved on the Board, steps added from a brief -- show up in the open window, and lets
+  // Save write only what was changed HERE instead of writing the whole stale form back over it.
+  // Asked: "make sure all the features work together, in sync" (see the standing rule in CLAUDE.md).
+  var taskOpenBase = null;
+  function sameJson(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+  function deepCopy(x) { return x == null ? x : JSON.parse(JSON.stringify(x)); }
+  // Three-way merge by item id: an item untouched here takes the server's version (or its
+  // deletion); one changed, added or removed here keeps this window's version; one added on the
+  // server is kept. Order follows the server unless it was reordered here. Gives up (keeps this
+  // window's list) if any server item has no id to match on.
+  function mergeChecklist(local, base, server) {
+    server = server || [];
+    if (server.some(function (it) { return !it || !it.id; })) return local;
+    function byId(list) { var m = {}; (list || []).forEach(function (it) { if (it && it.id) m[it.id] = it; }); return m; }
+    var B = byId(base), L = byId(local), S = byId(server);
+    function pick(id) {
+      var b = B[id], l = L[id], sv = S[id];
+      // Server items are copied: the window edits its items in place, and they must not be the
+      // board's own objects (an edit would then also change the 'before' Save compares with).
+      if (b && l) return sameJson(l, b) ? deepCopy(sv || null) : l;
+      if (b) return null;
+      return l || deepCopy(sv || null);
+    }
+    var ids = function (list) { return (list || []).map(function (it) { return it && it.id; }); };
+    var order = sameJson(ids(local), ids(base)) ? server : local;
+    var out = [], seen = {};
+    order.concat(local, server).forEach(function (it) {
+      if (!it || !it.id || seen[it.id]) return;
+      seen[it.id] = true;
+      var v = pick(it.id);
+      if (v) out.push(v);
+    });
+    return out;
+  }
+  // Time entries have no ids, so they merge as counts of identical entries: result = here +
+  // server - open (never below zero). Logged here: kept. Logged or removed elsewhere: followed.
+  function mergeTimeEntries(local, base, server) {
+    server = server || [];
+    function count(list) { var m = {}; (list || []).forEach(function (e) { var k = JSON.stringify(e); m[k] = (m[k] || 0) + 1; }); return m; }
+    var B = count(base), L = count(local), S = count(server), want = {};
+    Object.keys(L).concat(Object.keys(S)).forEach(function (k) { want[k] = Math.max(0, (L[k] || 0) + (S[k] || 0) - (B[k] || 0)); });
+    var out = [];
+    local.concat(server).forEach(function (e) { var k = JSON.stringify(e); if (want[k] > 0) { want[k]--; out.push(deepCopy(e)); } });
+    return out;
+  }
+  function taskOpenBaseFrom(task) {
+    return {
+      name: task.name || '', project: task.project || '', assignee: task.assignee || '',
+      involved: JSON.stringify(Array.isArray(task.involved) ? task.involved : []),
+      priority: task.priority || '', status: task.status || '', startDate: task.startDate || '',
+      deadline: task.deadline || '', driveLink: task.driveLink || '',
+      reviewAudience: task.status === 'Review' ? (task.reviewAudience || null) : null
+    };
+  }
+  // Called by the tasks listener while this task is open. A field still showing what it showed at
+  // open takes the server's new value; a field edited here is left alone (and Save writes it).
+  function syncOpenTaskFromServer(fresh) {
+    var b = taskOpenBase;
+    if (!b) return;
+    var sb = taskOpenBaseFrom(fresh);
+    function field(key, cur, apply) {
+      if (String(cur) === String(b[key]) && String(sb[key]) !== String(b[key])) apply(sb[key]);
+      b[key] = sb[key];
+    }
+    field('name', document.getElementById('task-name').value, function (v) { document.getElementById('task-name').value = v; });
+    field('project', document.getElementById('task-project').value, function (v) { document.getElementById('task-project').value = v; });
+    field('priority', document.getElementById('task-priority').value, function (v) { document.getElementById('task-priority').value = v; taskPriorityPill.sync(); });
+    var statusBefore = document.getElementById('task-status').value;
+    field('status', statusBefore, function (v) { document.getElementById('task-status').value = v; taskStatusPill.sync(); });
+    if (document.getElementById('task-status').value !== statusBefore || pendingReviewAudience === b.reviewAudience) pendingReviewAudience = sb.reviewAudience;
+    b.reviewAudience = sb.reviewAudience;
+    field('startDate', document.getElementById('task-start').value, function (v) { document.getElementById('task-start').value = v; });
+    field('deadline', document.getElementById('task-deadline').value, function (v) {
+      document.getElementById('task-deadline').value = v;
+      document.getElementById('task-deadline').disabled = !v;
+      document.getElementById('task-deadline-tbd').checked = !v;
+    });
+    field('driveLink', document.getElementById('task-drive').value, function (v) { document.getElementById('task-drive').value = v; syncDriveLinkButtons(); });
+    field('assignee', currentAssigneeValue(), function (v) { renderAssigneeOptions(v); involvedPrevAssignee = currentAssigneeValue(); });
+    field('involved', JSON.stringify(currentInvolved), function (v) { currentInvolved = JSON.parse(v); renderInvolved(); });
+    // Lists: not while an item or an entry is being edited here (the re-render would close it);
+    // Save merges against the server anyway, so nothing is lost by waiting.
+    if (checklistEditIndex === null) {
+      var mergedList = mergeChecklist(currentChecklist, b.checklist, fresh.checklist);
+      b.checklist = deepCopy(fresh.checklist || []);
+      if (!sameJson(mergedList, currentChecklist)) { currentChecklist = mergedList; renderChecklistEditor(); }
+    }
+    if (timeEntryEditIndex === null) {
+      var mergedTime = mergeTimeEntries(currentTimeEntries, b.time, fresh.timeEntries);
+      b.time = deepCopy(fresh.timeEntries || []);
+      if (!sameJson(mergedTime, currentTimeEntries)) {
+        currentTimeEntries = mergedTime;
+        renderTimeEntriesEditor(currentTimeEntries, document.getElementById('task-time-log'), document.getElementById('task-time-total'));
+      }
+    }
+    // A change that arrived from elsewhere isn't an unsaved change of yours.
+    var base = JSON.parse(formBaseline);
+    ['name', 'project', 'priority', 'status', 'startDate', 'deadline', 'driveLink', 'assignee'].forEach(function (k) { base[k] = b[k]; });
+    base.involved = JSON.parse(b.involved);
+    base.checklist = b.checklist;
+    base.timeEntries = b.time;
+    formBaseline = JSON.stringify(base);
+  }
 
   function taskFormSnapshot() {
     return JSON.stringify({
@@ -6894,6 +7049,19 @@
     taskModal.classList.remove('hidden');
     taskModal.classList.add('flex');
     formBaseline = taskFormSnapshot();
+    taskOpenBase = null;
+    if (task) {
+      taskOpenBase = taskOpenBaseFrom(task);
+      taskOpenBase.checklist = deepCopy(currentChecklist);
+      taskOpenBase.time = deepCopy(currentTimeEntries);
+      // Older steps saved without an id get one now, written straight away (like the comment
+      // backfill above), so the phone, WIP and this window can all match steps by id.
+      if ((task.checklist || []).some(function (it) { return it && !it.id; })) {
+        updateDoc(doc(tasksCol, task.id), { checklist: deepCopy(currentChecklist) }).catch(function (e) {
+          console.error('Could not persist checklist id backfill', e);
+        });
+      }
+    }
     setTimeout(function () { document.getElementById('task-project').focus(); }, 30);
   }
 
@@ -6901,6 +7069,7 @@
     taskModal.classList.add('hidden');
     taskModal.classList.remove('flex');
     editingTaskId = null;
+    taskOpenBase = null;
     taskForm.reset();
     if (location.hash.indexOf('#task=') === 0) history.replaceState(null, '', location.pathname + location.search);
   }
@@ -7050,7 +7219,7 @@
   function checklistDueLabelHtml(item, i) {
     if (!item.due) return item.dueTbd ? '<span class="block text-[11px] text-zinc-400 dark:text-zinc-500">Due TBD</span>' : '';
     var taskDeadline = document.getElementById('task-deadline').value;
-    var overdue = !item.done && parseDate(item.due) < todayMidnight();
+    var overdue = stepIsLate({ status: document.getElementById('task-status').value }, item);
     var after = taskDeadline && item.due > taskDeadline;
     var cls = overdue ? 'text-rose-600 dark:text-rose-400' : (after ? 'text-amber-700 dark:text-amber-400' : 'text-zinc-400 dark:text-zinc-500');
     return '<span class="block text-[11px] ' + cls + '">Due ' + formatShortDate(item.due) + (overdue ? ' · overdue' : '') + (after ? ' · after the task deadline' : '');
@@ -8703,11 +8872,16 @@
     // A date passing doesn't mean the step happened, so status comes from the matching checklist
     // step (same name, any task in the project): ticked = done, past and unticked = late. A past
     // date with no matching step is just "passed". The card and the checklist can't disagree.
+    // When the same step name is on several tasks, an open one speaks for it. Its date wins too:
+    // moving the step's date in a task moves it here (the brief keeps what was typed, shown only
+    // when there's no step). A step on a Completed task counts as done.
     var steps = {};
     activeTasks().filter(function (t) { return t.project === briefOpen.name; }).forEach(function (t) {
       (t.checklist || []).forEach(function (it) {
         var k = (it.text || '').trim().toLowerCase();
-        if (k) steps[k] = steps[k] === true ? true : !!it.done;
+        if (!k) return;
+        var info = { done: !!it.done || t.status === 'Done', due: it.due || '', late: stepIsLate(t, it) };
+        if (!steps[k] || (steps[k].done && !info.done)) steps[k] = info;
       });
     });
     var nextMarked = false;
@@ -8715,9 +8889,10 @@
       if (r.track) return '<li class="pt-2 text-[10px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">' + briefEsc(r.a) + '</li>';
       var key = r.a.trim().toLowerCase();
       var tracked = Object.prototype.hasOwnProperty.call(steps, key);
-      var done = tracked && steps[key];
+      if (tracked && steps[key].due) r = Object.assign({}, r, { b: steps[key].due });
+      var done = tracked && steps[key].done;
       var past = r.b && r.b < today;
-      var late = past && tracked && !done;
+      var late = tracked ? steps[key].late : false;
       var isNext = !done && !past && r.b && !nextMarked; if (isNext) nextMarked = true;
       var dot = done ? 'bg-emerald-500 border-emerald-500'
         : late ? 'border-rose-500'
@@ -9042,6 +9217,7 @@
     }
     updateDoc(doc(tasksCol, taskId), { checklist: briefClean(list), updatedAt: new Date().toISOString() }).then(function () {
       notifyChecklistChanges(task, oldList, list);
+      logActivity('task_updated', 'Added or updated ' + changed + ' checklist step' + (changed === 1 ? '' : 's') + ' from the brief on "' + task.name + '"', { taskId: taskId });
     }).catch(function (err) { showToast('Could not add the checklist steps: ' + writeErrorMessage(err, task), 'error'); });
     return changed;
   }
@@ -9171,7 +9347,7 @@
     var driveEl = document.getElementById('task-drive');
 
     var name = sentenceCase(nameEl.value.trim());
-    var project = stripZwsp(projectEl.value).trim();
+    var project = canonicalProjectName(projectEl.value, editingTaskId, (tasks.find(function (x) { return x.id === editingTaskId; }) || {}).project);
     // Not assigneeEl.value: the picker's "+ Someone else..." row keeps the real name in the
     // adjacent text input, and currentAssigneeValue() is what knows which of the two is live.
     var assignee = currentAssigneeValue();
@@ -9202,26 +9378,54 @@
     var isEditing = !!editingTaskId;
     var oldTask = isEditing ? tasks.find(function (x) { return x.id === editingTaskId; }) : null;
     var id = isEditing ? editingTaskId : uid();
+    // On an edit, a field nobody changed in this window keeps whatever the server has NOW, and the
+    // checklist and time entries are merged with the server's -- so saving never undoes a tick,
+    // a status move or a time entry made elsewhere while this window was open (it used to write
+    // the whole form back, last write wins). See taskOpenBase.
+    var b = isEditing && oldTask ? taskOpenBase : null;
+    var untouched = function (key, cur) { return !!b && String(cur) === String(b[key] == null ? '' : b[key]); };
+    var full = {
+      name: name, project: project, assignee: assignee,
+      involved: currentInvolved.filter(function (n) { return n !== assignee; }),
+      priority: priority, status: status, startDate: startDate, deadline: deadline, driveLink: driveLink,
+      checklist: b ? mergeChecklist(currentChecklist, b.checklist, oldTask.checklist || []) : currentChecklist,
+      timeEntries: b ? mergeTimeEntries(currentTimeEntries, b.time, oldTask.timeEntries || []) : currentTimeEntries,
+      // Overridden back to null by statusEffect.patch below on the leaving-Review path -- this
+      // is the staying-in/entering-Review value, already resolved before Save was ever clicked
+      // (see the #task-status change listener and openTaskModal(), above).
+      reviewAudience: pendingReviewAudience
+    };
+    if (b) {
+      if (untouched('name', nameEl.value)) full.name = oldTask.name;
+      if (untouched('project', projectEl.value)) full.project = oldTask.project;
+      if (untouched('assignee', assignee) && untouched('involved', JSON.stringify(currentInvolved))) {
+        full.assignee = oldTask.assignee;
+        full.involved = Array.isArray(oldTask.involved) ? oldTask.involved : [];
+      }
+      if (untouched('priority', priority)) full.priority = oldTask.priority;
+      if (untouched('status', status)) full.status = oldTask.status;
+      if (untouched('startDate', startEl.value)) full.startDate = oldTask.startDate;
+      if (untouched('deadline', deadline)) full.deadline = oldTask.deadline || '';
+      if (untouched('driveLink', driveEl.value)) full.driveLink = oldTask.driveLink || '';
+      if (full.status === oldTask.status && pendingReviewAudience === b.reviewAudience) full.reviewAudience = oldTask.reviewAudience || null;
+    }
     // Same completion effects (completedAt, card pulse, whole-project celebration) as dragging a
     // card to Done on the Board -- this is the other way a task's status changes, and it used to
     // skip all of it since this save goes through setDoc, not updateTaskStatus. A brand-new task
     // saved with status Done straight away counts as "entering Done" too (oldStatus is null).
-    var statusEffect = statusTransitionEffects(id, project, oldTask ? oldTask.status : null, status);
-    var taskData = Object.assign({
-      name: name, project: project, assignee: assignee,
-      involved: currentInvolved.filter(function (n) { return n !== assignee; }),
-      priority: priority,
-      status: status, startDate: startDate, deadline: deadline, driveLink: driveLink,
-      checklist: currentChecklist,
-      timeEntries: currentTimeEntries,
-      dependsOn: currentDependsOn,
-      // Overridden back to null by statusEffect.patch below on the leaving-Review path -- this
-      // is the staying-in/entering-Review value, already resolved before Save was ever clicked
-      // (see the #task-status change listener and openTaskModal(), above).
-      reviewAudience: pendingReviewAudience,
-      updatedAt: new Date().toISOString()
-    }, statusEffect.patch);
-    if (!isEditing) {
+    var statusEffect = statusTransitionEffects(id, full.project, oldTask ? oldTask.status : null, full.status);
+    Object.assign(full, statusEffect.patch);
+    var taskData;
+    if (oldTask) {
+      // Only the fields that actually differ from the server.
+      taskData = {};
+      Object.keys(full).forEach(function (k) {
+        var was = oldTask[k];
+        if (!sameJson(full[k], was === undefined ? (Array.isArray(full[k]) ? [] : full[k] === null ? null : '') : was)) taskData[k] = full[k];
+      });
+      taskData.updatedAt = new Date().toISOString();
+    } else {
+      taskData = Object.assign({}, full, { dependsOn: currentDependsOn, updatedAt: new Date().toISOString() });
       taskData.createdAt = taskData.updatedAt;
       taskData.comments = [];
       // Requested directly ("tasks can only be edited by the creator, not a fully open model,
@@ -9234,26 +9438,24 @@
       var creatorUser = auth.currentUser;
       taskData.createdBy = creatorUser ? (creatorUser.displayName || creatorUser.email) : null;
     }
+    name = full.name; assignee = full.assignee; deadline = full.deadline;
 
     var saveBtn = document.getElementById('task-save-btn');
     saveBtn.disabled = true;
     saveBtn.textContent = 'Saving…';
 
     var ref = doc(tasksCol, id);
-    // Last write wins: the whole board is meant to be edited live by anyone on the team, so
-    // a save here simply overwrites whatever is on the server, including checklist/time
-    // entries -- this trades away conflict protection for never blocking a save.
     var savePromise = setDoc(ref, taskData, { merge: true });
 
     savePromise.then(function () {
       showToast(isEditing ? 'Task updated' : 'Task added', 'success');
       if (isEditing) {
-        var changes = describeTaskChanges(oldTask, taskData);
+        var changes = describeTaskChanges(oldTask, Object.assign({}, oldTask, full));
         var changeSummary = changes.slice(0, 3).join(', ') + (changes.length > 3 ? ' (+' + (changes.length - 3) + ' more)' : '');
         logActivity('task_updated', changes.length ? 'Updated "' + name + '": ' + changeSummary : 'Updated task "' + name + '"', { taskId: id });
         if (oldTask.assignee !== assignee) notifyAssignment({ id: id, name: name, deadline: deadline }, assignee);
         var oldInvolved = oldTask.involved || [];
-        taskData.involved.forEach(function (n) {
+        full.involved.forEach(function (n) {
           if (oldInvolved.indexOf(n) === -1) notifyAssignment({ id: id, name: name, deadline: deadline }, n, true);
         });
       } else {
@@ -9261,7 +9463,8 @@
         notifyAssignment({ id: id, name: name, deadline: deadline }, assignee);
         taskData.involved.forEach(function (n) { notifyAssignment({ id: id, name: name, deadline: deadline }, n, true); });
       }
-      notifyChecklistChanges({ id: id, name: name, assignee: assignee }, isEditing ? oldTask.checklist : [], taskData.checklist);
+      notifyChecklistChanges({ id: id, name: name, assignee: assignee }, isEditing ? oldTask.checklist : [], full.checklist);
+      if (isEditing && oldTask.project !== full.project) carryProjectDocOnRename(oldTask.project, full.project, id);
       if (statusEffect.willFinishProject) celebrateProjectComplete(statusEffect.projectName);
       else if (statusEffect.enteringDone) spawnConfetti();
       closeTaskModal();
@@ -9479,6 +9682,7 @@
       else if (effect.enteringDone) spawnConfetti();
     }).catch(function (err) {
       showToast('Could not move task: ' + writeErrorMessage(err, t), 'error');
+      mRefresh();   // the phone's status buttons move before the write; put them back
     });
   }
 
@@ -11203,7 +11407,10 @@
   // exactly 3 tasks had no click target before either). Reads calendarDayCache rather than
   // recomputing spans, so opening it is just a lookup.
   var calendarDayModal = document.getElementById('calendar-day-modal');
+  // The open day pop-up follows live changes like the grid behind it (see renderCurrentSecondaryView).
+  var calendarDayOpenDate = null;
   function openCalendarDayModal(dateStr) {
+    calendarDayOpenDate = dateStr;
     var d = parseDate(dateStr);
     document.getElementById('calendar-day-modal-title').textContent = d
       ? d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
@@ -11235,6 +11442,7 @@
     calendarDayModal.classList.add('flex');
   }
   function closeCalendarDayModal() {
+    calendarDayOpenDate = null;
     calendarDayModal.classList.add('hidden');
     calendarDayModal.classList.remove('flex');
   }
@@ -11448,6 +11656,7 @@
   }
 
   function cal2OpenDay(ds) {
+    calendarDayOpenDate = ds;
     var d = parseDate(ds);
     document.getElementById('calendar-day-modal-title').textContent = d ? d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }) : ds;
     document.getElementById('calendar-day-modal-leave').classList.add('hidden'); // "away" items are in the list itself now
@@ -11584,15 +11793,17 @@
       });
       if (!owns && !involved && !steps.length) return;
       var p = t.project || 'No project';
-      var g = by[p] || (by[p] = { project: p, dates: [], dueThisWeek: [], items: [] });
+      var g = by[p] || (by[p] = { project: p, dates: [], lateDates: [], dueThisWeek: [], items: [] });
       if (t.deadline && owns) {
         g.dates.push(t.deadline);
+        if (dueUrgency(t).overdue) g.lateDates.push(t.deadline);
         g.items.push({ date: t.deadline, text: t.name });
         if (t.deadline >= key && t.deadline <= weekEnd) g.dueThisWeek.push({ date: t.deadline, text: t.name });
       }
       steps.forEach(function (it) {
         if (!it.due) return;
         g.dates.push(it.due);
+        if (it.due < today) g.lateDates.push(it.due);
         g.items.push({ date: it.due, text: it.text });
         if (it.due >= key && it.due <= weekEnd) g.dueThisWeek.push({ date: it.due, text: it.text });
       });
@@ -11600,7 +11811,7 @@
     return Object.keys(by).map(function (k) {
       var g = by[k];
       g.next = g.dates.filter(function (d) { return d >= today; }).sort()[0] || null;
-      g.late = g.dates.filter(function (d) { return d < today; }).sort()[0] || null;
+      g.late = g.lateDates.sort()[0] || null;
       g.dueThisWeek.sort(function (a, b) { return a.date < b.date ? -1 : 1; });
       // "Coming up": the person's next few dated items there, one per name.
       var upSeen = {};
@@ -11623,11 +11834,22 @@
     return statusSorted(all)[0] || null;
   }
 
+  // Away for the meeting = booked leave (People > Time off, the one place leave lives) covers the
+  // whole Mon-Fri week. A day or two off still means an update is expected. The editor's "I'm on
+  // leave this week" reads and writes that same leave, so the two can't disagree.
   function weeklyAwayDuring(name, key) {
     for (var i = 0; i < 5; i++) {
-      if (isOnLeave(name, toDateInputValue(addDays(parseDate(key), i)))) return true;
+      if (!isOnLeave(name, toDateInputValue(addDays(parseDate(key), i)))) return false;
     }
-    return false;
+    return true;
+  }
+  var WEEKLY_LEAVE_NOTE = 'From Monday update';
+  // A project from last week's update is carried into this week's only while it's still live:
+  // on the board and not fully archived, or a WIP entry (a lead or pitch with no tasks).
+  function weeklyProjectStillOpen(name) {
+    var doc0 = projectDeadlineDoc(name);
+    if (doc0 && WIP_CATEGORIES.some(function (c) { return c.key === doc0.wipCategory; })) return true;
+    return activeTasks().some(function (t) { return t.project === name; }) && !isProjectFullyArchived(name);
   }
 
   // Who the meeting expects an update from: people with a sign-in (a hand-typed name can't fill
@@ -11681,9 +11903,9 @@
     var html = '';
     var key = weeklyShownKey();
     var isCurrent = key === weeklyCurrentKey();
-    var people = weeklyPeople(key);
+    var people = weeklyPeople(key).filter(function (n) { return !!weeklyEntryFor(n, key) || !weeklyAwayDuring(n, key); });
     var inCount = people.filter(function (n) { return !!weeklyEntryFor(n, key); }).length;
-    var waiting = people.filter(function (n) { return !weeklyEntryFor(n, key) && !weeklyAwayDuring(n, key); });
+    var waiting = people.filter(function (n) { return !weeklyEntryFor(n, key); });
     var me = weeklyMe();
     var mine = me ? weeklyEntryFor(me, key) : null;
     var pct = people.length ? Math.round(inCount / people.length * 100) : 0;
@@ -11853,14 +12075,14 @@
     }
     board.forEach(function (g) { add(g.project, g); });
     // Anything you reported last week that's still open, even if it has left the board.
-    if (prev && !prev.leave) (prev.rows || []).forEach(function (r) { if (r && r.status !== 'done') add(r.project, null); });
+    if (prev && !prev.leave) (prev.rows || []).forEach(function (r) { if (r && r.status !== 'done' && weeklyProjectStillOpen(r.project)) add(r.project, null); });
     if (prev && !prev.leave) (prev.rows || []).forEach(function (r) { if (r && byProject[r.project]) byProject[r.project].last = r; });
     if (existing && !existing.leave) (existing.rows || []).forEach(function (r) {
       if (!r) return;
       var row = add(r.project, null);
       row.status = r.status; row.note = r.note || '';
     });
-    weeklyDraft = { week: key, rows: rows, extra: existing ? (existing.extra || '') : '', leave: !!(existing && existing.leave), existing: existing };
+    weeklyDraft = { week: key, rows: rows, extra: existing ? (existing.extra || '') : '', leave: existing ? !!existing.leave : weeklyAwayDuring(me, key), existing: existing };
     renderWeeklyEditor();
     weeklyModal.classList.remove('hidden');
     weeklyModal.classList.add('flex');
@@ -11957,7 +12179,17 @@
     list = list.slice(0, WEEKLY_KEEP);
     var btn = document.querySelector('#weekly-modal-foot [data-weekly-send]');
     if (btn) btn.disabled = true;
-    setDoc(doc(peopleCol, me.id), { weekly: list }, { merge: true }).then(function () {
+    var patch = { weekly: list };
+    var weekEndKey = toDateInputValue(addDays(parseDate(d.week), 4));
+    var periods = Array.isArray(me.leave) ? me.leave.slice() : [];
+    var ours = function (l) { return l && l.note === WEEKLY_LEAVE_NOTE && l.start === d.week && l.end === weekEndKey; };
+    if (d.leave && !weeklyAwayDuring(weeklyMe(), d.week)) {
+      patch.leave = periods.concat([{ id: uid(), start: d.week, end: weekEndKey, note: WEEKLY_LEAVE_NOTE }]);
+    } else if (!d.leave && periods.some(ours)) {
+      patch.leave = periods.filter(function (l) { return !ours(l); });
+    }
+    setDoc(doc(peopleCol, me.id), patch, { merge: true }).then(function () {
+      if (patch.leave) logActivity('leave_changed', (d.leave ? 'Booked leave ' : 'Removed leave ') + formatShortDate(d.week) + '–' + formatShortDate(weekEndKey) + ' (Monday update)');
       closeWeeklyEditor();
       showToast(d.existing ? 'Update saved' : 'Update sent. Thanks!', 'success');
     }).catch(function (err) {
@@ -12049,7 +12281,7 @@
     if (!slot) return;
     var key = weeklyCurrentKey(now);
     if (weeklyEntryFor(name, key)) return;
-    if (weeklyAwayDuring(name, key) && slot === 'mon') return;
+    if (weeklyAwayDuring(name, key)) return;
     var tag = key + '|' + slot;
     var sent = Array.isArray(me.weeklyReminded) ? me.weeklyReminded : [];
     if (sent.indexOf(tag) !== -1 || weeklyReminderSession[tag]) return;
@@ -12103,7 +12335,7 @@
   // of the priority dot is what marks it as a step rather than a whole task. Opens the task.
   function personChecklistRowHtml(s) {
     var t = s.task, it = s.item;
-    var overdue = it.due && parseDate(it.due) < todayMidnight();
+    var overdue = stepIsLate(t, it);
     var dueLabel = it.due ? formatShortDate(it.due) : '';
     return (
       '<button data-open-task="' + t.id + '" class="flex items-center gap-2.5 px-4 py-2.5 text-left hover:bg-zinc-50 dark:hover:bg-zinc-700/40 transition w-full">' +
@@ -12736,7 +12968,7 @@
     task_moved: 'arrowRight', task_comment: 'message',
     board_imported: 'upload', board_seeded: 'download',
     board_archived: 'download', task_archived: 'download', task_unarchived: 'upload',
-    leave_changed: 'calendar', project_departments: 'dashboard'
+    leave_changed: 'calendar', project_departments: 'dashboard', project_renamed: 'pencil'
   };
   var ACTIVITY_ICON_CLASS = {
     task_created: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400',
@@ -14633,6 +14865,12 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-07g', date: '2026-10-07', items: [
+      { type: 'fixed', title: 'Saving a task no longer undoes other people\'s changes', text: "If someone ticked a step, moved the status or logged time while you had the task open, saving used to put the old values back. Now their changes appear in your open window as they happen, and saving only changes what you changed." },
+      { type: 'fixed', title: 'Renaming a project keeps its chat and brief', text: "Change a project's name on its tasks and its group chat, brief, deadline and WIP entry move to the new name. A name typed with different capitals or spacing joins the existing project instead of starting a new one." },
+      { type: 'improved', title: 'Monday update and leave agree', text: "\"I'm on leave this week\" is ticked for you when your time off is booked, and ticking it books the week, so WIP, the Calendar and reminders all know you're away. A day or two off doesn't count as away all week." },
+      { type: 'fixed', title: 'Phone fixes', text: "Ticking older checklist steps on a phone now works, and moving a task to Review on a phone asks whether it's a client or internal review, like on the Board." }
+    ] },
     { id: '2026-10-07f', date: '2026-10-07', items: [
       { type: 'new', title: '"You\'re up" when a step is done', text: "Tick off a checklist step and the people on the next step get a notification that it's their turn. No more chasing." },
       { type: 'new', title: 'A Friday reminder to log time', text: "If you worked on a task this week but logged no time on it, you'll get one reminder on Friday afternoon listing them. Nothing comes if you're all caught up." },
@@ -15808,7 +16046,10 @@
   ========================================================= */
   function renderCurrentSecondaryView() {
     if (currentView === 'gantt') renderGantt();
-    if (currentView === 'calendar') renderCalendar();
+    if (currentView === 'calendar') {
+      renderCalendar();
+      if (calendarDayOpenDate && !calendarDayModal.classList.contains('hidden')) (CALENDAR_V2_ENABLED ? cal2OpenDay : openCalendarDayModal)(calendarDayOpenDate);
+    }
     if (currentView === 'people') renderPeople();
     // These two are the only views that read archivedTasks -- attaching its listener here,
     // right before rendering, means most sessions (anyone who sticks to Board/Gantt/Calendar/
@@ -15966,7 +16207,7 @@
             return {
               id: (t.id && typeof t.id === 'string' && /^[A-Za-z0-9_-]{1,200}$/.test(t.id)) ? t.id : uid(),
               name: String(t.name).slice(0, 200),
-              project: String(t.project || 'Untitled Project').slice(0, 100),
+              project: (stripZwsp(String(t.project || '')).trim().replace(/s+/g, ' ') || 'Untitled Project').slice(0, 60),
               priority: PRIORITIES.indexOf(t.priority) !== -1 ? t.priority : 'Medium',
               status: STATUSES.indexOf(t.status) !== -1 ? t.status : 'Pipeline',
               assignee: String(t.assignee || 'Unassigned').slice(0, 100),
@@ -15984,6 +16225,9 @@
               dependsOn: Array.isArray(t.dependsOn) ? t.dependsOn.filter(function (id) { return typeof id === 'string'; }) : [],
               archivedAt: (t.archivedAt && !isNaN(new Date(t.archivedAt).getTime())) ? t.archivedAt : null,
               createdAt: t.createdAt || new Date().toISOString(),
+              // Kept so the Done column's 'N today' and Review labels survive a round trip.
+              completedAt: (t.status === 'Done' && t.completedAt && !isNaN(new Date(t.completedAt).getTime())) ? t.completedAt : null,
+              reviewAudience: (t.status === 'Review' && (t.reviewAudience === 'client' || t.reviewAudience === 'internal')) ? t.reviewAudience : null,
               // Preserved like every other ownership-relevant field on an import round-trip --
               // dropping it would silently move a re-imported task into the "no createdBy, falls
               // back to assignee" bucket firestore.rules' isCreator() treats as legacy data.
@@ -16599,7 +16843,7 @@
       : escapeHtml(t.name) + ' · ' + projectNameHtml(t.project || '');
     var main = '<span class="m-row-title">' + escapeHtml(it.text) + '</span>' + (sub ? '<span class="m-row-sub">' + sub + '</span>' : '');
     return '<div class="m-row' + (it.done ? ' m-struck' : '') + '">' +
-      '<button type="button" class="m-check' + (it.done ? ' m-done' : '') + '" data-m-act="step" data-task="' + t.id + '" data-item="' + escapeHtml(it.id || '') + '" aria-label="' + (it.done ? 'Mark not done' : 'Mark done') + '">' + mIcon('check') + '</button>' +
+      '<button type="button" class="m-check' + (it.done ? ' m-done' : '') + '" data-m-act="step" data-task="' + t.id + '" data-item="' + escapeHtml(it.id || ('@' + (t.checklist || []).indexOf(it))) + '" aria-label="' + (it.done ? 'Mark not done' : 'Mark done') + '">' + mIcon('check') + '</button>' +
       (inTask ? '<span class="m-row-main">' + main + '</span>' : '<button type="button" class="m-row-main m-tap" style="text-align:left" data-m-task="' + t.id + '">' + main + '</button>') +
       (due.text ? '<span class="m-row-right"><span class="' + due.cls + '">' + escapeHtml(due.text) + '</span></span>' : '') +
     '</div>';
@@ -16985,8 +17229,14 @@
     var t = tasks.find(function (x) { return x.id === taskId; });
     if (!t) return;
     var old = t.checklist || [];
-    var item = old.find(function (it) { return it && it.id === itemId; });
+    // A step saved before steps had ids is found by its position ("@3"), and every step gets an
+    // id in the same write, so the desktop window, WIP and notifications can match it from now on.
+    var at = itemId && itemId.charAt(0) === '@' ? parseInt(itemId.slice(1), 10) : old.findIndex(function (it) { return it && it.id === itemId; });
+    var item = at >= 0 ? old[at] : null;
     if (!item) return;
+    var ids = old.map(function (it) { return (it && it.id) || uid(); });
+    old = old.map(function (it, i) { return Object.assign({}, it, { id: ids[i] }); });
+    itemId = ids[at];
     var nowDone = !item.done;
     if (btn) {
       btn.classList.toggle('m-done', nowDone);
@@ -17062,7 +17312,7 @@
   function mSubmitQuickAdd(form) {
     var me = mMe();
     var name = sentenceCase(form.elements.name.value.trim());
-    var project = stripZwsp(form.elements.project.value).trim();
+    var project = canonicalProjectName(form.elements.project.value);
     var assignee = form.elements.owner.value || me;
     var deadline = form.elements.deadline.value || '';
     var priority = form.elements.priority.value || 'Medium';
@@ -17491,6 +17741,12 @@
       el.parentNode.querySelectorAll('button').forEach(function (b) { b.classList.toggle('m-on', b === el); });
       mHaptic();
       updateTaskStatus(taskId, s);
+      // Same as dragging a card into Review on the Board: ask who the review is for.
+      if (s === 'Review') {
+        promptReviewAudience(function (audience) {
+          updateDoc(doc(tasksCol, taskId), { reviewAudience: audience }).catch(function () { /* silent, as on the Board */ });
+        });
+      }
       return;
     }
     if (act === 'add-update') { mOpenUpdateSheet(taskId); return; }
@@ -17568,6 +17824,7 @@
     renderCurrentSecondaryView();
     renderDigestPanel();
     mRefresh();
+    if (typeof briefOpen !== 'undefined' && briefOpen && briefOpen.mode === 'view') renderBriefModal();
   }
 
   /* =========================================================
@@ -17786,6 +18043,7 @@
           // back through this same listener, so rendering the raw (possibly still-unbackfilled)
           // data would otherwise flash flat/unthreaded for a beat before self-correcting.
           renderCommentsLog(backfillCommentThreading(freshTask.comments), document.getElementById('task-comments-log'));
+          syncOpenTaskFromServer(freshTask);
         }
       }
       // Opens a task linked via #task=<id> (Copy link / a shared URL), once, the moment tasks
@@ -18081,7 +18339,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-07T09:31:20Z";
+  var CURRENT_BUILD_VERSION = "2026-10-07T10:00:34Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

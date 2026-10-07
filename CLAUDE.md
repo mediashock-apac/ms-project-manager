@@ -99,6 +99,23 @@ clutter rule above:
   asked to log time on it).
 - **Derive rather than ask; default rather than choose.**
 
+## Standing rule: every feature works together, in sync
+
+Stated directly (2026-10-07): *"Make sure all the features in the PM tool work together
+syncronisingly and not in separately"*, then *"make this a rule"*. For every change:
+
+- **One fact, one place.** Every view reads it from there or derives it; never a second copy that
+  has to be kept in step by hand (the Monday "on leave" tick reads and writes booked leave).
+- **Same action, same side effects, wherever it's done**: desktop, phone, Board drag, WIP, brief,
+  import. Status effects, notifications, activity log, ids.
+- **Live everywhere, open windows included** (task window, brief card, pop-ups), and never write
+  back a stale copy over someone else's change.
+- **Shared rules come from shared helpers**: `dueUrgency` for overdue, `stepIsLate` for a late
+  step, `taskTimeMinutes` for time.
+- **Names used as links survive renames and case/spacing variants** (`canonicalProjectName`,
+  the project doc follows a renamed project).
+- Before building, list what else reads or writes the same data and wire it in the same change.
+
 ## Commands
 
 There is no build/lint/test tooling — it's static HTML/JS served as-is. Local development uses the
@@ -2670,6 +2687,56 @@ needs revisiting.
   row's content ever needs to grow taller than 64px, both heights need to move together or this
   drifts out of alignment again.
 
+### Features in sync (2026-10-07)
+
+Asked: "Make sure all the features in the PM tool work together syncronisingly and not in
+separately", then "make this a rule" (see the standing rule near the top). A four-part audit
+(duplicate data, names as links, live refresh, phone vs desktop side effects) found these, all fixed:
+
+- **The open task window no longer undoes other people's changes.** It used to write the whole
+  form back on Save (last write wins), so a step ticked on a phone, a status moved on the Board or
+  steps added from a brief were undone by any unrelated edit. Now (`taskOpenBase`,
+  `syncOpenTaskFromServer`, `mergeChecklist`, `mergeTimeEntries`): changes made elsewhere show in
+  the open window live; a field you didn't touch takes the server's value; Save writes only fields
+  that differ from the server, with checklist and time entries three-way merged (by step id; time
+  entries by identical-entry counts). Lists don't merge while a step or time entry is being edited
+  (the re-render would close it); Save merges anyway. Merged-in items are copies, never the board's
+  own objects (sharing them made an edit also change Save's "before" and silently skip the write).
+  Changes that arrived from elsewhere don't trigger "Discard changes?".
+- **Step ids are written on open** when a task has steps saved before ids existed, and the phone
+  finds such a step by position ("@3") and writes ids in the same tick. Before, a phone tick on an
+  old step did nothing, and the task window re-sent "assigned you" for every step with people.
+- **One spelling per project** (`canonicalProjectName`, `projectKey`): "acme  rebrand" snaps to an
+  existing "Acme Rebrand" (task window, phone quick add, WIP "+ Add entry"; import strips and trims);
+  `projectDeadlineDoc` falls back to the same match. Fixing the capitals on a project's only task is
+  a rename, not snapped back.
+- **Renaming a project keeps its chat, brief, deadline and WIP entry** (`carryProjectDocOnRename`):
+  once no task (active or archived) uses the old name, its project doc takes the new name; your own
+  chat read/favourite/mute marks move too. Not done if the new name already has a doc. Logged as
+  `project_renamed`.
+- **Monday "on leave" is booked leave.** "I'm on leave this week" is pre-ticked from People > Time
+  off, and sending it with no leave booked adds a Mon-Fri period (note "From Monday update"),
+  removed again if unticked and sent. Away = leave covering the whole Mon-Fri week. Away people
+  don't count in "N of M in" and get no Friday or Monday reminder.
+- **Monday "late" uses `dueUrgency`** (a task in Review isn't late, as on the board), and last week's
+  rows are carried only for projects still live (`weeklyProjectStillOpen`: on the board and not
+  fully archived, or a WIP entry).
+- **One "late step" rule: `stepIsLate(t, item)`** (`ganttItemLate` now calls it), also used by the
+  task window's "Due" line, People step rows and brief key dates.
+- **Brief key dates follow the checklist**: a date that became a step shows the step's date and
+  status (an open one speaks for a name on several tasks; a step on a Completed task is done), and
+  the brief card re-renders live while open (`renderAll`). Steps added from a brief are logged.
+- **Phone status to Review asks "Client or internal review?"**, as on the Board; a failed status
+  write puts the phone's buttons back.
+- **Import keeps `completedAt` and `reviewAudience`.** The calendar day pop-up refreshes live.
+- **Not done (offered as later decisions):** Monday "Needs help" shown on WIP; a warning when a
+  Monday row says Done while the project has open tasks; involved-only people in the digest/
+  Calendar Mine/People card (by design today: involved isn't workload); a display-name change
+  re-mapping old names (needs an admin path); time logging and archiving on the phone.
+- Verified in Chromium with the in-memory stand-in plus a remote-edit hook (16 checks), and the
+  earlier suites still pass (phone 25/25 with the new review question answered; the Monday suite's
+  "Chloe away" check now expects "not away" for a Tue-Fri leave).
+
 ### Mobile app (phones, below 768px)
 
 Asked: "The mobile view is horrible. Interfaces overlap each other, scrolling is a pain ... I don't
@@ -3699,7 +3766,8 @@ their week into a cell before the Monday meeting. Asked: "Is there a way to inte
   client, on track, on hold, done, with the next date in a fixed right column. NEW marks a row that
   differs from that person's previous week (nothing is marked if there was no previous update).
   A person with no update shows "Not in yet" plus what's due for them this week from the board;
-  someone on leave shows "Away this week" and doesn't count as waiting. The two chips look deliberately
+  someone whose booked leave covers the whole Mon-Fri week shows "Away this week" and doesn't count as waiting
+  (a day or two off still expects an update; see "Features in sync"). The two chips look deliberately
   different (reported as "almost the same" when both were amber): Away is amber, the app-wide
   "not available" colour; Not in yet is a dashed neutral outline with a clock. That due list shows
   everything (a "+N more" cap shipped first; asked: "just show all?"); a task and its own step with
@@ -3718,7 +3786,7 @@ their week into a cell before the Monday meeting. Asked: "Is there a way to inte
   Same place as `chatLastRead`/`toursSeen`, so **no rules change**: team-readable, only you can
   write yours. Rows key on the project NAME, so renaming a project breaks NEW for that row once.
 - **Reminders** (`checkWeeklyReminder`, on the people snapshot and every 10 min): Friday from 4pm
-  (and the weekend), then Monday 9am-6pm only if still missing (not if away that week). An in-app
+  (and the weekend), then Monday 9am-6pm only if still missing (neither if away the whole week). An in-app
   notification to yourself, `type: 'weekly_reminder'` ("Your Monday update is due"); clicking it
   opens the page and your editor. Slots sent are recorded in `people/{uid}.weeklyReminded` so a
   reload or second tab doesn't resend. Client-side like every automation here: it fires the next
