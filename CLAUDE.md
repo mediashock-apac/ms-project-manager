@@ -3977,6 +3977,11 @@ draws one Timeline diamond instead of six, and hides a late size inside the batc
   date stays a flat list with each row's own "Due" line (otherwise a heading over every row). Rows in a group
   drop their own "Due …" line; the heading carries it, rose when overdue, amber when after the task
   deadline. Items keep their own order inside a group. The folded "N done" rows are not grouped.
+- **A group whose 2+ steps all have the same people names them once on the heading** (avatars + name
+  after the date and count; `checklistGroupHeadHtml(key, members, people)`), and those rows drop
+  their own people line. Asked "if same name, can group together?" from six ad sizes each
+  repeating "Aqila Ramadhani". Mixed groups keep a name per row; a step being edited shows its
+  people in the editor as usual.
 - **Dragging an item into another date's group gives it that date** (in the drop handler);
   otherwise it would jump straight back to its old group. A toast always says so ("... is now due
   Oct 9"), so a drag meant only to reorder never changes a date silently.

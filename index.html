@@ -7297,7 +7297,9 @@
       return false;
     });
   }
-  function checklistGroupHeadHtml(key, members) {
+  // `people`: names every step in the group shares, shown once here instead of under each row
+  // (asked: "if same name, can group together?" from six ad sizes all for one person).
+  function checklistGroupHeadHtml(key, members, people) {
     var count = members.length > 1 ? ' · ' + members.length : '';
     var label, cls = 'text-zinc-500 dark:text-zinc-400', note = '';
     if (key === 'none') label = 'No date';
@@ -7309,12 +7311,15 @@
       if (anyOpen && parseDate(key) < todayMidnight()) { cls = 'text-rose-600 dark:text-rose-400'; note = ' · overdue'; }
       else if (taskDeadline && key > taskDeadline) { cls = 'text-amber-700 dark:text-amber-400'; note = ' · after the task deadline'; }
     }
-    return '<div class="checklist-group-head px-2 pt-2 first:pt-0 text-[11px] font-bold ' + cls + '">' + escapeHtml(label + note) + '<span class="font-semibold text-zinc-400 dark:text-zinc-500">' + count + '</span></div>';
+    var who = people && people.length
+      ? '<span class="inline-flex items-center gap-1 ml-2 font-medium text-zinc-500 dark:text-zinc-400">' + people.map(function (n) { return avatarHtml(n, 'w-3.5 h-3.5 shrink-0', 'text-[8px]'); }).join('') + escapeHtml(stepPeopleLabel({ assignees: people })) + '</span>'
+      : '';
+    return '<div class="checklist-group-head flex items-center flex-wrap px-2 pt-2 first:pt-0 text-[11px] font-bold ' + cls + '"><span>' + escapeHtml(label + note) + '<span class="font-semibold text-zinc-400 dark:text-zinc-500">' + count + '</span></span>' + who + '</div>';
   }
 
   function renderChecklistEditor() {
     var el = document.getElementById('task-checklist-editor');
-    function rowHtml(item, i, inGroup) {
+    function rowHtml(item, i, inGroup, peopleOnHead) {
           var editing = checklistEditIndex === i;
           var itemMinutes = checklistItemMinutes(item.id);
           return '<div class="checklist-item-row rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-700/50' + (justCheckedItemIds[item.id] ? ' checklist-just-checked' : '') + '" data-checklist-i="' + i + '">' +
@@ -7335,7 +7340,7 @@
                 : '<div class="flex-1 min-w-0">' +
                   '<span class="block text-sm ' + (item.done ? 'line-through text-zinc-400 dark:text-zinc-500' : 'text-zinc-700 dark:text-zinc-200') + '">' + escapeHtml(item.text) + '</span>' +
                   (item.link ? '<div>' + linkChipHtml(item.link) + '</div>' : '') +
-                  (stepPeople(item).length ? '<span class="flex items-center gap-1 text-[11px] text-zinc-500 dark:text-zinc-400">' + stepPeople(item).map(function (n) { return avatarHtml(n, 'w-3.5 h-3.5 shrink-0', 'text-[8px]'); }).join('') + escapeHtml(stepPeopleLabel(item)) + '</span>' : '') +
+                  (stepPeople(item).length && !peopleOnHead ? '<span class="flex items-center gap-1 text-[11px] text-zinc-500 dark:text-zinc-400">' + stepPeople(item).map(function (n) { return avatarHtml(n, 'w-3.5 h-3.5 shrink-0', 'text-[8px]'); }).join('') + escapeHtml(stepPeopleLabel(item)) + '</span>' : '') +
                   (inGroup ? '' : checklistDueLabelHtml(item, i)) +
                 '</div>') +
               (itemMinutes ? '<span class="shrink-0 text-[10px] font-semibold text-zinc-400 dark:text-zinc-500" title="Time logged against this item">' + formatDuration(itemMinutes) + '</span>' : '') +
@@ -7364,8 +7369,11 @@
         var rank = function (k) { return k === 'none' ? '~2' : k === 'tbd' ? '~1' : k; };
         return rank(a) < rank(b) ? -1 : 1;
       }).forEach(function (k) {
-        openRows.push(checklistGroupHeadHtml(k, groups[k]));
-        groups[k].forEach(function (x) { openRows.push(rowHtml(x.item, x.i, true)); });
+        // Same people on every step in the group (2+ steps): named once on the heading.
+        var first = JSON.stringify(stepPeople(groups[k][0].item));
+        var shared = groups[k].length > 1 && first !== '[]' && groups[k].every(function (x) { return JSON.stringify(stepPeople(x.item)) === first; });
+        openRows.push(checklistGroupHeadHtml(k, groups[k], shared ? stepPeople(groups[k][0].item) : null));
+        groups[k].forEach(function (x) { openRows.push(rowHtml(x.item, x.i, true, shared && checklistEditIndex !== x.i)); });
       });
     }
     var doneToggle = doneRows.length
@@ -14921,6 +14929,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-07k', date: '2026-10-07', items: [
+      { type: 'improved', title: 'Shorter checklists when one person has the batch', text: "When every step due on the same day is for the same person, their name shows once next to the date instead of under every step." }
+    ] },
     { id: '2026-10-07j', date: '2026-10-07', items: [
       { type: 'improved', title: 'Checklist links stand out', text: "Links on checklist steps, like Frame.io or Google Drive, are now orange like every other link, so they're easy to spot and clearly clickable." }
     ] },
@@ -18410,7 +18421,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-07T10:21:39Z";
+  var CURRENT_BUILD_VERSION = "2026-10-07T10:25:40Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
