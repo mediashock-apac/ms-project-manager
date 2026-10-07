@@ -1762,7 +1762,7 @@
         <div class="flex flex-wrap items-start gap-2">
           <!-- A textarea so several items can go in at once, one per line (typed with Shift+Enter or
                pasted). Enter adds them all. -->
-          <textarea id="task-checklist-input" rows="1" placeholder="Add a checklist item (one per line for several)" title="Enter adds. Shift+Enter or pasting several lines adds one item per line, all with the date and link set here." class="flex-[2] min-w-[9rem] text-sm leading-5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 resize-none overflow-y-auto max-h-40 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400"></textarea>
+          <textarea id="task-checklist-input" rows="1" placeholder="Add checklist items…" title="Enter adds. Shift+Enter or pasting several lines adds one item per line, all with the date and link set here." class="flex-[2] min-w-[9rem] text-sm leading-5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 resize-none overflow-y-auto max-h-40 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400"></textarea>
           <input type="text" id="task-checklist-link-input" placeholder="Paste a link…" class="flex-1 min-w-[8rem] text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
           <input type="date" id="task-checklist-due-input" class="text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
           <label class="h-[38px] flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400"><input type="checkbox" id="task-checklist-tbd-check" class="brand-checkbox w-3.5 h-3.5 rounded border border-zinc-300 dark:border-zinc-600"> TBD</label>
@@ -1908,6 +1908,13 @@
 </div>
 
 <!-- ============ TOASTS ============ -->
+<!-- Team list for the checklist add row's People button (see "People for new items" in the script).
+     On <body> so the task window's scrolling form can't clip it; above the task modal (z-50). -->
+<div id="checklist-people-pop" hidden class="fixed z-[60] w-64 bg-white dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 rounded-xl shadow-pop overflow-hidden panel-pop-in" role="dialog" aria-label="People on the new items">
+  <div class="p-2 border-b border-zinc-100 dark:border-zinc-600"><input type="search" placeholder="Find someone…" aria-label="Find someone" class="w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-500 bg-white dark:bg-zinc-600 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-400 px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500/40"></div>
+  <div class="checklist-people-list max-h-64 overflow-y-auto py-1"></div>
+</div>
+
 <div id="toast-container" class="fixed bottom-4 right-4 z-[60] flex flex-col gap-2 items-end"></div>
 
 <!-- Shown by reloadIfPendingAndSafe() once a new version is deployed and the person has stopped
@@ -7331,41 +7338,107 @@
   function setChecklistExtrasOpen() {}
   // People for new items, set on the add row like the date and link, applied to every item added
   // in that go (asked: "add people in checklist is not done here?", once several items could be
-  // added at once). A dashed "+ People" pill, chips once someone is picked, the same look as the
-  // item editor's People row. Clears after each add, like the date.
+  // added at once). Clears after each add, like the date.
+  //
+  // ONE fixed-size button, not a chip per person: chips grew with every name, squeezed the text
+  // box and pushed Calendar and Add onto a second line (reported from a screenshot with four
+  // people: "adding more people just disrupts the UI"). The button shows "+ People" at rest, or up
+  // to three overlapping avatars plus "+N"; hovering names everyone. Clicking opens a team list
+  // with checkboxes (#checklist-people-pop) that lives on <body>, position: fixed from the
+  // button's rect, so the task window's scrolling form can't clip it. Ticks apply as clicked.
   var checklistAddPeople = [];
+  var CHECKLIST_PEOPLE_SHOWN = 3;
   function renderChecklistAddPeople() {
     var wrap = document.getElementById('task-checklist-add-people');
-    var others = teamRoster().filter(function (n) { return checklistAddPeople.indexOf(n) === -1; });
-    // First names on this row (full name on hover): it shares one line with the text box, link and
-    // date, and full names pushed Calendar and Add onto a second line.
-    wrap.innerHTML = checklistAddPeople.map(function (n) {
-      return '<span class="checklist-person-chip inline-flex items-center gap-1 pl-0.5 pr-1 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-600 text-xs text-zinc-700 dark:text-zinc-200" data-name="' + escapeHtml(n) + '" title="' + escapeHtml(n) + '">' +
-        avatarHtml(n, 'w-4 h-4 shrink-0', 'text-[8px]') + escapeHtml(String(n).split(' ')[0]) +
-        '<button type="button" class="checklist-person-remove p-0.5 rounded-full text-zinc-400 hover:text-rose-500 dark:hover:text-rose-400" aria-label="Remove ' + escapeHtml(n) + '">' + svgIcon('x', 'w-2.5 h-2.5') + '</button></span>';
-    }).join('') +
-      '<select class="checklist-add-person w-[5.75rem] text-xs rounded-full border border-dashed border-zinc-300 dark:border-zinc-600 bg-transparent text-zinc-500 dark:text-zinc-400 pl-2 pr-1 py-1 focus:outline-none focus:ring-2 focus:ring-brand-500/40" aria-label="People on the new items">' +
-        '<option value="">' + (checklistAddPeople.length ? '+ Add' : '+ People') + '</option>' +
-        others.map(function (n) { return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('') +
-      '</select>';
+    var picked = checklistAddPeople;
+    var open = !document.getElementById('checklist-people-pop').hidden;
+    var inner = picked.length
+      ? '<span class="flex -space-x-1.5">' + picked.slice(0, CHECKLIST_PEOPLE_SHOWN).map(function (n) {
+          return '<span class="rounded-full ring-2 ring-white dark:ring-zinc-800">' + avatarHtml(n, 'w-6 h-6', 'text-[9px]') + '</span>';
+        }).join('') + '</span>' +
+        (picked.length > CHECKLIST_PEOPLE_SHOWN ? '<span class="text-xs font-semibold text-zinc-500 dark:text-zinc-400">+' + (picked.length - CHECKLIST_PEOPLE_SHOWN) + '</span>' : '')
+      : '<span>+ People</span>';
+    wrap.innerHTML = '<button type="button" id="task-checklist-people-btn" aria-haspopup="true" aria-expanded="' + (open ? 'true' : 'false') + '"' +
+      (picked.length ? ' data-tooltip="' + escapeHtml(picked.join(', ')) + '"' : '') +
+      ' aria-label="' + (picked.length ? 'People on the new items: ' + escapeHtml(picked.join(', ')) : 'Add people to the new items') + '"' +
+      ' class="tooltip-top inline-flex items-center gap-1.5 h-8 rounded-full text-xs focus:outline-none focus:ring-2 focus:ring-brand-500/40 ' +
+      (picked.length ? 'pl-1 pr-2 border border-zinc-200 dark:border-zinc-600 hover:bg-zinc-50 dark:hover:bg-zinc-700' : 'px-3 border border-dashed border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200') +
+      '">' + inner + '</button>';
   }
-  document.getElementById('task-checklist-add-people').addEventListener('change', function (e) {
-    if (!e.target.classList.contains('checklist-add-person') || !e.target.value) return;
-    checklistAddPeople.push(e.target.value);
-    renderChecklistAddPeople();
-    var sel = document.querySelector('#task-checklist-add-people .checklist-add-person');
-    if (sel) sel.focus();
-  });
+  function renderChecklistPeoplePop() {
+    var pop = document.getElementById('checklist-people-pop');
+    var filterEl = pop.querySelector('input[type="search"]');
+    var q = filterEl ? filterEl.value.trim().toLowerCase() : '';
+    var names = teamRoster().slice().sort(function (a, b) { return a.localeCompare(b); });
+    checklistAddPeople.forEach(function (n) { if (names.indexOf(n) === -1) names.push(n); });
+    var shown = names.filter(function (n) { return !q || n.toLowerCase().indexOf(q) !== -1; });
+    pop.querySelector('.checklist-people-list').innerHTML = shown.length
+      ? shown.map(function (n) {
+          var on = checklistAddPeople.indexOf(n) !== -1;
+          return '<label class="flex items-center gap-2.5 px-3 py-1.5 cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-600">' +
+            '<input type="checkbox" class="brand-checkbox w-4 h-4 rounded border border-zinc-300 dark:border-zinc-500" data-name="' + escapeHtml(n) + '"' + (on ? ' checked' : '') + '>' +
+            avatarHtml(n, 'w-6 h-6 shrink-0', 'text-[9px]') +
+            '<span class="text-sm text-zinc-700 dark:text-zinc-100 truncate">' + escapeHtml(n) + '</span></label>';
+        }).join('')
+      : '<p class="px-3 py-2 text-sm text-zinc-400 dark:text-zinc-500">No one matches.</p>';
+  }
+  function openChecklistPeoplePop() {
+    var pop = document.getElementById('checklist-people-pop');
+    var btn = document.getElementById('task-checklist-people-btn');
+    pop.querySelector('input[type="search"]').value = '';
+    renderChecklistPeoplePop();
+    pop.hidden = false;
+    var r = btn.getBoundingClientRect();
+    var w = pop.offsetWidth, h = pop.offsetHeight;
+    var top = r.bottom + 6;
+    if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 6);   // no room below: open upward
+    pop.style.top = top + 'px';
+    pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + 'px';
+    btn.setAttribute('aria-expanded', 'true');
+    pop.querySelector('input[type="search"]').focus();
+  }
+  function closeChecklistPeoplePop(focusButton) {
+    var pop = document.getElementById('checklist-people-pop');
+    if (pop.hidden) return;
+    pop.hidden = true;
+    var btn = document.getElementById('task-checklist-people-btn');
+    if (btn) { btn.setAttribute('aria-expanded', 'false'); if (focusButton) btn.focus(); }
+  }
   document.getElementById('task-checklist-add-people').addEventListener('click', function (e) {
-    var x = e.target.closest('.checklist-person-remove');
-    if (!x) return;
-    var gone = x.closest('.checklist-person-chip').getAttribute('data-name');
-    checklistAddPeople = checklistAddPeople.filter(function (n) { return n !== gone; });
-    renderChecklistAddPeople();
+    if (!e.target.closest('#task-checklist-people-btn')) return;
+    if (document.getElementById('checklist-people-pop').hidden) openChecklistPeoplePop(); else closeChecklistPeoplePop();
   });
+  document.getElementById('checklist-people-pop').addEventListener('change', function (e) {
+    var name = e.target.getAttribute && e.target.getAttribute('data-name');
+    if (!name) return;
+    if (e.target.checked) { if (checklistAddPeople.indexOf(name) === -1) checklistAddPeople.push(name); }
+    else checklistAddPeople = checklistAddPeople.filter(function (n) { return n !== name; });
+    renderChecklistAddPeople();   // the button only; the list keeps its focus and scroll
+  });
+  document.getElementById('checklist-people-pop').addEventListener('input', function (e) {
+    if (e.target.type === 'search') renderChecklistPeoplePop();
+  });
+  // Outside click, scrolling the window behind it, or Escape closes the list. Escape is caught
+  // in the capture phase so it closes only the list, not the whole task window.
+  document.addEventListener('mousedown', function (e) {
+    var pop = document.getElementById('checklist-people-pop');
+    if (pop.hidden || pop.contains(e.target) || e.target.closest('#task-checklist-people-btn')) return;
+    closeChecklistPeoplePop();
+  });
+  document.addEventListener('scroll', function (e) {
+    var pop = document.getElementById('checklist-people-pop');
+    if (!pop.hidden && !pop.contains(e.target)) closeChecklistPeoplePop();
+  }, true);
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape' || document.getElementById('checklist-people-pop').hidden) return;
+    e.preventDefault();
+    e.stopPropagation();
+    closeChecklistPeoplePop(true);
+  }, true);
 
   function resetChecklistExtras() {
     checklistAddPeople = [];
+    closeChecklistPeoplePop();
     renderChecklistAddPeople();
     document.getElementById('task-checklist-link-input').value = '';
     document.getElementById('task-checklist-due-input').value = '';
@@ -14321,8 +14394,7 @@
   ========================================================= */
   var CHANGELOG = [
     { id: '2026-10-07c', date: '2026-10-07', items: [
-      { type: 'improved', title: 'People on new checklist items', text: "The add row now has \"+ People\". Pick who's on the items before you add them, and they go on every item you add in that go." },
-      { type: 'improved', title: 'Fewer checklist notifications', text: "Adding or ticking several items for someone in one save now sends them one notification listing the items, not one each." }
+      { type: 'improved', title: 'People on new checklist items', text: "Click \"+ People\" on the add row and tick who's on the items before you add them. They go on every item you add in that go, and each person gets one notification listing their items." }
     ] },
     { id: '2026-10-07b', date: '2026-10-07', items: [
       { type: 'new', title: 'Add several checklist items at once', text: "Paste a list into \"Add a checklist item\", or use Shift+Enter between lines, and each line becomes its own item. The date and link you set apply to all of them." },
@@ -17757,7 +17829,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-07T03:51:10Z";
+  var CURRENT_BUILD_VERSION = "2026-10-07T03:59:17Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
