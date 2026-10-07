@@ -399,10 +399,10 @@
      cloning it. The overlay under it swallows clicks: a tour step is something to read, not a
      live screen to click through. */
   #tour-overlay { position: fixed; inset: 0; z-index: 60; }
-  #tour-spot { position: fixed; border-radius: 12px; box-shadow: 0 0 0 9999px rgba(9, 9, 11, 0.55); transition: top .25s ease, left .25s ease, width .25s ease, height .25s ease; pointer-events: none; }
+  #tour-spot { position: fixed; border-radius: 12px; box-shadow: 0 0 0 9999px rgba(9, 9, 11, 0.55); transition: top .35s ease-in-out, left .35s ease-in-out, width .35s ease-in-out, height .35s ease-in-out; pointer-events: none; }
   #tour-spot.tour-spot-none { box-shadow: none; }
   #tour-overlay.tour-no-target { background: rgba(9, 9, 11, 0.55); }
-  #tour-card { position: fixed; z-index: 61; transition: top .25s ease, left .25s ease; }
+  #tour-card { position: fixed; z-index: 61; transition: top .35s ease-in-out, left .35s ease-in-out; }
   @media (prefers-reduced-motion: reduce) {
     #tour-spot, #tour-card { transition: none; }
   }
@@ -15528,6 +15528,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-08c', date: '2026-10-08', items: [
+      { type: 'improved', title: 'A calmer welcome tour', text: "The welcome tour (profile menu > Take the tour) now moves across the screen in one sweep, from the top bar down to the sidebar, instead of hopping back and forth. It's 7 steps again, and now includes Ctrl K." }
+    ] },
     { id: '2026-10-08b', date: '2026-10-08', items: [
       { type: 'improved', title: 'Every dropdown looks the same', text: "The smaller dropdowns (Repeat, adding people, brief rows) now open the same list as Status and Priority, instead of the computer's own grey one that ignored dark mode." },
       { type: 'improved', title: "Projects keep their Drive folder", text: "Once any task in a project has its Drive folder attached, every other task in that project picks it up automatically, on desktop and phone. A project with no folder yet shows an \"Add the Drive folder\" button under its name." }
@@ -15951,7 +15954,11 @@
   var TOURS_LAUNCH = '2026-10-06';
   var TOURS_SEEN_KEY = 'flowboard_tours_seen';
   var WELCOME_FEATURE_DAYS = 90;
-  var WELCOME_FEATURE_MAX = 3;
+  // 0 since 2026-10-08: what's-new items used to be folded into the welcome tour (up to 3), which
+  // made it 10 steps that pointed wherever each feature happened to sit, and "A more useful
+  // Calendar" means nothing to someone new. New joiners meet newer features through the page tours;
+  // a feature basic enough for day one gets a step written into the sweep by hand (Ctrl K did).
+  var WELCOME_FEATURE_MAX = 0;
   // Feature tours older than this don't pop up on their own (someone back from a long break
   // shouldn't get a queue of them); "Show me" still plays them.
   var FEATURE_TOUR_AUTO_DAYS = 60;
@@ -15962,11 +15969,14 @@
   var TOURS = [
     { id: 'welcome', kind: 'welcome', steps: [
       { target: null, art: 'welcome', cta: "Show me around", title: "Hi, welcome aboard!", text: "This is where your team plans the work, tracks it, talks it through and gets it done. Let's take a quick look around. It takes less than a minute, and you can skip whenever you like." },
+      // One sweep, no doubling back (reported: "It feels like it jumps all over the place"): the
+      // top bar right to left, down to Focus of the Day, then down the sidebar to the profile menu.
+      // Seven steps, as tour guides (Appcues, Userpilot, Intercom) and Notion's own tour keep it.
       { target: '#btn-add-task', title: "Got something to do? Start here", text: "Add a task with a project, an owner and a deadline. Big job? Break it into checklist steps." },
-      { target: '#focus-section', title: "Not sure where to begin?", text: "Focus of the Day picks your most urgent, highest-priority work. Start at the top and work along." },
-      { target: '#sidebar-nav', title: "Same work, different angles", text: "Board, Timeline, Calendar and People all show the same tasks, just laid out differently. Every project can have its own group chat too." },
-      { target: '#teamspace-trigger', title: "Just want your team's work?", text: "Pick your department here to cut out the noise, or choose All to see everything." },
       { target: '#btn-notifications', title: "We'll keep you posted", text: "The bell lights up when someone mentions you, comments or hands you a task. The icon next to it shows what's due this week." },
+      { target: '#filter-search', title: "Find anything fast", text: "Search tasks, steps and comments here. Or press Ctrl K from anywhere to jump straight to a task, project or chat." },
+      { target: '#focus-section', title: "Not sure where to begin?", text: "Focus of the Day picks your most urgent, highest-priority work. Start at the top and work along." },
+      { target: '#teamspace-trigger, #sidebar-nav', title: "Your team, your view", text: "Pick your department at the top to see just your team's work. Below it, Board, Timeline, Calendar and People show the same tasks laid out differently." },
       { target: '#user-menu-trigger', art: 'done', cta: "Let's go!", title: "You're all set!", text: "That's the basics. Dark mode, notifications and your departments live in your profile menu, and so does this tour if you ever want a refresher. Happy planning!" }
     ] },
     { id: 'tours-intro', kind: 'feature', date: '2026-10-06', steps: [
@@ -16300,14 +16310,22 @@
     });
   }
 
+  // A selector list ("#a, #b") spotlights everything it matches as one box, so neighbouring
+  // controls can share a step instead of the tour hopping between them.
   function tourTargetRect(sel) {
     if (!sel) return null;
-    var el = document.querySelector(sel);
-    if (!el) return null;
-    var r = el.getBoundingClientRect();
-    // Hidden, or off-screen (the sidebar drawer on a phone sits at translateX(-100%)).
-    if (r.width === 0 || r.height === 0 || r.right <= 0 || r.left >= window.innerWidth) return null;
-    return r;
+    var box = null;
+    Array.prototype.forEach.call(document.querySelectorAll(sel), function (el) {
+      var r = el.getBoundingClientRect();
+      // Hidden, or off-screen (the sidebar drawer on a phone sits at translateX(-100%)).
+      if (r.width === 0 || r.height === 0 || r.right <= 0 || r.left >= window.innerWidth) return;
+      box = box ? { left: Math.min(box.left, r.left), top: Math.min(box.top, r.top), right: Math.max(box.right, r.right), bottom: Math.max(box.bottom, r.bottom) }
+                : { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+    });
+    if (!box) return null;
+    box.width = box.right - box.left;
+    box.height = box.bottom - box.top;
+    return box;
   }
 
   function renderTourStep() {
@@ -16365,9 +16383,11 @@
     spot.classList.remove('tour-spot-none');
     // A tall target (the whole nav) is clipped to the viewport so the spotlight stays on screen.
     var top = Math.max(4, r.top - pad), bottom = Math.min(vh - 4, r.bottom + pad);
-    spot.style.left = (r.left - pad) + 'px';
+    // Kept on screen on the left too (the sidebar starts at x = 0, so its padding ran off the edge).
+    var sLeft = Math.max(4, r.left - pad);
+    spot.style.left = sLeft + 'px';
     spot.style.top = top + 'px';
-    spot.style.width = (r.width + pad * 2) + 'px';
+    spot.style.width = (r.right + pad - sLeft) + 'px';
     spot.style.height = (bottom - top) + 'px';
     var left, y;
     if (r.right + gap + cw + margin <= vw && r.width < vw / 3) {
@@ -19194,7 +19214,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-07T16:33:01Z";
+  var CURRENT_BUILD_VERSION = "2026-10-07T16:45:50Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

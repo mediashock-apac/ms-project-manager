@@ -127,7 +127,7 @@ here (dependencies, Gantt grouping, the progress column) stay out even when a re
 
 ## Commands
 
-**Browser tests: `node tests/run.mjs`** (see `tests/README.md`). 16 suites, ~245 checks, each loading
+**Browser tests: `node tests/run.mjs`** (see `tests/README.md`). 17 suites, ~265 checks, each loading
 the real `index.html` in Chromium with Firebase replaced by `tests/fbstub.js`. They run on every push to
 `main` and every weekday at 7am Singapore (`.github/workflows/tests.yml`); a failure is a red X plus
 GitHub's email. Asked for directly: "Constantly run checks as I did today to make sure everything is
@@ -208,8 +208,15 @@ tutorial should auto update on new features"** — so feature tours are generate
   else, plus a card with "N of M", progress dots, Back / Next (Done, or "Got it" on a one-step
   tour) and Skip tour. Escape skips, arrow keys step, Tab stays in the card. No library — same
   single-file rule as everything else here.
-- **Welcome tour: 7 steps, under a minute** — Add Task, Focus of the Day, the views, teamspace,
-  the bell/This Week, the profile menu (where it can be replayed). Keep it that short.
+- **Welcome tour: 7 steps, under a minute, in ONE sweep across the screen** (2026-10-08, reported:
+  "It feels like it jumps all over the place"; it had grown to 10 steps that crossed the screen at
+  almost every step). Order: welcome (centred) → Add Task → bell → search + Ctrl K (the top bar,
+  right to left) → Focus of the Day (below) → teamspace and the pages list as ONE step → profile menu
+  (bottom of the sidebar). Tour guidance (Appcues, Userpilot, Intercom) and Notion's own tour: 3-7
+  steps, in reading order, no doubling back. **A new step goes where it sits on screen in that
+  sweep, never at the end**; neighbouring controls share a step (`target` takes a selector list,
+  "#a, #b", and `tourTargetRect` spotlights the union). The spotlight glides 0.35s ease-in-out so the
+  eye can follow it. `tests/tour-welcome.test.js` checks the route.
 - **Who sees what is decided by the account's creation time** (`auth.currentUser.metadata.
   creationTime`, i.e. first sign-in), so nobody is asked anything:
   - welcome: accounts created on/after `TOURS_LAUNCH` (2026-10-06). Teammates already using the
@@ -219,9 +226,11 @@ tutorial should auto update on new features"** — so feature tours are generate
   - starting the welcome tour marks every tour seen, so a new joiner never gets a queue.
 - **Auto-updating: give a `CHANGELOG` item a `tourTarget`** (a CSS selector) and that release
   becomes feature tour `cl-<release id>` (one step per targeted item, the item's own title and
-  text), gets a "Show me" on New Updates, and — while it is under `WELCOME_FEATURE_DAYS` (90) old
-  — is folded into the welcome tour just before its last step, capped at `WELCOME_FEATURE_MAX` (3)
-  so the welcome tour stays short as features pile up. **Use `tourTarget` only for a major feature
+  text) and gets a "Show me" on New Updates. **It is no longer folded into the welcome tour**
+  (`WELCOME_FEATURE_MAX` = 0 since 2026-10-08; the code path stays): folded items made the tour
+  long, pointed wherever each feature sat, and "A more useful Calendar" means nothing to someone new.
+  New joiners meet newer features through the page tours; one basic enough for day one gets a step
+  written into the welcome sweep by hand (Ctrl K did). **Use `tourTarget` only for a major feature
   someone could miss**, and only on something visible from any view (sidebar, header, toolbar):
   the tour does not switch views. Small fixes stay plain notes.
 - **Read tracking**: `people/{uid}.toursSeen` (array; your own doc, so no rules change) plus
