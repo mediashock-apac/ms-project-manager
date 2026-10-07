@@ -2735,9 +2735,14 @@ separately", then "make this a rule" (see the standing rule near the top). A fou
 - **Phone status to Review asks "Client or internal review?"**, as on the Board; a failed status
   write puts the phone's buttons back.
 - **Import keeps `completedAt` and `reviewAudience`.** The calendar day pop-up refreshes live.
-- **Not done (offered as later decisions):** Monday "Needs help" shown on WIP; a warning when a
-  Monday row says Done while the project has open tasks; involved-only people in the digest/
-  Calendar Mine/People card (by design today: involved isn't workload); a display-name change
+- **Built after, on the owner's go-ahead:** Monday "Needs help" rows show on WIP Meeting
+  (`weeklyHelpByProject`: each person's newest update, this meeting week or last; a "Needs help" chip
+  on the folded header, or a line naming who needs what when open, never both) and on the phone's
+  project page; the Monday editor notes "N tasks here are still open on the board" when Done is
+  picked (`weeklyOpenTaskCount`); Calendar "Mine" counts tasks you're also involved in. WIP's folded
+  "behind" count now uses `stepIsLate`.
+- **Still not done (later decisions):** involved-only people in the This Week digest and People card
+  (by design: involved isn't workload); a display-name change
   re-mapping old names (needs an admin path); time logging and archiving on the phone.
 - Verified in Chromium with the in-memory stand-in plus a remote-edit hook (16 checks), and the
   earlier suites still pass (phone 25/25 with the new review question answered; the Monday suite's
