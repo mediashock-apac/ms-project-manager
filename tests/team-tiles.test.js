@@ -96,6 +96,7 @@ async function skipTours(page) {
     if (!dark) {
       check('This Week count shown on load', await page.isVisible('#digest-badge'));
       check('no red count pops just from loading', (await page.evaluate(() => window.__pops)) === 0, await page.evaluate(() => window.__pops));
+      check('people filter reads All people at rest', (await page.textContent('#filter-people-label')).trim() === 'All people');
       check('switcher shows a tile', !!(await page.$('#teamspace-trigger .ts-tile')));
       await page.click('#teamspace-trigger'); await page.waitForTimeout(200);
       check('menu: a tile on every option (6)', (await page.$$('#teamspace-menu [data-teamspace] .ts-tile')).length === 6);

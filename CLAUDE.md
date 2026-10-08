@@ -1265,6 +1265,10 @@ to bottom:
          and it applies to the same four views the old single-select touched (Board/Gantt/
          Calendar/People), not narrowed to just Gantt/People, so the app has one filtering
          behavior everywhere instead of two.
+       - **The trigger reads "All people" at rest** (was "Everyone", which didn't read as a filter),
+         matching "All priorities"/"All projects", with a "Filter by people" tooltip. Chosen
+         (2026-10-08) instead of a "Sort: Owner": the Board groups rows into project cards with
+         several owners, so a person sort would only shuffle rows inside cards.
        - `loadFilters()` migrates the old persisted single `assignee` string into a one-item
          `assignees` array, so someone's existing narrowed view survives the upgrade instead of
          silently resetting to Everyone.

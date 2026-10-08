@@ -1208,8 +1208,8 @@
            registry so it behaves identically to every other header dropdown without a second
            set of handlers -- see the registration further down near the other filter wiring. -->
       <div id="filter-people-wrap" class="relative w-full sm:w-auto">
-        <button type="button" id="filter-people-trigger" class="filter-pill w-full sm:w-auto flex items-center justify-between gap-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-white dark:hover:bg-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-2.5" aria-haspopup="true" aria-expanded="false">
-          <span id="filter-people-label" class="truncate">Everyone</span>
+        <button type="button" id="filter-people-trigger" title="Filter by people" class="filter-pill w-full sm:w-auto flex items-center justify-between gap-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-white dark:hover:bg-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-2.5" aria-haspopup="true" aria-expanded="false">
+          <span id="filter-people-label" class="truncate">All people</span>
           <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
         </button>
         <!-- z-[28], not z-20: the Gantt's frozen header/corner cells sit at 25/26, and this
@@ -9024,7 +9024,9 @@
 
   function filterPeopleLabel() {
     var n = filters.assignees.length;
-    if (n === 0) return 'Everyone';
+    // 'All people', like 'All priorities' / 'All projects' beside it ('Everyone' didn't read as a
+    // filter; asked for instead of a sort-by-people option).
+    if (n === 0) return 'All people';
     if (n === 1) return filters.assignees[0];
     return n + ' people';
   }
@@ -15926,6 +15928,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-08p', date: '2026-10-08', items: [
+      { type: 'improved', title: 'People filter is easier to spot', text: 'The people filter above the board now reads All people, next to All priorities and All projects. Tick the people you want to see.' }
+    ] },
     { id: '2026-10-08o', date: '2026-10-08', items: [
       { type: 'improved', title: 'All teamspaces gets its own look', text: 'When you are viewing every team, the switcher shows a grid with one square in each team\'s colour on a matching four-colour background. The New Updates bar picks up the same dot pattern while there is something new.' }
     ] },
@@ -19680,7 +19685,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-08T08:35:56Z";
+  var CURRENT_BUILD_VERSION = "2026-10-08T08:58:53Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
