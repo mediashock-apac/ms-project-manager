@@ -127,7 +127,7 @@ here (dependencies, Gantt grouping, the progress column) stay out even when a re
 
 ## Commands
 
-**Browser tests: `node tests/run.mjs`** (see `tests/README.md`). 17 suites, ~265 checks, each loading
+**Browser tests: `node tests/run.mjs`** (see `tests/README.md`). 19 suites, ~320 checks, each loading
 the real `index.html` in Chromium with Firebase replaced by `tests/fbstub.js`. They run on every push to
 `main` and every weekday at 7am Singapore (`.github/workflows/tests.yml`); a failure is a red X plus
 GitHub's email. Asked for directly: "Constantly run checks as I did today to make sure everything is
@@ -461,6 +461,12 @@ to bottom:
      message. `notificationSnippetText` (shared with the bell and the phone list) drops your own @mention, turns links
      into the site's name ("Frame.io link", via `linkChipLabel`), collapses spaces and cuts at a word. System alerts
      keep their headline and message unchanged. Stored snippets are untouched; this is display only.
+   - **A new notification rings the bell and pops the count (2026-10-08).** Asked "can animations be
+     added here? ... a new notification", while the old 0.5s wobble of the whole button already ran:
+     too small to notice. `.bell-nudge` now swings the bell icon from its top (0.9s), and
+     `popBadgeIfUp(el, count, ready)` pops any red count that goes up with a ripple: bell, This Week
+     (digest) and the sidebar Chat count. `ready` (`notifListenerReady`, `tasksSnapshotSeen`) keeps
+     the climb from 0 while data loads from popping on every page load (tested). One-off, never looping.
    - **Desktop popups**: an opt-in toggle in the user menu (`btn-desktop-notif-toggle`,
      `localStorage` key `flowboard_desktop_notif`) fires a native `Notification` from the
      `notifications` `onSnapshot` listener in `startListeners` for anything added *after* the
@@ -3425,6 +3431,22 @@ happens to be.
 
 Notion-style teamspaces — Suits, Creative/Post, Copy/Production, Admin. Pick one in the sidebar switcher
 and the whole app scopes to it.
+
+**Each team has a colour AND an icon (2026-10-08)** (asked "make it obvious which department", then
+"will a design or icon be included? Besides just using colour cues"): `teamspaceTileHtml(key)` draws a
+square in the team's `DEPARTMENT_BADGE` colour with its icon (`DEPARTMENT_ICON`: Suits briefcase,
+Creative/Post clapperboard, Copy/Production pen nib, Admin clipboard; All = grid, Unassigned = dashed
+circle, both neutral). Icon as well as colour because colour alone fails for colour-blind people and
+on the collapsed rail. Used in the switcher button and menu, the profile menu, the first-login prompt
+and Monday group headings; `departmentChipHtml(key)` puts the icon in the People/Monday chips. The
+switcher button takes the team's tint (`DEPARTMENT_TRIGGER_TINT`) only while ONE team is chosen, so a
+coloured button always means "you're seeing one team"; the selected menu row lost its orange label
+(orange is the brand/button colour), the tick marks it. **Motion only on change**: a pick in the menu
+plays a one-off animation (`.ts-anim`: tile pops, briefcase hops, clapper snaps, pen writes, clipboard
+ticks), menu rows nudge their icon on hover; nothing loops, since the switcher is on screen all day.
+The button tile is redrawn only when the team changes, so a re-render can't restart the animation.
+A new department needs an entry in `DEPARTMENT_ICON` and `DEPARTMENT_TRIGGER_TINT` too.
+`tests/team-tiles.test.js`.
 
 **Current departments (2026-10-08):** Suits, **Creative/Post** (key `production`, renamed from
 "Production" on request; the key was kept so nobody's saved department changed), **Copy/Production**

@@ -154,14 +154,24 @@
      Removed the moment the real image loads -- see that function's own comment. */
   .chat-image-thumb.chat-image-loading { min-height: 120px; min-width: 160px; }
 
+  /* A new notification: the bell rings (swings from its top, like a real bell) and the red count
+     pops with a ripple. It used to be a 0.5s wobble of the whole button, too small to notice (asked
+     "can animations be added here? ... a new notification" while it already shook). One-off, never
+     looping. Any red count that goes up pops the same way: bell, This Week, Chat (popBadge). */
   @keyframes bell-nudge {
     0%, 100% { transform: rotate(0deg); }
-    20% { transform: rotate(-12deg); }
-    40% { transform: rotate(10deg); }
-    60% { transform: rotate(-6deg); }
-    80% { transform: rotate(3deg); }
+    12% { transform: rotate(22deg); }
+    26% { transform: rotate(-18deg); }
+    40% { transform: rotate(13deg); }
+    54% { transform: rotate(-9deg); }
+    68% { transform: rotate(5deg); }
+    82% { transform: rotate(-2deg); }
   }
-  .bell-nudge { animation: bell-nudge 0.5s ease-in-out; }
+  .bell-nudge > svg { transform-origin: 50% 8%; animation: bell-nudge 0.9s ease-in-out; }
+  @keyframes badge-pop { 0% { transform: scale(0.4); } 55% { transform: scale(1.35); } 100% { transform: scale(1); } }
+  @keyframes badge-ripple { 0% { transform: scale(1); opacity: .7; } 100% { transform: scale(2.4); opacity: 0; } }
+  .badge-pop { animation: badge-pop 0.45s cubic-bezier(.34,1.56,.64,1); }
+  .badge-pop::after { content: ''; position: absolute; inset: 0; border-radius: 9999px; border: 2px solid rgb(244 63 94); animation: badge-ripple 0.8s ease-out 0.1s both; pointer-events: none; }
 
   /* Completed-projects disclosure -- hide the native <summary> marker (two different
      mechanisms needed for cross-browser: list-style for Firefox/Chromium, the pseudo-element
@@ -308,6 +318,28 @@
     #updates-nav-btn.updates-unread:not(.active) { animation: none; background-position: 150% 0, 0% 0; }
   }
   #updates-nav-btn.updates-unread:not(.active):hover { filter: brightness(1.06); }
+  /* Team tiles (teamspaceTileHtml): each department's colour plus its own icon. Still at rest; a
+     one-off animation when you switch (.ts-anim on #teamspace-tile-wrap) and a small nudge on hover
+     in the menu. Motion only on change, never looping: the switcher is on screen all day. */
+  .ts-tile svg { transition: transform .2s ease; }
+  [data-teamspace]:hover .ts-tile svg { transform: rotate(-10deg) scale(1.12); }
+  .ts-clap { transform-box: view-box; transform-origin: 3px 11px; }
+  .ts-anim .ts-tile { animation: ts-pop .45s cubic-bezier(.34,1.56,.64,1); }
+  .ts-anim .ts-suits svg { animation: ts-hop .6s ease .1s; }
+  .ts-anim .ts-production .ts-clap { animation: ts-clap .65s ease .1s; }
+  .ts-anim .ts-copy svg { animation: ts-write .7s ease .1s; }
+  .ts-anim .ts-admin .ts-tick { stroke-dasharray: 1; animation: ts-tick .5s ease .2s both; }
+  .ts-anim .ts-all svg, .ts-anim .ts-unassigned svg { animation: ts-turn .6s ease .1s; }
+  @keyframes ts-pop { 0% { transform: scale(.6); } 60% { transform: scale(1.15); } 100% { transform: scale(1); } }
+  @keyframes ts-hop { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-3px); } 70% { transform: translateY(.5px); } }
+  @keyframes ts-clap { 0%, 100% { transform: rotate(0); } 35% { transform: rotate(-22deg); } 60% { transform: rotate(0); } 78% { transform: rotate(-6deg); } }
+  @keyframes ts-write { 0%, 100% { transform: translate(0,0) rotate(0); } 20% { transform: translate(-1.5px,1px) rotate(-8deg); } 40% { transform: translate(1px,-.5px) rotate(4deg); } 60% { transform: translate(-1px,1px) rotate(-6deg); } 80% { transform: translate(1px,0) rotate(2deg); } }
+  @keyframes ts-tick { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+  @keyframes ts-turn { from { transform: rotate(0); } to { transform: rotate(90deg); } }
+  @media (prefers-reduced-motion: reduce) {
+    .ts-anim .ts-tile, .ts-anim .ts-tile svg, .ts-anim .ts-clap, .ts-anim .ts-tick { animation: none !important; }
+    [data-teamspace]:hover .ts-tile svg { transform: none; }
+  }
   @keyframes updates-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255,78,32,0.45); } 50% { box-shadow: 0 0 0 5px rgba(255,78,32,0); } }
   .updates-pulse { animation: updates-pulse 2s ease-in-out infinite; }
   #updates-nav-btn.updates-unread:not(.active) #updates-nav-badge { background: #fff; color: #6366f1; }
@@ -417,7 +449,7 @@
     .remote-change-flash, .saved-tick, .expand-in, .expand-fade,
     .updates-pulse, .updates-unread:not(.active), .updates-unread:not(.active) > svg,
     .task-just-completed, .done-today-bounce, .modal-backdrop, .modal-pop-in, .panel-pop-in,
-    .checklist-just-checked, .bell-nudge, .chat-message-enter, .chat-receipt-flip,
+    .checklist-just-checked, .bell-nudge > svg, .badge-pop, .badge-pop::after, .chat-message-enter, .chat-receipt-flip,
     .chat-star-pop, .chat-typing-dots span, .field-shake, .chat-message-jump-flash { animation: none; }
   }
 
@@ -822,8 +854,8 @@
          same .sidebar-label mechanism every nav item uses. -->
     <div class="px-2 pt-2 shrink-0 relative">
       <button type="button" id="teamspace-trigger" data-tooltip="Teamspace" aria-haspopup="listbox" aria-expanded="false"
-              class="tooltip-right w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg border border-zinc-300 dark:border-zinc-600 bg-zinc-50 dark:bg-zinc-700/50 text-sm font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700">
-        <svg class="w-4 h-4 shrink-0 text-zinc-500 dark:text-zinc-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg>
+              class="tooltip-right w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg border border-zinc-300 dark:border-zinc-600 bg-zinc-50 dark:bg-zinc-700/50 text-sm font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700">
+        <span id="teamspace-tile-wrap" class="flex shrink-0"></span>
         <span id="teamspace-current" class="sidebar-label flex-1 text-left truncate">All teamspaces</span>
         <svg class="sidebar-label w-3.5 h-3.5 shrink-0 text-zinc-400 dark:text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
       </button>
@@ -2331,7 +2363,27 @@
     btn.classList.remove('bell-nudge');
     void btn.offsetWidth;
     btn.classList.add('bell-nudge');
-    setTimeout(function () { btn.classList.remove('bell-nudge'); }, 600);
+    setTimeout(function () { btn.classList.remove('bell-nudge'); }, 1000);
+  }
+  // Pops a red count when its number goes up (never on the first render after loading).
+  function popBadge(el) {
+    if (!el) return;
+    el.classList.remove('badge-pop');
+    void el.offsetWidth;
+    el.classList.add('badge-pop');
+    clearTimeout(el.__popTimer);
+    el.__popTimer = setTimeout(function () { el.classList.remove('badge-pop'); }, 1000);
+  }
+  var lastBadgeCounts = {};
+  // ready = this count's data has loaded. Until then the count only starts from 0 and climbs as
+  // data arrives, which would pop on every page load; the first loaded render sets the baseline.
+  var tasksSnapshotSeen = false;
+  function popBadgeIfUp(el, count, ready) {
+    if (!el) return;
+    if (!ready) { delete lastBadgeCounts[el.id]; return; }
+    var prev = lastBadgeCounts[el.id];
+    if (prev !== undefined && count > prev) popBadge(el);
+    lastBadgeCounts[el.id] = count;
   }
 
   /* =========================================================
@@ -3202,6 +3254,29 @@
     return d ? d.label : key;
   }
 
+  // One look per team everywhere: its People-card colour plus its own icon (asked: "make it obvious
+  // which department", then "will a design or icon be included? Besides just using colour cues").
+  // Colour alone fails for colour-blind people and on the collapsed rail, so the icon carries it too.
+  var DEPARTMENT_ICON = { suits: 'teamSuits', production: 'teamCreative', copy: 'teamCopy', admin: 'teamAdmin' };
+  var DEPARTMENT_TRIGGER_TINT = {
+    suits: 'border-sky-300 bg-sky-50 dark:border-sky-500/40 dark:bg-sky-500/10',
+    production: 'border-violet-300 bg-violet-50 dark:border-violet-500/40 dark:bg-violet-500/10',
+    copy: 'border-teal-300 bg-teal-50 dark:border-teal-500/40 dark:bg-teal-500/10',
+    admin: 'border-stone-300 bg-stone-100 dark:border-stone-500/40 dark:bg-stone-500/15'
+  };
+  function teamspaceIconName(key) {
+    return DEPARTMENT_ICON[key] || (key === 'unassigned' ? 'teamNone' : 'grid');
+  }
+  function teamspaceTileHtml(key) {
+    var colour = DEPARTMENT_BADGE[key] || 'bg-zinc-200/70 text-zinc-500 dark:bg-zinc-600/60 dark:text-zinc-300';
+    return '<span class="ts-tile ts-' + escapeHtml(key) + ' inline-flex items-center justify-center shrink-0 w-6 h-6 rounded-md ' + colour + '" aria-hidden="true">' +
+      svgIcon(teamspaceIconName(key), 'w-3.5 h-3.5') + '</span>';
+  }
+  function departmentChipHtml(key) {
+    return '<span class="inline-flex items-center gap-1 text-xs font-bold px-1.5 py-0.5 rounded ' + DEPARTMENT_BADGE[key] + '">' +
+      svgIcon(teamspaceIconName(key), 'w-3 h-3 shrink-0') + escapeHtml(departmentLabel(key)) + '</span>';
+  }
+
   function teamspaceLabel(key) {
     if (key === 'all') return 'All teamspaces';
     if (key === 'unassigned') return 'Unassigned';
@@ -3464,7 +3539,7 @@
       return '<label data-dept-option="' + escapeHtml(d.key) + '" ' +
         'class="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 text-sm font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700/60 cursor-pointer">' +
         '<input type="checkbox" class="department-modal-check brand-checkbox w-4 h-4 rounded border border-zinc-300 dark:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500/40" value="' + escapeHtml(d.key) + '">' +
-        escapeHtml(d.label) +
+        teamspaceTileHtml(d.key) + escapeHtml(d.label) +
       '</label>';
     }).join('');
     modal.classList.remove('hidden');
@@ -3569,7 +3644,7 @@
       return '<label class="flex items-center gap-2 text-xs font-medium text-zinc-600 dark:text-zinc-300 cursor-pointer">' +
         '<input type="checkbox" class="profile-dept-check brand-checkbox w-3.5 h-3.5 rounded border border-zinc-300 dark:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500/40" ' +
           'data-dept="' + escapeHtml(d.key) + '"' + (on ? ' checked' : '') + '>' +
-        escapeHtml(d.label) +
+        teamspaceTileHtml(d.key) + escapeHtml(d.label) +
       '</label>';
     }).join('') +
     (mine.length ? '' : '<p class="text-[11px] text-zinc-400 dark:text-zinc-500 mt-0.5">None yet — your tasks sit in Unassigned.</p>');
@@ -3594,6 +3669,20 @@
     var menu = document.getElementById('teamspace-menu');
     if (!label || !menu) return;
     label.textContent = teamspaceLabel(currentTeamspace);
+    var tileWrap = document.getElementById('teamspace-tile-wrap');
+    var trigger = document.getElementById('teamspace-trigger');
+    if (tileWrap && tileWrap.getAttribute('data-key') !== currentTeamspace) {
+      tileWrap.setAttribute('data-key', currentTeamspace);
+      tileWrap.innerHTML = teamspaceTileHtml(currentTeamspace);
+    }
+    if (trigger) {
+      // A coloured button always means "you are seeing one team"; All and Unassigned stay neutral.
+      var neutral = 'border-zinc-300 dark:border-zinc-600 bg-zinc-50 dark:bg-zinc-700/50';
+      var tint = DEPARTMENT_TRIGGER_TINT[currentTeamspace] || neutral;
+      (neutral + ' ' + Object.keys(DEPARTMENT_TRIGGER_TINT).map(function (k) { return DEPARTMENT_TRIGGER_TINT[k]; }).join(' ')).split(' ')
+        .forEach(function (c) { trigger.classList.remove(c); });
+      tint.split(' ').forEach(function (c) { trigger.classList.add(c); });
+    }
 
     var counts = teamspaceCounts();
     var options = [{ key: 'all' }].concat(DEPARTMENTS.map(function (d) { return { key: d.key }; }))
@@ -3614,10 +3703,11 @@
         // menu were updated with it, this one was missed because it is built in JS.
         // Any hover INSIDE #teamspace-menu or #user-menu-panel has to clear zinc-700.
         'class="w-full flex items-center gap-2 px-3 py-2 text-sm text-left hover:bg-zinc-100 dark:hover:bg-zinc-600 ' +
-        (active ? 'font-bold text-brand-700 dark:text-brand-400' : 'text-zinc-700 dark:text-zinc-200') + '">' +
+        (active ? 'font-bold text-zinc-900 dark:text-white' : 'text-zinc-700 dark:text-zinc-200') + '">' +
+          teamspaceTileHtml(o.key) +
           '<span class="flex-1 truncate">' + escapeHtml(teamspaceLabel(o.key)) + '</span>' +
           '<span class="text-xs text-zinc-400 dark:text-zinc-500">' + (counts[o.key] || 0) + '</span>' +
-          (active ? svgIcon('check', 'w-3.5 h-3.5 shrink-0') : '') +
+          (active ? svgIcon('check', 'w-3.5 h-3.5 shrink-0 text-brand-600 dark:text-brand-400') : '') +
         '</button>';
     }).join('');
   }
@@ -3652,8 +3742,16 @@
     }
     var opt = e.target.closest('[data-teamspace]');
     if (opt) {
+      var changed = opt.getAttribute('data-teamspace') !== currentTeamspace;
       setTeamspace(opt.getAttribute('data-teamspace'));
       closeTeamspaceMenu();
+      if (changed) {
+        var tw = document.getElementById('teamspace-tile-wrap');
+        if (tw) {
+          tw.classList.remove('ts-anim'); void tw.offsetWidth; tw.classList.add('ts-anim');
+          clearTimeout(tw.__tsTimer); tw.__tsTimer = setTimeout(function () { tw.classList.remove('ts-anim'); }, 1000);
+        }
+      }
       return;
     }
     if (menu && !menu.classList.contains('hidden') && !e.target.closest('#teamspace-menu')) {
@@ -5993,7 +6091,14 @@
     checkTickDouble: '<path d="M18 6 7 17l-5-5"></path><path d="m22 10-7.5 7.5L13 16"></path>',
     chevronDown: '<polyline points="6 9 12 15 18 9"></polyline>',
     moreHorizontal: '<circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle>',
-    repeat: '<path d="m17 2 4 4-4 4"></path><path d="M3 11v-1a4 4 0 0 1 4-4h14"></path><path d="m7 22-4-4 4-4"></path><path d="M21 13v1a4 4 0 0 1-4 4H3"></path>'
+    repeat: '<path d="m17 2 4 4-4 4"></path><path d="M3 11v-1a4 4 0 0 1 4-4h14"></path><path d="m7 22-4-4 4-4"></path><path d="M21 13v1a4 4 0 0 1-4 4H3"></path>',
+    // Team icons (teamspace tiles and department chips). ts-clap / ts-tick are animated on switch.
+    grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect>',
+    teamSuits: '<rect x="3" y="7" width="18" height="13" rx="2"></rect><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><path d="M3 13h18"></path>',
+    teamCreative: '<path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"></path><g class="ts-clap"><path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3Z"></path><path d="m6.2 5.3 3.1 3.9"></path><path d="m12.4 3.4 3.1 4"></path></g>',
+    teamCopy: '<path d="M15.7 21.3a1 1 0 0 1-1.4 0l-1.6-1.6a1 1 0 0 1 0-1.4l5.6-5.6a1 1 0 0 1 1.4 0l1.6 1.6a1 1 0 0 1 0 1.4z"></path><path d="m18 13-1.4-6.9a1 1 0 0 0-.7-.8L3.2 2a1 1 0 0 0-1.2 1.2l3.3 12.7a1 1 0 0 0 .8.7L13 18"></path><path d="m2.3 2.3 7.3 7.3"></path><circle cx="11" cy="11" r="2"></circle>',
+    teamAdmin: '<rect x="8" y="2" width="8" height="4" rx="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><path class="ts-tick" pathLength="1" d="m9 14 2 2 4-4"></path>',
+    teamNone: '<circle cx="12" cy="12" r="8.5" stroke-dasharray="3 3"></circle>'
   };
 
   function svgIcon(name, cls) {
@@ -11257,6 +11362,7 @@
     var digestBadge = document.getElementById('digest-badge');
     digestBadge.textContent = badgeCount > 9 ? '9+' : String(badgeCount);
     digestBadge.classList.toggle('hidden', badgeCount === 0);
+    popBadgeIfUp(digestBadge, badgeCount, tasksSnapshotSeen);
   }
 
   /* =========================================================
@@ -12726,7 +12832,7 @@
       '</div>';
     }
     var chips = personDepartments(name).map(function (k) {
-      return '<span class="text-xs font-bold px-1.5 py-0.5 rounded ' + DEPARTMENT_BADGE[k] + '">' + escapeHtml(departmentLabel(k)) + '</span>';
+      return departmentChipHtml(k);
     }).join('');
     var grip = weeklyCanArrange()
       ? '<button type="button" draggable="true" data-weekly-drag="' + escapeHtml(name) + '" data-tooltip="Drag to reorder (or use the arrow keys)" aria-label="Move ' + escapeHtml(name) + ' (arrow keys)" class="tooltip-top -ml-1.5 w-6 h-7 shrink-0 flex items-center justify-center rounded-md cursor-grab active:cursor-grabbing text-zinc-400 dark:text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-600">' + svgIcon('grip', 'w-3.5 h-3.5') + '</button>'
@@ -12786,7 +12892,7 @@
     });
     var showHeads = groups.length > 1;
     wrap.innerHTML = helpHtml + groups.map(function (g) {
-      return (showHeads ? '<h3 class="text-sm font-bold text-zinc-500 dark:text-zinc-400 mt-1 mb-2.5">' + escapeHtml(g.dept ? departmentLabel(g.dept) : 'No department') + '</h3>' : '') +
+      return (showHeads ? '<h3 class="flex items-center gap-2 text-sm font-bold text-zinc-500 dark:text-zinc-400 mt-1 mb-2.5">' + teamspaceTileHtml(g.dept || 'unassigned') + escapeHtml(g.dept ? departmentLabel(g.dept) : 'No department') + '</h3>' : '') +
         // One column (asked for directly): read down the room in order, and draggable within it.
         '<div class="flex flex-col gap-4 mb-6">' + g.names.map(function (n) { return weeklyCardHtml(n, key); }).join('') + '</div>';
     }).join('');
@@ -13394,7 +13500,7 @@
       var identityChips = '';
       var workloadChips = '';
       personDepartments(p.name).forEach(function (k) {
-        identityChips += '<span class="text-xs font-bold px-1.5 py-0.5 rounded ' + DEPARTMENT_BADGE[k] + '">' + escapeHtml(departmentLabel(k)) + '</span>';
+        identityChips += departmentChipHtml(k);
       });
       // Admin belongs with identity, not workload -- a standing fact about the person.
       // Read-only: see isAdminName's own comment on why this can't be clicked to change.
@@ -15743,6 +15849,10 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-08k', date: '2026-10-08', items: [
+      { type: 'improved', title: 'Each team has its own colour and icon', text: 'Suits is a blue briefcase, Creative/Post a violet clapperboard, Copy/Production a teal pen and Admin a clipboard. You see them in the team switcher (which takes your team\'s colour while you\'re viewing one team), on People and Monday Meeting, and in the profile menu. Switching teams plays a short animation.' },
+      { type: 'improved', title: 'New notifications are easier to notice', text: 'When something new arrives, the bell now rings and its red count pops. The This Week and Chat counts pop too whenever their number goes up.' }
+    ] },
     { id: '2026-10-08j', date: '2026-10-08', items: [
       { type: 'improved', title: 'Click a step or a logged time to edit it', text: 'In the task window, clicking a checklist step\'s name opens it for editing, and so does clicking a logged time or its note. The pencil still works too.' },
       { type: 'improved', title: 'Adding several steps at once is easier to find', text: 'While you type in the checklist\'s add box, a short note now says how: Shift+Enter for a new line or paste a list, and the link, date and people you set go on every step.' }
@@ -19140,6 +19250,7 @@
       noteRemoteTaskChanges(snap);
       var modalOpenId = (!taskModal.classList.contains('hidden') && editingTaskId) ? editingTaskId : null;
       tasks = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
+      tasksSnapshotSeen = true;
       migrateLegacyArchivedTasks(tasks);
       fixLowercaseTitles(tasks);
       // Before renderAll below, so the board is never painted once through a filter that is
@@ -19276,6 +19387,7 @@
     var badge = document.getElementById('chat-nav-badge');
     badge.textContent = unread.length > 9 ? '9+' : String(unread.length);
     badge.classList.toggle('hidden', unread.length === 0);
+    popBadgeIfUp(badge, unread.length, notifListenerReady);
   }
 
   // One sentence per notification, shared by the bell panel and the phone layout's list.
@@ -19297,6 +19409,7 @@
     var badge = document.getElementById('notification-badge');
     badge.textContent = unread.length > 9 ? '9+' : String(unread.length);
     badge.classList.toggle('hidden', unread.length === 0);
+    popBadgeIfUp(badge, unread.length, notifListenerReady);
 
     var list = document.getElementById('notification-list');
     list.innerHTML = myNotifications.length
@@ -19452,7 +19565,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-08T07:33:02Z";
+  var CURRENT_BUILD_VERSION = "2026-10-08T07:46:55Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
