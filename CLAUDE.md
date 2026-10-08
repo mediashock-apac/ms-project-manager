@@ -3346,6 +3346,16 @@ site. Pushing to `main` only updates the static GitHub Pages site; rules/indexes
 change, or every read/write against the new collection fails with "Missing or insufficient
 permissions" even though the code and the deployed page are otherwise correct.
 
+### Windows you type in never close on an outside click (2026-10-08)
+
+Asked: "Clicking outside of the window when entering a task should not take you out of the window."
+The task window, the Monday update editor and a brief being written no longer close when the dimmed
+backdrop is clicked (a stray click, or a text selection dragged past the card's edge, used to close
+them; the Monday editor dropped its draft with no warning). They close only from X, Cancel or Escape,
+and the task window still asks "Discard changes?" there. A brief that is only being READ still closes
+on an outside click, as do the read-only pop-ups (calendar day, confirm). **Any new window someone
+types in follows the same rule.** Checked in `tests/live-forms.test.js`.
+
 ### Popups that open over the sidebar (`.panel-raised`)
 
 Every floating panel in this app is `bg-white dark:bg-zinc-800`. That is fine over `<main>`, but

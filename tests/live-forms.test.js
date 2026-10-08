@@ -168,6 +168,27 @@ async function skipTours(page) {
     check('WIP: Enter still saves and closes the editor at once', saved && !(await page.$('#wip-projects [data-wip-field="text"]')));
   }
 
+  // An outside click never closes a window you're typing in
+  await page.click('#btn-add-task'); await page.waitForTimeout(400);
+  await page.fill('#task-name', 'Half-typed task');
+  await page.mouse.click(8, 8); await page.waitForTimeout(300);
+  check('task window: outside click keeps it open', await page.isVisible('#task-modal') && (await page.inputValue('#task-name')) === 'Half-typed task');
+  await page.click('#task-cancel-btn'); await page.waitForTimeout(300);
+  const discard = await page.$('#confirm-ok-btn');
+  if (discard && await discard.isVisible()) { await discard.click(); await page.waitForTimeout(300); }
+  check('task window: Cancel still closes it', !(await page.isVisible('#task-modal')));
+  await page.click('[data-view-btn="weekly"]'); await page.waitForTimeout(1300);
+  await skipTours(page);
+  const write = await page.$('#view-weekly [data-weekly-write]');
+  check('Monday page has a Write button', !!write);
+  if (write) {
+    await write.click(); await page.waitForTimeout(400);
+    await page.mouse.click(8, 8); await page.waitForTimeout(300);
+    check('Monday editor: outside click keeps it open', await page.isVisible('#weekly-modal'));
+    await page.click('#weekly-modal-close'); await page.waitForTimeout(300);
+    check('Monday editor: X still closes it', !(await page.isVisible('#weekly-modal')));
+  }
+
   check('no page errors', errors.length === 0, errors.join(' | '));
 
   console.log(results.join('\n'));

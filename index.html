@@ -9530,7 +9530,8 @@
 
   function briefModalClick(e) {
     var el = document.getElementById('brief-modal');
-    if (e.target === el && el.__downOnBackdrop) { closeBrief(); return; }
+    // Outside click closes the brief only while reading it, never while it's being written.
+    if (e.target === el && el.__downOnBackdrop) { if (briefOpen && briefOpen.mode === 'view') closeBrief(); return; }
     if (!briefOpen) return;
     var d = briefOpen.draft;
     var tpl = e.target.closest('[data-brief-tpl]');
@@ -9743,7 +9744,8 @@
   });
   document.getElementById('task-modal-close').addEventListener('click', requestCloseTaskModal);
   document.getElementById('task-cancel-btn').addEventListener('click', requestCloseTaskModal);
-  taskModal.addEventListener('click', function (e) { if (e.target === taskModal) requestCloseTaskModal(); });
+  // No close on an outside click: a stray click (or a text selection dragged past the edge) used to
+  // close the window mid-entry. X, Cancel and Escape still close it, with the unsaved-changes check.
   taskModal.addEventListener('keydown', trapFocus(taskModal));
 
   document.getElementById('task-delete-btn').addEventListener('click', function () {
@@ -12926,7 +12928,7 @@
   if (WEEKLY_ENABLED) {
     document.getElementById('weekly-modal-close').addEventListener('click', closeWeeklyEditor);
     weeklyModal.addEventListener('click', function (e) {
-      if (e.target === weeklyModal) { closeWeeklyEditor(); return; }
+      // An outside click doesn't close the editor (it used to, dropping the draft). X / Escape do.
       if (!weeklyDraft) return;
       var t = e.target.closest('button');
       if (!t) return;
@@ -15728,6 +15730,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-08h', date: '2026-10-08', items: [
+      { type: 'fixed', title: 'Clicking outside a window no longer closes it', text: 'A stray click outside the task window, your Monday update or a brief you are writing used to close it, and the Monday update lost what you had typed. Now only the X, Cancel or Escape close them.' }
+    ] },
     { id: '2026-10-08g', date: '2026-10-08', items: [
       { type: 'fixed', title: 'Typing is never wiped by a teammate\'s change', text: 'The same fix as Add leave now covers every place you type on a page that updates live, including a project deadline on Projects and status updates, notes and links on WIP Meeting. What you type stays until you save or cancel.' }
     ] },
@@ -19427,7 +19432,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-08T03:10:29Z";
+  var CURRENT_BUILD_VERSION = "2026-10-08T06:38:56Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
