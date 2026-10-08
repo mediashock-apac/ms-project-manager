@@ -139,6 +139,16 @@ async function skipTours(page) {
       await page.click('#btn-notifications'); await page.waitForTimeout(150);
       check('opening the bell closes the team menu', !(await page.isVisible('#teamspace-menu')));
       await page.keyboard.press('Escape'); await page.mouse.click(700, 500); await page.waitForTimeout(150);
+      // New Updates: one day open at a time
+      await page.click('[data-view-btn="updates"]'); await page.waitForTimeout(800); await skipTours(page);
+      const openDays = () => page.$$eval('#updates-list [data-updates-day]', b => b.filter(x => x.getAttribute('aria-expanded') === 'true').map(x => x.getAttribute('data-updates-day')));
+      const heads = await page.$$eval('#updates-list [data-updates-day]', b => b.map(x => x.getAttribute('data-updates-day')));
+      check('New Updates opens on the newest day only', JSON.stringify(await openDays()) === JSON.stringify([heads[0]]), JSON.stringify(await openDays()));
+      await page.click('#updates-list [data-updates-day="' + heads[2] + '"]'); await page.waitForTimeout(200);
+      check('opening another day folds the first', JSON.stringify(await openDays()) === JSON.stringify([heads[2]]));
+      await page.screenshot({ path: path.join(OUT, 'updates-days.png'), fullPage: false });
+      await page.click('#updates-list [data-updates-day="' + heads[2] + '"]'); await page.waitForTimeout(200);
+      check('clicking the open day folds it', (await openDays()).length === 0);
       await page.click('[data-view-btn="weekly"]'); await page.waitForTimeout(1300); await skipTours(page);
       check('Monday group headings have a tile', (await page.$$('#view-weekly h3 .ts-tile')).length >= 3);
     }

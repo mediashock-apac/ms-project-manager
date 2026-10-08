@@ -332,6 +332,11 @@ sidebar so users will know whenever new updates are in."
 - **Opening the tab** snapshots what was unseen (`updatesUnseenAtOpen`) *before* marking it
   seen, so those releases still carry a "New since your last visit" label and an orange border on
   that visit. Toolbar hidden (`TOOLBAR_FULLY_HIDDEN_VIEWS`) — nothing to search or filter.
+- **Days fold; one open at a time** (2026-10-08, asked: "Collapse the past updates from other days.
+  Only one day should be able to open at a time"). Each day is a clickable row (`data-updates-day`,
+  chevron, "N updates", and "N new" while folded); opening one folds the rest, clicking the open one
+  folds it. `updatesOpenDay`: null = the newest day, which every visit to the tab opens on; '' = all
+  folded. Session-only.
 - **Rendered one heading and one card per DAY**, not per release (`renderUpdatesView` merges
   consecutive releases with the same `date`) -- several releases a day each repeated the date
   heading, reported as "why aren't updates on the same day grouped together?". Releases stay
