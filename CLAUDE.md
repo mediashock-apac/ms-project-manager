@@ -3040,17 +3040,28 @@ Asked: "There should be a Shared files tab or combine with Projects so that all 
 that project are compiled and easy to access." Built as a section of the Projects card, not a tab
 (a tab would repeat Projects and add a sidebar row). PROJECT FILES & LINKS in index.html.
 
-- **Derived, never stored** (`projectLinks(name)`): the project's pinned links (`projects.links`,
-  shared with chat Pinned links and WIP Contact & links), brief Links rows (never the budget), every
-  task's Drive folder, checklist-step links, and URLs pasted into task comments, WIP status lines and
-  the project chat. Active and archived tasks. Deduped by URL (query/hash ignored); pinned wins.
-- **Grouped by kind** (`linkChipLabel`: Drive, Docs, Sheets, Slides, Forms, Frame.io, Figma, Canva,
-  YouTube, Vimeo, Dropbox, then Other links), pinned first then newest. Each row: a name from where
-  it was used (pinned label, step text, the message around the link), and "source · person · date".
-- **Card:** "N files & links" under the Brief button (only when there's at least one), opening a
-  two-column panel above the tasks (`projectFilesOpen`, session-only). **Phone project page:** a
-  "Files & links" section; its old "Contact & links" became "Client contact", since the links are in
-  the new section.
+- **Sorted by PURPOSE, not by website (second design, same day).** The first version grouped every
+  link by site (Drive, Frame.io...) and listed every link pasted into comments; reported as "a mess
+  and it doesn't really help me find things", with the intent spelled out: "Briefs, brand guidelines
+  sent by client or client assets that suits have provided, or file versions that post team has
+  attached in the checklist ... this section serves as a shortcut". **Don't go back to site groups.**
+  Sections, all derived (`projectLinks(name)` tags each link with a `kind`):
+  - **Project folder**: the tasks' Drive folder(s); several are listed by task.
+  - **Brief**: "Open the creative brief" (the app's brief) plus any link named "brief".
+  - **Client assets & guidelines**: pinned links (`projects.links`, the same list as chat Pinned links
+    and WIP Contact & links), the brief's Links rows ("From the brief"), and any link whose name
+    matches `ASSET_WORDS` (brand, guideline, logo, asset, font, kit, template...). **"+ Add"** here
+    pins a link (`addProjectKeyLink`), so Suits have an obvious place for client files; pinned rows
+    get an x. Empty state says what goes there.
+  - **Work files**: links on checklist steps, under their task: the deliverables and their versions.
+  - **Links from comments & chat**: every other pasted link (comments, WIP status lines, chat),
+    folded by default, @mentions stripped from the snippet.
+  Deduped by URL (query/hash ignored), the higher section wins (folder > brief > assets > work >
+  conversation). The toggle counts everything except the conversation links. Each row: name, a
+  small detail (task, date, "From the brief"), and a site tag on the right. Never the budget link.
+- **Card:** "Files & links · N" under the Brief button, opening a one-column panel above the tasks
+  (`projectFilesOpen`, session-only). **Phone project page:** the same four sections (no
+  conversation links); its old "Contact & links" became "Client contact".
 - Can't list files that only live inside a Drive folder (that needs Google sign-in for Drive); the
   folder link shows. `tests/project-files.test.js`.
 
@@ -4050,8 +4061,10 @@ their week into a cell before the Monday meeting. Asked: "Is there a way to inte
   "not available" colour; Not in yet is a dashed neutral outline with a clock.
   **Each row shows where the project stands** (2026-10-08, asked: "It doesn't help by just listing
   the project name. It needs to show the current status. Can it show what is on the checklist items
-  or next steps?"): `weeklyRowContextHtml` adds "Next:" with this person's late (rose, "late, was
-  …") then upcoming steps/tasks there, then undated steps, up to 3 plus "+N more"; and "Latest
+  or next steps?"): `weeklyRowContextHtml` adds a "Next" list, one step per line with its date in a
+  short column first (agenda style; a single wrapping line was "hard to read", and a right-hand date
+  column sat far from its step at full width): this person's late (rose, "· late") then upcoming
+  steps/tasks there, then undated steps ("No date"), up to 3 plus "+N more"; and "Latest
   status:" (the newest WIP status line) when they wrote no note. Current meeting week only (the board
   is now, not last week), not on Done rows. It replaced the right-hand next-date column. This is
   text people typed on the board, unlike the removed "From the board" list on cards with no update.

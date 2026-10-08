@@ -94,35 +94,52 @@ async function skipTours(page) {
     await page.evaluate(() => window.__fb.remote(function (d) {
       const t1 = d.tasks.t1;
       t1.driveLink = 'https://drive.google.com/drive/folders/gws';
-      t1.checklist = [{ id: 'c1', text: 'Final deck', due: '2026-10-08', done: false, link: 'https://docs.google.com/presentation/d/deck1/edit' }];
-      t1.comments = [{ id: 'k1', text: 'Cut v2 is up https://next.frame.io/project/abc/view please check.', author: 'Mychelle Chen', date: '2026-10-05T03:00:00Z' },
+      t1.checklist = [
+        { id: 'c1', text: 'Final deck', due: '2026-10-08', done: false, link: 'https://docs.google.com/presentation/d/deck1/edit' },
+        { id: 'c2', text: 'Cut v2', due: '2026-10-09', done: false, link: 'https://next.frame.io/project/cut2' },
+        { id: 'c3', text: 'Client brief from Google', due: '', done: true, link: 'https://docs.google.com/document/d/clientbrief' }];
+      t1.comments = [{ id: 'k1', text: '@Deane Cheng Added B-roll here https://next.frame.io/project/abc/view please check.', author: 'Mychelle Chen', date: '2026-10-05T03:00:00Z' },
                      { id: 'k2', text: 'Same deck again https://docs.google.com/presentation/d/deck1/edit', author: 'Arvind Kumaraguru', date: '2026-10-05T04:00:00Z' }];
       d.tasks.t2.driveLink = 'https://drive.google.com/drive/folders/other-project';
       d.projects.p1 = { name: 'GWS recording', deadline: null,
-        links: [{ id: 'l1', label: 'Client brief doc', url: 'https://docs.google.com/document/d/brief1' }],
+        links: [{ id: 'l1', label: 'Brand guidelines', url: 'https://drive.google.com/file/d/brand' }],
         chat: [{ id: 'm1', text: 'Budget sheet: https://docs.google.com/spreadsheets/d/sheet1', author: 'Arvind Kumaraguru', date: '2026-10-04T03:00:00Z' }],
-        brief: { job: 'Recording', sections: [{ type: 'links', rows: [{ a: 'Brand guide', b: 'figma.com/file/brand' }] }, { type: 'budget', url: 'https://docs.google.com/spreadsheets/d/SECRET' }] } };
+        brief: { job: 'Recording', sections: [{ type: 'links', rows: [{ a: 'Logo pack', b: 'figma.com/file/logos' }] }, { type: 'budget', url: 'https://docs.google.com/spreadsheets/d/SECRET' }] } };
     }));
     await page.waitForTimeout(300);
     await page.click('[data-view-btn="projects"]'); await page.waitForTimeout(1300); await skipTours(page);
     const card = '#projects-grid .project-files-toggle[data-project="GWS recording"]';
-    if (!dark) {
-      check('card shows the count (6: pinned doc, brief Figma, folder, step deck, Frame.io comment, chat sheet; deck once)', (await page.textContent(card)).trim() === '6 files & links', (await page.textContent(card)).trim());
-    }
+    const cardText = () => page.$eval(card, b => b.closest('.rounded-xl').innerText);
+    if (!dark) check('toggle counts the useful links, not the chatter (folder, brief, 2 assets, 2 work = 6)', (await page.textContent(card)).trim() === 'Files & links · 6', (await page.textContent(card)).trim());
     await page.click(card); await page.waitForTimeout(400);
-    const panel = await page.$eval(card, b => b.closest('.rounded-xl').innerText);
+    const panel = await cardText();
     if (!dark) {
-      check('grouped by kind', /GOOGLE DRIVE/i.test(panel) && /GOOGLE SLIDES/i.test(panel) && /FRAME\.IO/i.test(panel) && /FIGMA/i.test(panel) && /GOOGLE SHEETS/i.test(panel) && /GOOGLE DOCS/i.test(panel));
-      check('names come from where it was used', /Client brief doc/.test(panel) && /Final deck/.test(panel) && /Brand guide/.test(panel) && /Cut v2 is up/.test(panel));
-      check('same link listed once', (await page.$$eval('#projects-grid a[href="https://docs.google.com/presentation/d/deck1/edit"]', a => a.length)) === 1);
-      check('another project\'s folder not included', !(await page.$('#projects-grid a[href*="other-project"]')) || (await page.$$eval('#projects-grid a[href*="other-project"]', a => a.every(x => !x.closest('.rounded-xl').innerText.includes('GWS recording')))));
+      const up = panel.toUpperCase(); let at = up.indexOf('PROJECT FOLDER');
+      const order = ['PROJECT FOLDER', 'BRIEF', 'CLIENT ASSETS & GUIDELINES', 'WORK FILES', 'LINKS FROM COMMENTS & CHAT'].map(h => (at = up.indexOf(h, Math.max(at, 0))));
+      check('sections by purpose, in order', order.every((v, i) => v >= 0 && (i === 0 || v > order[i - 1])), JSON.stringify(order));
+      check('brief: the app brief and the brief link', /Open the creative brief/.test(panel) && /Client brief from Google/.test(panel));
+      check('client assets: pinned link and the brief\'s links', /Brand guidelines/.test(panel) && /Logo pack/.test(panel) && /From the brief/.test(panel));
+      check('work files: steps under their task', /WORK FILES[\s\S]*Rough cut[\s\S]*Final deck[\s\S]*Cut v2/i.test(panel));
+      check('a link used in a step and a comment shows once, as a work file', (await page.$$eval('#projects-grid a[href="https://docs.google.com/presentation/d/deck1/edit"]', a => a.length)) === 1);
+      check('comment and chat links folded away', !(await page.$('#projects-grid a[href*="frame.io/project/abc"]')));
+      await page.click('#projects-grid .project-files-conv-toggle'); await page.waitForTimeout(300);
+      const conv = await cardText();
+      check('unfolding shows them, mentions stripped', !!(await page.$('#projects-grid a[href*="frame.io/project/abc"]')) && /Added B-roll here please check/.test(conv) && !/@Deane/.test(conv), conv.slice(-300));
+      check('another project\'s folder not included', !(await page.$('#projects-grid a[href*="other-project"]')));
       check('brief budget link never included', !(await page.$('#projects-grid a[href*="SECRET"]')));
-      check('links open in a new tab', await page.$$eval('#projects-grid .project-files-toggle[aria-expanded="true"]', b => b.length === 1) && await page.$eval('#projects-grid a[href*="frame.io"]', a => a.target === '_blank'));
+      // + Add a client asset
+      await page.click('#projects-grid .project-link-add[data-project="GWS recording"]'); await page.waitForTimeout(200);
+      await page.fill('#projects-grid .project-link-label', 'Font files');
+      await page.fill('#projects-grid .project-link-url', 'drive.google.com/drive/folders/fonts');
+      await page.keyboard.press('Enter'); await page.waitForTimeout(500);
+      const links = await page.evaluate(() => (window.__fb.data.projects.p1.links || []).map(l => l.label + '|' + l.url));
+      check('+ Add saves a pinned link (shared with chat)', links.includes('Font files|https://drive.google.com/drive/folders/fonts'), JSON.stringify(links));
+      check('it shows under client assets', /Font files/.test(await cardText()));
+      await page.click('#projects-grid .project-link-remove[data-link-id="l1"]'); await page.waitForTimeout(500);
+      check('a pinned link can be removed', !(await page.evaluate(() => (window.__fb.data.projects.p1.links || []).some(l => l.id === 'l1'))));
     }
-    const box = await page.$eval(card, b => { const r = b.closest('.rounded-xl').getBoundingClientRect(); return { x: r.x - 8, y: r.y - 8, width: r.width + 16, height: Math.min(r.height + 16, 700) }; });
+    const box = await page.$eval(card, b => { const r = b.closest('.rounded-xl').getBoundingClientRect(); return { x: r.x - 8, y: r.y - 8, width: r.width + 16, height: Math.min(r.height + 16, 900) }; });
     await page.screenshot({ path: path.join(OUT, 'project-files' + (dark ? '-dark' : '') + '.png'), clip: box });
-    await page.click(card); await page.waitForTimeout(300);
-    if (!dark) check('clicking again folds it', !(await page.$('#projects-grid a[href*="frame.io"]')));
     check('no page errors' + (dark ? ' (dark)' : ''), errors.length === 0, errors.join(' | '));
     await ctx.close();
   }
