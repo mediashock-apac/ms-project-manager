@@ -115,6 +115,12 @@ async function skipTours(page) {
       check('All is neutral again', await page.$eval('#teamspace-trigger', e => !e.className.includes('blue-50') && e.classList.contains('bg-zinc-50')));
       await page.click('#teamspace-trigger'); await page.click('#teamspace-menu [data-teamspace="production"]'); await page.waitForTimeout(300);
     } else { await page.waitForTimeout(1100); }
+    for (const t of ['suits','production','copy','admin']) {
+      await page.click('#teamspace-trigger'); await page.click('#teamspace-menu [data-teamspace="' + t + '"]'); await page.waitForTimeout(1100);
+      await page.screenshot({ path: path.join(OUT, 'team-btn-' + t + (dark ? '-dark' : '') + '.png'), clip: { x: 0, y: 64, width: 260, height: 56 } });
+      if (!dark && t === 'production') check('one team chosen: button patterned', await page.$eval('#teamspace-trigger', e => e.classList.contains('ts-patterned')) && !!(await page.$('#teamspace-watermark svg')));
+    }
+    await page.click('#teamspace-trigger'); await page.click('#teamspace-menu [data-teamspace="suits"]'); await page.waitForTimeout(1100);
     await page.screenshot({ path: path.join(OUT, 'team-button' + (dark ? '-dark' : '') + '.png'), clip: { x: 0, y: 0, width: 300, height: 120 } });
     // collapsed rail
     if (!dark) {
@@ -136,6 +142,17 @@ async function skipTours(page) {
       await page.click('[data-view-btn="weekly"]'); await page.waitForTimeout(1300); await skipTours(page);
       check('Monday group headings have a tile', (await page.$$('#view-weekly h3 .ts-tile')).length >= 3);
     }
+    await page.mouse.click(700, 600); await page.waitForTimeout(150);
+    await page.click('#btn-digest'); await page.waitForTimeout(300);
+    const pb = await page.$eval('#digest-panel', e => { const r = e.getBoundingClientRect(); return { x: r.x - 60, y: r.y - 50, width: r.width + 120, height: Math.min(r.height, 420) + 80 }; });
+    await page.screenshot({ path: path.join(OUT, 'digest-panel' + (dark ? '-dark' : '') + '.png'), clip: pb });
+    if (dark) check('dark: floating panel lighter than the cards under it', await page.$eval('#digest-panel', e => getComputedStyle(e).backgroundColor) === 'rgb(45, 45, 50)', await page.$eval('#digest-panel', e => getComputedStyle(e).backgroundColor));
+    await page.keyboard.press('Escape'); await page.mouse.click(700, 600);
+    await page.click('#user-menu-trigger'); await page.waitForTimeout(300);
+    const um = await page.evaluate(() => { const p = document.getElementById('user-menu-panel').getBoundingClientRect(), sb = document.getElementById('sidebar').getBoundingClientRect(), t = document.getElementById('user-menu-trigger').getBoundingClientRect(); return { beside: p.left >= sb.right, bottomAligned: Math.abs(p.bottom - t.bottom) < 12, onScreen: p.top >= 0, x: p.left, y: p.top, w: p.width, h: p.height }; });
+    if (!dark) check('profile menu opens beside the profile, not over the sidebar', um.beside && um.bottomAligned && um.onScreen, JSON.stringify(um));
+    await page.screenshot({ path: path.join(OUT, 'user-menu' + (dark ? '-dark' : '') + '.png'), clip: { x: 0, y: Math.max(0, um.y - 20), width: um.x + um.w + 20, height: Math.min(1000 - Math.max(0, um.y - 20), um.h + 120) } });
+    await page.keyboard.press('Escape'); await page.mouse.click(700, 600);
     check('no page errors' + tag, errors.length === 0, errors.join(' | '));
     await ctx.close();
   }

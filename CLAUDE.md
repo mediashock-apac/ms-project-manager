@@ -3364,6 +3364,20 @@ types in follows the same rule.** Checked in `tests/live-forms.test.js`.
 
 ### Popups that open over the sidebar (`.panel-raised`)
 
+**Update (2026-10-08): every other floating panel gets `.float-panel`** (bell, This Week, people filter,
+enhanced-select and `#select-menu` lists, chat menus and pickers, @mention lists). The reasoning below
+("everything else opens over `<main>`, already a different colour") was wrong in practice: the cards
+under those panels are `bg-white`/`dark:bg-zinc-800`, the panel's own colour, so This Week vanished
+over the board in dark mode (reported from a screenshot). `.float-panel` = firmer border plus a deeper
+shadow, and in dark a surface of rgb(45,45,50): lighter than the cards, but only a little, so the rows'
+existing `dark:hover:bg-zinc-700` hovers still show. A new floating panel gets the class.
+
+**The profile menu opens BESIDE the profile now** (asked: "the arrow beside the profile should point
+right. The floating window should then be beside the profile image, not above it covering the side
+bar"): `#user-menu-panel` sits at `left: calc(100% + .375rem)`, bottom-aligned with the profile, and
+the chevron points right. The mobile drawer has no room beside it, so below 768px it opens above
+again with the chevron turned up.
+
 Every floating panel in this app is `bg-white dark:bg-zinc-800`. That is fine over `<main>`, but
 it is **the sidebar's own colour** — so the two panels that open over the rail (the user/profile
 menu and the teamspace switcher) shared its surface exactly and read as part of it rather than as
@@ -3451,6 +3465,17 @@ A new department needs an entry in `DEPARTMENT_ICON` and `DEPARTMENT_TRIGGER_TIN
 Suits was sky (too near teal, and the same blue as Low priority); Admin was stone grey, which read as
 "no team" next to the neutral All/Unassigned tiles. Pink was ruled out for Admin (sits beside the
 rose overdue chip on People cards). Keep the four hues far apart on the wheel.
+**The switcher button is patterned while one team is chosen** (asked: "a pattern ... it's so bland"):
+`.ts-patterned` = a wash in the team colour, a fine dot texture fading in from the left (`::before`,
+masked) and the team icon large and faint behind the right edge (`#teamspace-watermark`, hidden on the
+collapsed rail). `--ts-c` comes from `DEPARTMENT_RGB` (a new team needs an entry). Static; the
+watermark slides in on a switch (`.ts-mark-anim`). All/Unassigned stay plain.
+
+**One dropdown open at a time, everywhere (2026-10-08).** `closeOtherHeaderPanels(except)` closes
+every floating panel: user/digest/bell, enhanced selects, `#select-menu`, the team switcher, chat
+New-chat/emoji/reaction/forward/message menus, the checklist people and copy pop-ups. Every opener
+calls it (with its own panel, after reading its trigger's position). Reported from a screenshot of the
+team menu and the profile menu open together. **A new floating panel must be added to that function.**
 `tests/team-tiles.test.js`.
 
 **Current departments (2026-10-08):** Suits, **Creative/Post** (key `production`, renamed from

@@ -217,6 +217,17 @@
   .panel-raised {
     box-shadow: 0 16px 40px -8px rgba(24, 24, 27, 0.30), 0 4px 12px -4px rgba(24, 24, 27, 0.18);
   }
+  /* Every other floating panel (.float-panel: bell, This Week, filters, dropdown lists, chat menus,
+     @mention lists). The comment above assumed they open over <main>'s background, but the cards
+     under them are bg-white / dark:bg-zinc-800 -- the panel's own colour -- so over a card the
+     panel vanished (reported from a screenshot of This Week in dark mode). Same two cues: a firmer
+     border and a deeper shadow, and in dark a surface a little LIGHTER than the cards. Only a little
+     (45,45,50, not zinc-700), so the rows' existing zinc-700 hovers still show on it.
+     !important: the Tailwind CDN injects its utilities after this sheet. */
+  .float-panel { border-color: rgb(212 212 216) !important;
+    box-shadow: 0 18px 44px -10px rgba(24, 24, 27, 0.32), 0 4px 12px -4px rgba(24, 24, 27, 0.16) !important; }
+  .dark .float-panel { background-color: rgb(45 45 50) !important; border-color: rgb(82 82 91) !important;
+    box-shadow: 0 18px 44px -8px rgba(0, 0, 0, 0.70), 0 4px 14px -4px rgba(0, 0, 0, 0.55) !important; }
   .dark .panel-raised {
     box-shadow: 0 16px 40px -8px rgba(0, 0, 0, 0.60), 0 4px 12px -4px rgba(0, 0, 0, 0.45);
   }
@@ -322,6 +333,21 @@
      one-off animation when you switch (.ts-anim on #teamspace-tile-wrap) and a small nudge on hover
      in the menu. Motion only on change, never looping: the switcher is on screen all day. */
   .ts-tile svg { transition: transform .2s ease; }
+  /* The switcher button while ONE team is chosen (asked: "a pattern ... it's so bland"): a soft wash
+     in the team colour, a fine dot texture fading in from the left, and the team's icon large and
+     faint behind the right edge. --ts-c is the team colour (set in renderTeamspaceSwitcher). Static:
+     the only motion is the watermark sliding in on a switch. */
+  #teamspace-trigger.ts-patterned { position: relative; overflow: hidden; isolation: isolate;
+    background-image: linear-gradient(100deg, rgb(var(--ts-c) / .20), rgb(var(--ts-c) / .05) 75%); }
+  #teamspace-trigger.ts-patterned::before { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+    background-image: radial-gradient(rgb(var(--ts-c) / .5) 1px, transparent 1.4px); background-size: 7px 7px;
+    -webkit-mask-image: linear-gradient(90deg, transparent 30%, #000 100%); mask-image: linear-gradient(90deg, transparent 30%, #000 100%); }
+  .ts-watermark { display: none; }
+  #teamspace-trigger.ts-patterned .ts-watermark { display: block; position: absolute; z-index: -1; right: 1.6rem; top: 50%;
+    width: 3.25rem; height: 3.25rem; margin-top: -1.625rem; color: rgb(var(--ts-c)); opacity: .22; transform: rotate(-14deg); pointer-events: none; }
+  #sidebar.collapsed #teamspace-trigger.ts-patterned .ts-watermark { display: none; }
+  #teamspace-trigger.ts-mark-anim .ts-watermark { animation: ts-mark-in .6s cubic-bezier(.34,1.3,.64,1); }
+  @keyframes ts-mark-in { from { transform: translateX(1.5rem) rotate(10deg); opacity: 0; } to { transform: rotate(-14deg); opacity: .22; } }
   [data-teamspace]:hover .ts-tile svg { transform: rotate(-10deg) scale(1.12); }
   .ts-clap { transform-box: view-box; transform-origin: 3px 11px; }
   .ts-anim .ts-tile { animation: ts-pop .45s cubic-bezier(.34,1.56,.64,1); }
@@ -337,7 +363,7 @@
   @keyframes ts-tick { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
   @keyframes ts-turn { from { transform: rotate(0); } to { transform: rotate(90deg); } }
   @media (prefers-reduced-motion: reduce) {
-    .ts-anim .ts-tile, .ts-anim .ts-tile svg, .ts-anim .ts-clap, .ts-anim .ts-tick { animation: none !important; }
+    .ts-anim .ts-tile, .ts-anim .ts-tile svg, .ts-anim .ts-clap, .ts-anim .ts-tick, .ts-mark-anim .ts-watermark { animation: none !important; }
     [data-teamspace]:hover .ts-tile svg { transform: none; }
   }
   @keyframes updates-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255,78,32,0.45); } 50% { box-shadow: 0 0 0 5px rgba(255,78,32,0); } }
@@ -533,6 +559,9 @@
      collapsed rail that is ~3rem, which cut every name to one letter and squeezed the selected one
      to nothing (reported from a screenshot). Collapsed, it opens beside the rail at a real width
      instead, the way the profile menu already does. Reset for the mobile drawer below. */
+  /* The profile menu opens BESIDE the profile, bottom-aligned with it, not above it over the sidebar
+     (asked, with the arrow pointing right). The mobile drawer has no room beside it: reset below. */
+  #user-menu-panel { left: calc(100% + 0.375rem); bottom: 0.5rem; margin-bottom: 0; max-height: calc(100vh - 1rem); overflow-y: auto; }
   #sidebar.collapsed #teamspace-menu { left: calc(100% + 0.25rem); right: auto; top: 0.5rem; margin-top: 0; width: 13rem; }
 
   /* Nav item coloring lives here instead of the pile of individually-toggled Tailwind utility
@@ -568,6 +597,8 @@
     #sidebar.collapsed .sidebar-label { opacity: 1; pointer-events: auto; position: static; }
     #sidebar.collapsed .view-toggle-btn { justify-content: flex-start; }
     #sidebar.collapsed #teamspace-menu { left: 0.5rem; right: 0.5rem; top: auto; margin-top: 0.25rem; width: auto; }
+    #user-menu-panel { left: 0.5rem; bottom: 100%; margin-bottom: 0.25rem; }
+    #user-menu-chevron { transform: rotate(-90deg); }
     #sidebar.collapsed #teamspace-trigger { justify-content: flex-start; padding-left: 0.625rem; padding-right: 0.625rem; }
     #sb-collapse-btn { display: none; }
   }
@@ -855,7 +886,7 @@
     <div class="px-2 pt-2 shrink-0 relative">
       <button type="button" id="teamspace-trigger" data-tooltip="Teamspace" aria-haspopup="listbox" aria-expanded="false"
               class="tooltip-right w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg border border-zinc-300 dark:border-zinc-600 bg-zinc-50 dark:bg-zinc-700/50 text-sm font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700">
-        <span id="teamspace-tile-wrap" class="flex shrink-0"></span>
+        <span id="teamspace-watermark" class="ts-watermark" aria-hidden="true"></span><span id="teamspace-tile-wrap" class="flex shrink-0"></span>
         <span id="teamspace-current" class="sidebar-label flex-1 text-left truncate">All teamspaces</span>
         <svg class="sidebar-label w-3.5 h-3.5 shrink-0 text-zinc-400 dark:text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
       </button>
@@ -972,10 +1003,10 @@
         <button id="user-menu-trigger" class="tooltip-right w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700/60 transition">
           <span id="user-chip-avatar" class="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"></span>
           <span id="user-chip-name" class="sidebar-label flex-1 min-w-0 text-left truncate"></span>
-          <svg class="sidebar-label w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+          <svg id="user-menu-chevron" class="sidebar-label w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg>
         </button>
       </div>
-      <div id="user-menu-panel" class="hidden absolute left-2 bottom-full mb-1 z-30 w-[min(14rem,calc(100vw-2rem))] bg-white dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 rounded-xl panel-raised py-1 text-sm panel-pop-in">
+      <div id="user-menu-panel" class="hidden absolute z-30 w-[min(14rem,calc(100vw-2rem))] bg-white dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 rounded-xl panel-raised py-1 text-sm panel-pop-in">
         <!-- Your own departments live here, in the profile menu, rather than on your People
              card. The card version was a permanently-open row of checkboxes on EVERY person --
              reported as clutter, and rightly: it is a set-once preference about yourself, which
@@ -1066,7 +1097,7 @@
             </button>
           </div>
           <!-- Same "positioned relative to the whole icons row" reasoning as #notification-panel below. -->
-          <div id="digest-panel" class="hidden absolute right-0 top-full mt-1 z-30 w-[min(22rem,calc(100vw-2rem))] max-h-[28rem] overflow-y-auto bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-pop panel-pop-in">
+          <div id="digest-panel" class="float-panel hidden absolute right-0 top-full mt-1 z-30 w-[min(22rem,calc(100vw-2rem))] max-h-[28rem] overflow-y-auto bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-pop panel-pop-in">
             <div class="flex items-center justify-between px-3.5 py-2.5 border-b border-zinc-100 dark:border-zinc-700">
               <span class="text-sm font-bold text-zinc-800 dark:text-zinc-100">This Week</span>
               <span class="text-xs text-zinc-400 dark:text-zinc-500">Your tasks only</span>
@@ -1082,7 +1113,7 @@
           <!-- Positioned relative to the whole icons row (not notification-bell-wrap) so it
                can't render off-screen when the row wraps and the bell isn't at the true
                right edge. -->
-          <div id="notification-panel" class="hidden absolute right-0 top-full mt-1 z-30 w-[min(20rem,calc(100vw-2rem))] max-h-96 overflow-y-auto bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-pop panel-pop-in">
+          <div id="notification-panel" class="float-panel hidden absolute right-0 top-full mt-1 z-30 w-[min(20rem,calc(100vw-2rem))] max-h-96 overflow-y-auto bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-pop panel-pop-in">
             <div class="flex items-center justify-between px-3.5 py-2.5 border-b border-zinc-100 dark:border-zinc-700">
               <span class="text-sm font-bold text-zinc-800 dark:text-zinc-100">Notifications</span>
               <button type="button" id="btn-mark-all-read" class="text-xs font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300">Mark all read</button>
@@ -1175,7 +1206,7 @@
              toolbar sits ABOVE the chart in the DOM, so at z-20 the header painted straight
              through an open dropdown on the Timeline tab (reported from a screenshot). 28 clears
              the chart while staying under the app header's own panels at z-30. -->
-        <div id="filter-people-menu" class="hidden absolute left-0 mt-1 z-[28] min-w-full w-[min(16rem,calc(100vw-2rem))] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 max-h-72 overflow-y-auto panel-pop-in">
+        <div id="filter-people-menu" class="float-panel hidden absolute left-0 mt-1 z-[28] min-w-full w-[min(16rem,calc(100vw-2rem))] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 max-h-72 overflow-y-auto panel-pop-in">
           <div class="flex items-center justify-between px-3 py-1.5 border-b border-zinc-100 dark:border-zinc-700">
             <button type="button" id="filter-people-select-all" class="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300">Select all</button>
             <button type="button" id="filter-people-clear" class="text-xs font-semibold text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">Clear</button>
@@ -1482,11 +1513,11 @@
               </div>
               <div class="relative">
                 <textarea id="project-chat-input" rows="2" maxlength="2000" placeholder="Message the team about this project… (@name to mention, *bold*, _italic_)" class="w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 pl-3 pr-10 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400"></textarea>
-                <div id="project-chat-mention-menu" class="hidden absolute left-0 bottom-full mb-1 z-20 w-full min-w-max bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 panel-pop-in"></div>
+                <div id="project-chat-mention-menu" class="float-panel hidden absolute left-0 bottom-full mb-1 z-20 w-full min-w-max bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 panel-pop-in"></div>
                 <button type="button" id="project-chat-emoji-toggle" title="Insert emoji" aria-expanded="false" aria-controls="project-chat-emoji-picker" class="absolute right-2 bottom-2 w-6 h-6 flex items-center justify-center rounded text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-zinc-100 dark:hover:bg-zinc-600">
                   <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg>
                 </button>
-                <div id="project-chat-emoji-picker" hidden class="absolute right-0 bottom-11 z-20 w-64 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop p-2">
+                <div id="project-chat-emoji-picker" hidden class="float-panel absolute right-0 bottom-11 z-20 w-64 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop p-2">
                   <div id="project-chat-emoji-tabs" class="flex flex-wrap gap-0.5 mb-1.5" role="tablist" aria-label="Emoji categories"></div>
                   <div id="project-chat-emoji-grid" class="grid grid-cols-8 gap-0.5 max-h-40 overflow-y-auto"></div>
                 </div>
@@ -1874,7 +1905,7 @@
         <div class="flex items-end gap-2">
           <div class="relative flex-1">
             <textarea id="task-comment-input" rows="2" placeholder="Add a comment… (type @ to mention someone)" class="w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400"></textarea>
-            <div id="mention-menu" class="hidden absolute left-0 top-full mt-1 z-20 w-full min-w-max bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 panel-pop-in"></div>
+            <div id="mention-menu" class="float-panel hidden absolute left-0 top-full mt-1 z-20 w-full min-w-max bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 panel-pop-in"></div>
           </div>
           <button type="button" id="task-comment-add-btn" class="shrink-0 text-sm font-semibold px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">Add</button>
         </div>
@@ -2010,7 +2041,7 @@
 <!-- Shared "add a reaction" emoji picker for the Chat tab -- one instance, repositioned via JS
      (position: fixed) to sit under whichever message's "+" was clicked. Declared here, not
      inside #project-chat-log, so #project-chat-log's own overflow-y-auto can never clip it. -->
-<div id="chat-reaction-picker" hidden class="fixed z-40 w-64 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop p-2 panel-pop-in">
+<div id="chat-reaction-picker" hidden class="float-panel fixed z-40 w-64 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop p-2 panel-pop-in">
   <div id="chat-reaction-tabs" class="flex flex-wrap gap-0.5 mb-1.5" role="tablist" aria-label="Emoji categories"></div>
   <div id="chat-reaction-grid" class="grid grid-cols-8 gap-0.5 max-h-40 overflow-y-auto"></div>
 </div>
@@ -2020,12 +2051,12 @@
      positioned child of it, since that pane has its own overflow-hidden (for the rounded corners
      + scrolling list) which clipped this menu's text the moment a project name was long enough
      to need the wider width below -- reported directly against a screenshot. -->
-<div id="chat-new-menu" hidden class="fixed z-40 w-max max-w-[24rem] max-h-64 overflow-y-auto bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 panel-pop-in"></div>
+<div id="chat-new-menu" hidden class="float-panel fixed z-40 w-max max-w-[24rem] max-h-64 overflow-y-auto bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 panel-pop-in"></div>
 
 <!-- "Forward to..." picker -- same fixed-position/off-DOM-parent reasoning as the two panels
      above, opened from the message context menu below (openChatForwardMenu). Lists existing
      chats to forward *into*, excluding whichever chat is currently open. -->
-<div id="chat-forward-menu" hidden class="fixed z-40 w-max max-w-[24rem] max-h-64 overflow-y-auto bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 panel-pop-in">
+<div id="chat-forward-menu" hidden class="float-panel fixed z-40 w-max max-w-[24rem] max-h-64 overflow-y-auto bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 panel-pop-in">
   <p class="px-3 pt-1 pb-1.5 text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Forward to…</p>
   <div id="chat-forward-options"></div>
 </div>
@@ -2034,7 +2065,7 @@
      show options"). Replaced the always-present hover row (reply/forward/delete icons) and the
      permanently-visible "add a reaction" dashed "+" -- both reported as visual clutter -- with a
      single context menu holding all of it, invisible until you actually ask for it. -->
-<div id="chat-message-menu" hidden class="fixed z-40 w-52 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop p-1.5 panel-pop-in">
+<div id="chat-message-menu" hidden class="float-panel fixed z-40 w-52 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop p-1.5 panel-pop-in">
   <div id="chat-message-menu-reactions" class="flex items-center gap-0.5 px-0.5 pb-1.5 mb-1 border-b border-zinc-100 dark:border-zinc-700"></div>
   <button type="button" id="chat-message-menu-reply" class="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-zinc-700 dark:text-zinc-200 rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-700/60">
     <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 14 4 9 9 4"></polyline><path d="M20 20v-7a4 4 0 0 0-4-4H4"></path></svg>
@@ -3266,6 +3297,7 @@
     copy: 'border-teal-300 bg-teal-50 dark:border-teal-500/40 dark:bg-teal-500/10',
     admin: 'border-lime-400 bg-lime-50 dark:border-lime-500/40 dark:bg-lime-500/10'
   };
+  var DEPARTMENT_RGB = { suits: '59 130 246', production: '139 92 246', copy: '20 184 166', admin: '132 204 22' };
   function teamspaceIconName(key) {
     return DEPARTMENT_ICON[key] || (key === 'unassigned' ? 'teamNone' : 'grid');
   }
@@ -3678,6 +3710,8 @@
     if (tileWrap && tileWrap.getAttribute('data-key') !== currentTeamspace) {
       tileWrap.setAttribute('data-key', currentTeamspace);
       tileWrap.innerHTML = teamspaceTileHtml(currentTeamspace);
+      var mark = document.getElementById('teamspace-watermark');
+      if (mark) mark.innerHTML = DEPARTMENT_RGB[currentTeamspace] ? svgIcon(teamspaceIconName(currentTeamspace), 'w-full h-full') : '';
     }
     if (trigger) {
       // A coloured button always means "you are seeing one team"; All and Unassigned stay neutral.
@@ -3686,6 +3720,9 @@
       (neutral + ' ' + Object.keys(DEPARTMENT_TRIGGER_TINT).map(function (k) { return DEPARTMENT_TRIGGER_TINT[k]; }).join(' ')).split(' ')
         .forEach(function (c) { trigger.classList.remove(c); });
       tint.split(' ').forEach(function (c) { trigger.classList.add(c); });
+      var rgb = DEPARTMENT_RGB[currentTeamspace];
+      trigger.classList.toggle('ts-patterned', !!rgb);
+      if (rgb) trigger.style.setProperty('--ts-c', rgb); else trigger.style.removeProperty('--ts-c');
     }
 
     var counts = teamspaceCounts();
@@ -3752,8 +3789,10 @@
       if (changed) {
         var tw = document.getElementById('teamspace-tile-wrap');
         if (tw) {
-          tw.classList.remove('ts-anim'); void tw.offsetWidth; tw.classList.add('ts-anim');
-          clearTimeout(tw.__tsTimer); tw.__tsTimer = setTimeout(function () { tw.classList.remove('ts-anim'); }, 1000);
+          var trg = document.getElementById('teamspace-trigger');
+          tw.classList.remove('ts-anim'); trg.classList.remove('ts-mark-anim'); void tw.offsetWidth;
+          tw.classList.add('ts-anim'); trg.classList.add('ts-mark-anim');
+          clearTimeout(tw.__tsTimer); tw.__tsTimer = setTimeout(function () { tw.classList.remove('ts-anim'); trg.classList.remove('ts-mark-anim'); }, 1000);
         }
       }
       return;
@@ -8704,7 +8743,7 @@
     // corner cells are z-25/z-26 and the toolbar precedes the chart in the DOM, so a z-20 menu
     // was painted through on the Timeline tab. Harmless inside the task modal, which is z-50 and
     // establishes its own stacking context, so its menus only ever compete with their siblings.
-    menu.className = 'absolute left-0 mt-1 z-[28] hidden min-w-full ' + (opts.menuWidthClass || 'max-w-[min(20rem,calc(100vw-2rem))]') + ' bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 max-h-60 overflow-y-auto panel-pop-in';
+    menu.className = 'float-panel absolute left-0 mt-1 z-[28] hidden min-w-full ' + (opts.menuWidthClass || 'max-w-[min(20rem,calc(100vw-2rem))]') + ' bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 max-h-60 overflow-y-auto panel-pop-in';
     wrapper.appendChild(menu);
 
     var entry = { wrapper: wrapper, menu: menu, trigger: trigger };
@@ -8867,7 +8906,7 @@
       selectMenuEl.setAttribute('role', 'listbox');
       selectMenuEl.hidden = true;
       // Same look as enhanceSelect's menu. z-[70]: above the task window (z-50) and the pop-ups on it (z-60).
-      selectMenuEl.className = 'fixed z-[70] max-w-[min(20rem,calc(100vw-1rem))] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 max-h-60 overflow-y-auto panel-pop-in';
+      selectMenuEl.className = 'float-panel fixed z-[70] max-w-[min(20rem,calc(100vw-1rem))] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 max-h-60 overflow-y-auto panel-pop-in';
       selectMenuEl.addEventListener('mousedown', function (e) { e.preventDefault(); });   // keep focus on the select
       selectMenuEl.addEventListener('click', function (e) {
         var row = e.target.closest('[data-i]');
@@ -15872,11 +15911,15 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-08m', date: '2026-10-08', items: [
+      { type: 'improved', title: 'Pop-ups stand out from the page', text: 'This Week, the bell, filter lists, chat menus and other pop-ups now have a clearer edge and shadow, and in dark mode a slightly lighter background, so they no longer blend into the board behind them.' },
+      { type: 'improved', title: 'Your profile menu opens beside you', text: 'Click your name at the bottom of the sidebar and the menu now opens to the right of it instead of covering the sidebar.' }
+    ] },
     { id: '2026-10-08l', date: '2026-10-08', items: [
       { type: 'fixed', title: 'Only one menu open at a time', text: 'Opening the team switcher, your profile menu, the bell or any other pop-up now closes whichever one was already open, so two never stack on top of each other.' }
     ] },
     { id: '2026-10-08k', date: '2026-10-08', items: [
-      { type: 'improved', title: 'Each team has its own colour and icon', text: 'Suits is a blue briefcase, Creative/Post a violet clapperboard, Copy/Production a teal pen and Admin a lime-green clipboard. You see them in the team switcher (which takes your team\'s colour while you\'re viewing one team), on People and Monday Meeting, and in the profile menu. Switching teams plays a short animation.' },
+      { type: 'improved', title: 'Each team has its own colour and icon', text: 'Suits is a blue briefcase, Creative/Post a violet clapperboard, Copy/Production a teal pen and Admin a lime-green clipboard. You see them in the team switcher (which takes your team\'s colour and pattern while you\'re viewing one team), on People and Monday Meeting, and in the profile menu. Switching teams plays a short animation.' },
       { type: 'improved', title: 'New notifications are easier to notice', text: 'When something new arrives, the bell now rings and its red count pops. The This Week and Chat counts pop too whenever their number goes up.' }
     ] },
     { id: '2026-10-08j', date: '2026-10-08', items: [
@@ -19591,7 +19634,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-08T08:10:47Z";
+  var CURRENT_BUILD_VERSION = "2026-10-08T08:19:56Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
