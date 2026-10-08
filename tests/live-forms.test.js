@@ -1,4 +1,4 @@
-// monday-meeting -- browser test against index.html with Firebase stubbed (see tests/README.md).
+// live-forms -- typing boxes survive teammates changes (People leave, Projects deadline, WIP editors). Browser test against index.html with Firebase stubbed (see tests/README.md).
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
@@ -129,6 +129,45 @@ async function skipTours(page) {
   await page.click('#people-grid .leave-cancel');
   await page.waitForTimeout(200);
   check('cancel closes the form', !(await page.$('#people-grid .leave-editor')));
+
+  // ---- Projects: a deadline date being typed survives a teammate's change ----
+  await page.click('[data-view-btn="projects"]'); await page.waitForTimeout(1300); await skipTours(page);
+  const addDl = await page.$('#projects-grid .project-deadline-add');
+  check('Projects has a deadline control', !!addDl);
+  if (addDl) {
+    await addDl.click(); await page.waitForTimeout(200);
+    await page.keyboard.press('Escape').catch(() => {});
+    await page.focus('#projects-grid .project-deadline-input');
+    await page.keyboard.type('11');   // half a date: no value yet
+    await page.evaluate(() => document.querySelector('#projects-grid .project-deadline-input').setAttribute('data-held', '1'));
+    await remote(`d.tasks.t2.priority = 'Low';`);
+    check('Projects: deadline box not rebuilt while typing', !!(await page.$('#projects-grid .project-deadline-input[data-held]')));
+    check('Projects: focus stays in the deadline box', await page.evaluate(() => document.activeElement.classList.contains('project-deadline-input')));
+    await page.click('#current-view-title'); await page.waitForTimeout(300);
+    check('Projects: catches up after leaving the box', !(await page.$('#projects-grid .project-deadline-input[data-held]')));
+  }
+
+  // ---- WIP: a status being written survives a teammate's change, half-typed date included ----
+  await page.click('[data-view-btn="wip"]'); await page.waitForTimeout(1300); await skipTours(page);
+  const foldAll = await page.$('[data-wip-fold-all]');
+  if (foldAll && /Expand/.test(await foldAll.textContent())) { await foldAll.click(); await page.waitForTimeout(300); }
+  const addStatus = await page.$('#wip-projects [data-wip-act="add-status"]');
+  check('WIP has an add-status control', !!addStatus);
+  if (addStatus) {
+    await addStatus.click(); await page.waitForTimeout(250);
+    await page.fill('#wip-projects [data-wip-field="text"]', 'Waiting on client logo');
+    await page.focus('#wip-projects [data-wip-field="date"]');
+    await page.evaluate(() => document.querySelector('#wip-projects [data-wip-field="date"]').setAttribute('data-held', '1'));
+    await remote(`d.people.u2.chatLastRead = [{ project: 'Z', at: new Date().toISOString() }]; d.tasks.t3.priority = 'High';`);
+    check('WIP: editor not rebuilt while typing', !!(await page.$('#wip-projects [data-wip-field="date"][data-held]')));
+    await page.click('#current-view-title'); await page.waitForTimeout(300);
+    check('WIP: after leaving, the typed status is still there', (await page.inputValue('#wip-projects [data-wip-field="text"]').catch(() => '')) === 'Waiting on client logo');
+    await page.click('#wip-projects [data-wip-field="text"]');
+    await page.keyboard.press('Enter'); await page.waitForTimeout(500);
+    const saved = await page.evaluate(() => Object.values(window.__fb.data.tasks).some(t => (t.statusUpdates || []).some(u => u.text === 'Waiting on client logo')));
+    check('WIP: Enter still saves and closes the editor at once', saved && !(await page.$('#wip-projects [data-wip-field="text"]')));
+  }
+
   check('no page errors', errors.length === 0, errors.join(' | '));
 
   console.log(results.join('\n'));

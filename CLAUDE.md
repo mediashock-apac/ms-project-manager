@@ -3630,9 +3630,15 @@ decides what to move.
   the form empty, reported as "I have to retype each time". `renderPeople` now holds the render
   while focus is inside `.leave-editor` (`peopleRenderPending`, run on `focusout`), because a
   half-typed date has no value to restore; `leaveDraft` keeps the start/end/note across any
-  render that does run, and is cleared on open, cancel and save. Covered by
-  `tests/leave-form.test.js`. Any other inline form inside a page that re-renders on snapshots
-  needs the same treatment (WIP's `wipDraft` is the earlier example).
+  render that does run, and is cleared on open, cancel and save. **Then made app-wide** ("make
+  sure this does not happen anywhere else"): a shared `holdIfTyping(container, renderFn)` (LIVE
+  FORMS, next to `escapeHtml`) now also guards the Projects deadline box (`renderProjects`) and
+  WIP's inline editors (`renderWipView`, only while `wipEdit` is set so Save/Cancel redraw at
+  once). Audited and already safe: Suggestions (keeps reply drafts, focus and caret), the task
+  window (merges; lists wait while a row is edited), Monday and brief editors (redraw only on your
+  own clicks), the phone layout (its boxes sit outside the redrawn parts), people pickers, Ctrl K.
+  All covered by `tests/live-forms.test.js`. **Any new typing box inside something that redraws
+  on live data must call `holdIfTyping` and be added to that test** (also in `/design-check`).
 - `logActivity` fires **inside `saveLeave`'s success path**, not at the call site, so a rules
   denial or dropped connection can't log something that never happened. Its own
   `leave_changed` activity type, amber, matching the Away chip and the Gantt note — one colour

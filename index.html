@@ -6312,6 +6312,39 @@
     return s.replace(/^(\s*)(\p{Ll})/u, function (m, ws, ch) { return ws + ch.toLocaleUpperCase(); });
   }
 
+  /* ---------------------------------------------------------
+     LIVE FORMS -- a page that redraws on every teammate's change must never rebuild a box someone
+     is typing in. Reported on People ("filling up leave keeps getting reset and I have to retype
+     each time"), then asked for app-wide ("make sure this does not happen anywhere else"). A
+     renderer whose container holds a typing box calls holdIfTyping(container, itself) first: while
+     focus is in a text box, date box or select inside it, the redraw is held, and it runs once
+     focus leaves (a half-typed date has no value yet, so restoring values alone can't save it).
+     Pages that also keep values across a redraw: People (leaveDraft), WIP (wipDraft), Suggestions
+     (reply drafts). Pages checked and safe without this (2026-10-08): task window (merges, and
+     lists wait while a row is edited), Monday editor and brief editor (redraw only on your own
+     clicks), phone layout (its boxes sit outside the parts that redraw), people pickers, Ctrl K.
+  --------------------------------------------------------- */
+  var heldRenders = [];
+  function isTypingIn(container) {
+    var ae = document.activeElement;
+    if (!container || !ae || !container.contains(ae)) return false;
+    if (ae.tagName === 'TEXTAREA' || ae.tagName === 'SELECT') return true;
+    return ae.tagName === 'INPUT' && !/^(checkbox|radio|button|submit|file|range|color)$/.test(ae.type);
+  }
+  function holdIfTyping(container, rerender) {
+    if (!isTypingIn(container)) return false;
+    if (!heldRenders.some(function (h) { return h.rerender === rerender; })) heldRenders.push({ container: container, rerender: rerender });
+    return true;
+  }
+  document.addEventListener('focusout', function () {
+    setTimeout(function () {
+      if (!heldRenders.length) return;
+      var due = heldRenders.filter(function (h) { return !isTypingIn(h.container); });
+      heldRenders = heldRenders.filter(function (h) { return isTypingIn(h.container); });
+      due.forEach(function (h) { h.rerender(); });
+    }, 0);
+  }, true);
+
   function escapeHtml(str) {
     return String(str == null ? '' : str)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -13630,6 +13663,8 @@
 
   function renderProjects() {
     var container = document.getElementById('projects-grid');
+    // Don't rebuild a deadline box someone is typing a date into (see LIVE FORMS).
+    if (holdIfTyping(container, renderProjects)) return;
     var allTasks = tasks.concat(archivedTasks);
     var projectNames = {};
     allTasks.forEach(function (t) { if (t.project) projectNames[t.project] = true; });
@@ -15583,6 +15618,10 @@
   });
 
   function renderWipView() {
+    // wipDraft already keeps typed text across a redraw; holding the redraw while an editor is open
+    // and focused also keeps a half-typed date and the caret (see LIVE FORMS). Only while editing,
+    // so Save/Cancel (which clear wipEdit first) still redraw at once.
+    if (wipEdit && holdIfTyping(document.getElementById('view-wip'), renderWipView)) return;
     document.querySelectorAll('[data-wip-mode]').forEach(function (btn) {
       btn.classList.toggle('active', btn.getAttribute('data-wip-mode') === wipMode);
     });
@@ -15689,6 +15728,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-08g', date: '2026-10-08', items: [
+      { type: 'fixed', title: 'Typing is never wiped by a teammate\'s change', text: 'The same fix as Add leave now covers every place you type on a page that updates live, including a project deadline on Projects and status updates, notes and links on WIP Meeting. What you type stays until you save or cancel.' }
+    ] },
     { id: '2026-10-08f', date: '2026-10-08', items: [
       { type: 'fixed', title: 'Adding leave no longer clears itself', text: 'On the People page, the Add leave form used to empty itself whenever a teammate changed something. What you type now stays until you click Add or Cancel.' }
     ] },
@@ -19385,7 +19427,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-08T02:59:07Z";
+  var CURRENT_BUILD_VERSION = "2026-10-08T03:10:29Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
