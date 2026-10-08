@@ -2891,6 +2891,7 @@
     e.stopPropagation();
     var picker = document.getElementById('project-chat-emoji-picker');
     var willOpen = picker.hidden;
+    if (willOpen) closeOtherHeaderPanels(picker);
     picker.hidden = !willOpen;
     this.setAttribute('aria-expanded', willOpen ? 'true' : 'false');
     if (willOpen) chatComposeEmojiPicker.render();
@@ -2935,6 +2936,7 @@
     if (top + 200 > window.innerHeight) top = Math.max(8, r.top - 206);
     panel.style.left = left + 'px';
     panel.style.top = top + 'px';
+    closeOtherHeaderPanels(panel);   // after reading the trigger's position (it may sit in a menu this closes)
   }
 
   function closeChatReactionPicker() {
@@ -4177,6 +4179,7 @@
     var menuEl = document.getElementById('chat-new-menu');
     var willOpen = menuEl.hidden;
     if (!willOpen) { menuEl.hidden = true; return; }
+    closeOtherHeaderPanels(menuEl);
     renderNewChatMenu();
     menuEl.hidden = false;
     var r = this.getBoundingClientRect();
@@ -4987,6 +4990,7 @@
     if (top + 200 > window.innerHeight) top = Math.max(8, r.top - 206);
     panel.style.left = left + 'px';
     panel.style.top = top + 'px';
+    closeOtherHeaderPanels(panel);
   }
 
   function closeChatForwardMenu() {
@@ -5079,6 +5083,7 @@
     var mh = menu.offsetHeight || 220;
     menu.style.left = Math.max(8, Math.min(x, window.innerWidth - mw - 8)) + 'px';
     menu.style.top = Math.max(8, Math.min(y, window.innerHeight - mh - 8)) + 'px';
+    closeOtherHeaderPanels(menu);
   }
 
   function closeChatMessageMenu() {
@@ -7902,6 +7907,7 @@
     pop.style.top = top + 'px';
     pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + 'px';
     btn.setAttribute('aria-expanded', 'true');
+    closeOtherHeaderPanels(pop);
     pop.querySelector('input[type="search"]').focus();
   }
   function closeChecklistPeoplePop(focusButton) {
@@ -8004,6 +8010,7 @@
     pop.style.top = top + 'px';
     pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + 'px';
     btn.setAttribute('aria-expanded', 'true');
+    closeOtherHeaderPanels(pop);
     pop.querySelector('input[type="search"]').focus();
     // Finished, archived jobs are often the best templates; they load on demand.
     withArchivedTasksReady(function () { if (!pop.hidden) renderChecklistCopyPop(); });
@@ -8625,12 +8632,26 @@
   // assigned until further down the file, but referencing them here is safe: `var` hoists them,
   // and this function body only ever actually runs from a later click, once module init has set
   // all three.
+  // One dropdown open at a time, ANYWHERE: every floating menu/panel is listed here, and every opener
+  // calls this (passing its own panel once positioned, or null before opening). The team switcher and
+  // the newer pop-ups were missing, so the teamspace menu and the profile menu could be open together
+  // (reported from a screenshot). A new floating panel must be added here.
   function closeOtherHeaderPanels(exceptPanel) {
     [userMenuPanel, digestPanel, notificationPanel].forEach(function (p) {
       if (p && p !== exceptPanel) p.classList.add('hidden');
     });
     closeOtherEnhancedSelectMenus(null);
     if (typeof closeSelectMenu === 'function') closeSelectMenu();
+    var byId = function (id) { var el = document.getElementById(id); return el && el !== exceptPanel ? el : null; };
+    if (byId('teamspace-menu')) closeTeamspaceMenu();
+    var chatNew = byId('chat-new-menu'); if (chatNew) chatNew.hidden = true;
+    var emoji = byId('project-chat-emoji-picker');
+    if (emoji && !emoji.hidden) { emoji.hidden = true; var et = document.getElementById('project-chat-emoji-toggle'); if (et) et.setAttribute('aria-expanded', 'false'); }
+    if (byId('chat-reaction-picker')) closeChatReactionPicker();
+    if (byId('chat-forward-menu')) closeChatForwardMenu();
+    if (byId('chat-message-menu')) closeChatMessageMenu();
+    if (byId('checklist-people-pop')) closeChecklistPeoplePop();
+    if (byId('checklist-copy-pop')) closeChecklistCopyPop();
   }
 
   document.addEventListener('click', function (e) {
@@ -15851,6 +15872,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-08l', date: '2026-10-08', items: [
+      { type: 'fixed', title: 'Only one menu open at a time', text: 'Opening the team switcher, your profile menu, the bell or any other pop-up now closes whichever one was already open, so two never stack on top of each other.' }
+    ] },
     { id: '2026-10-08k', date: '2026-10-08', items: [
       { type: 'improved', title: 'Each team has its own colour and icon', text: 'Suits is a blue briefcase, Creative/Post a violet clapperboard, Copy/Production a teal pen and Admin a lime-green clipboard. You see them in the team switcher (which takes your team\'s colour while you\'re viewing one team), on People and Monday Meeting, and in the profile menu. Switching teams plays a short animation.' },
       { type: 'improved', title: 'New notifications are easier to notice', text: 'When something new arrives, the bell now rings and its red count pops. The This Week and Chat counts pop too whenever their number goes up.' }
@@ -19567,7 +19591,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-08T07:55:34Z";
+  var CURRENT_BUILD_VERSION = "2026-10-08T08:10:47Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

@@ -124,6 +124,15 @@ async function skipTours(page) {
       await page.click('#teamspace-trigger'); await page.click('#teamspace-menu [data-teamspace="all"]'); await page.waitForTimeout(200);
       await page.click('[data-view-btn="people"]'); await page.waitForTimeout(900); await skipTours(page);
       check('People chips carry the team icon', (await page.$$('#people-grid span.rounded svg')).length > 0 && /Creative\/Post/.test(await page.textContent('#people-grid')));
+      // one dropdown at a time (reported: team menu and profile menu open together)
+      await page.click('#teamspace-trigger'); await page.waitForTimeout(150);
+      await page.click('#user-chip'); await page.waitForTimeout(150);
+      check('opening the profile menu closes the team menu', await page.isVisible('#user-menu-panel') && !(await page.isVisible('#teamspace-menu')));
+      await page.click('#teamspace-trigger'); await page.waitForTimeout(150);
+      check('opening the team menu closes the profile menu', await page.isVisible('#teamspace-menu') && !(await page.isVisible('#user-menu-panel')));
+      await page.click('#btn-notifications'); await page.waitForTimeout(150);
+      check('opening the bell closes the team menu', !(await page.isVisible('#teamspace-menu')));
+      await page.keyboard.press('Escape'); await page.mouse.click(700, 500); await page.waitForTimeout(150);
       await page.click('[data-view-btn="weekly"]'); await page.waitForTimeout(1300); await skipTours(page);
       check('Monday group headings have a tile', (await page.$$('#view-weekly h3 .ts-tile')).length >= 3);
     }
