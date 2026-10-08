@@ -115,9 +115,10 @@ async function skipTours(page) {
       check('All is neutral again', await page.$eval('#teamspace-trigger', e => !e.className.includes('blue-50') && e.classList.contains('bg-zinc-50')));
       await page.click('#teamspace-trigger'); await page.click('#teamspace-menu [data-teamspace="production"]'); await page.waitForTimeout(300);
     } else { await page.waitForTimeout(1100); }
-    for (const t of ['suits','production','copy','admin']) {
+    for (const t of ['suits','production','copy','admin','all']) {
       await page.click('#teamspace-trigger'); await page.click('#teamspace-menu [data-teamspace="' + t + '"]'); await page.waitForTimeout(1100);
       await page.screenshot({ path: path.join(OUT, 'team-btn-' + t + (dark ? '-dark' : '') + '.png'), clip: { x: 0, y: 64, width: 260, height: 56 } });
+      if (!dark && t === 'all') check('All teamspaces: patterned with the four-colour mark', await page.$eval('#teamspace-trigger', e => e.classList.contains('ts-patterned-all')) && (await page.$$('#teamspace-watermark svg rect')).length === 4);
       if (!dark && t === 'production') check('one team chosen: button patterned', await page.$eval('#teamspace-trigger', e => e.classList.contains('ts-patterned')) && !!(await page.$('#teamspace-watermark svg')));
     }
     await page.click('#teamspace-trigger'); await page.click('#teamspace-menu [data-teamspace="suits"]'); await page.waitForTimeout(1100);
@@ -158,6 +159,7 @@ async function skipTours(page) {
     await page.screenshot({ path: path.join(OUT, 'digest-panel' + (dark ? '-dark' : '') + '.png'), clip: pb });
     if (dark) check('dark: floating panel lighter than the cards under it', await page.$eval('#digest-panel', e => getComputedStyle(e).backgroundColor) === 'rgb(45, 45, 50)', await page.$eval('#digest-panel', e => getComputedStyle(e).backgroundColor));
     await page.keyboard.press('Escape'); await page.mouse.click(700, 600);
+    { const b = await page.$eval('#updates-nav-btn', e => { const r = e.getBoundingClientRect(); return { x: 0, y: r.y - 10, width: 250, height: r.height + 20 }; }); await page.screenshot({ path: path.join(OUT, 'updates-bar' + (dark ? '-dark' : '') + '.png'), clip: b }); }
     await page.click('#user-menu-trigger'); await page.waitForTimeout(300);
     const um = await page.evaluate(() => { const p = document.getElementById('user-menu-panel').getBoundingClientRect(), sb = document.getElementById('sidebar').getBoundingClientRect(), t = document.getElementById('user-menu-trigger').getBoundingClientRect(); return { beside: p.left >= sb.right, bottomAligned: Math.abs(p.bottom - t.bottom) < 12, onScreen: p.top >= 0, x: p.left, y: p.top, w: p.width, h: p.height }; });
     if (!dark) check('profile menu opens beside the profile, not over the sidebar', um.beside && um.bottomAligned && um.onScreen, JSON.stringify(um));

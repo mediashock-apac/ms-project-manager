@@ -3474,7 +3474,10 @@ rose overdue chip on People cards). Keep the four hues far apart on the wheel.
 `.ts-patterned` = a wash in the team colour, a fine dot texture fading in from the left (`::before`,
 masked) and the team icon large and faint behind the right edge (`#teamspace-watermark`, hidden on the
 collapsed rail). `--ts-c` comes from `DEPARTMENT_RGB` (a new team needs an entry). Static; the
-watermark slides in on a switch (`.ts-mark-anim`). All/Unassigned stay plain.
+watermark slides in on a switch (`.ts-mark-anim`). **All teamspaces gets it too** (asked the same
+day): its mark is the grid with one square in each team's colour (`allTeamsGridSvg`), on a
+four-colour wash (`.ts-patterned-all`) with neutral dots. Unassigned stays plain (it means "no team").
+The unread New Updates bar carries the same dot texture (`::after`, unread only).
 
 **One dropdown open at a time, everywhere (2026-10-08).** `closeOtherHeaderPanels(except)` closes
 every floating panel: user/digest/bell, enhanced selects, `#select-menu`, the team switcher, chat

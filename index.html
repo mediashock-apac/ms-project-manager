@@ -329,6 +329,13 @@
     #updates-nav-btn.updates-unread:not(.active) { animation: none; background-position: 150% 0, 0% 0; }
   }
   #updates-nav-btn.updates-unread:not(.active):hover { filter: brightness(1.06); }
+  /* Same dot texture as the team switcher (asked: "should New Updates have that same design
+     treatment?"), only while there's something unread; a read item stays a plain nav row. A
+     pseudo-element, not another background layer, so the shine/flow animation positions above
+     don't apply to it. */
+  #updates-nav-btn.updates-unread:not(.active)::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+    background-image: radial-gradient(rgb(255 255 255 / .28) 1px, transparent 1.4px); background-size: 7px 7px;
+    -webkit-mask-image: linear-gradient(90deg, transparent 35%, #000 100%); mask-image: linear-gradient(90deg, transparent 35%, #000 100%); }
   /* Team tiles (teamspaceTileHtml): each department's colour plus its own icon. Still at rest; a
      one-off animation when you switch (.ts-anim on #teamspace-tile-wrap) and a small nudge on hover
      in the menu. Motion only on change, never looping: the switcher is on screen all day. */
@@ -342,6 +349,9 @@
   #teamspace-trigger.ts-patterned::before { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none;
     background-image: radial-gradient(rgb(var(--ts-c) / .5) 1px, transparent 1.4px); background-size: 7px 7px;
     -webkit-mask-image: linear-gradient(90deg, transparent 30%, #000 100%); mask-image: linear-gradient(90deg, transparent 30%, #000 100%); }
+  /* All teamspaces: every team's colour at once (asked: "All teamspaces should also have the same
+     design treatment"). Neutral dots (--ts-c zinc), a four-colour wash, the four-colour grid mark. */
+  #teamspace-trigger.ts-patterned-all { background-image: linear-gradient(100deg, rgb(59 130 246 / .16), rgb(139 92 246 / .13) 35%, rgb(20 184 166 / .11) 65%, rgb(132 204 22 / .09)); }
   .ts-watermark { display: none; }
   #teamspace-trigger.ts-patterned .ts-watermark { display: block; position: absolute; z-index: -1; right: 1.6rem; top: 50%;
     width: 3.25rem; height: 3.25rem; margin-top: -1.625rem; color: rgb(var(--ts-c)); opacity: .22; transform: rotate(-14deg); pointer-events: none; }
@@ -3298,13 +3308,17 @@
     admin: 'border-lime-400 bg-lime-50 dark:border-lime-500/40 dark:bg-lime-500/10'
   };
   var DEPARTMENT_RGB = { suits: '59 130 246', production: '139 92 246', copy: '20 184 166', admin: '132 204 22' };
+  var ALL_TEAMS_GRID = '<svg class="CLS" viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<rect x="3" y="3" width="7" height="7" rx="1.5" stroke="rgb(59 130 246)"></rect><rect x="14" y="3" width="7" height="7" rx="1.5" stroke="rgb(139 92 246)"></rect>' +
+    '<rect x="3" y="14" width="7" height="7" rx="1.5" stroke="rgb(20 184 166)"></rect><rect x="14" y="14" width="7" height="7" rx="1.5" stroke="rgb(132 204 22)"></rect></svg>';
+  function allTeamsGridSvg(cls) { return ALL_TEAMS_GRID.replace('CLS', cls); }
   function teamspaceIconName(key) {
     return DEPARTMENT_ICON[key] || (key === 'unassigned' ? 'teamNone' : 'grid');
   }
   function teamspaceTileHtml(key) {
-    var colour = DEPARTMENT_BADGE[key] || 'bg-zinc-200/70 text-zinc-500 dark:bg-zinc-600/60 dark:text-zinc-300';
+    var colour = DEPARTMENT_BADGE[key] || (key === 'all' ? 'bg-white dark:bg-zinc-700 ring-1 ring-zinc-200 dark:ring-zinc-600' : 'bg-zinc-200/70 text-zinc-500 dark:bg-zinc-600/60 dark:text-zinc-300');
     return '<span class="ts-tile ts-' + escapeHtml(key) + ' inline-flex items-center justify-center shrink-0 w-6 h-6 rounded-md ' + colour + '" aria-hidden="true">' +
-      svgIcon(teamspaceIconName(key), 'w-3.5 h-3.5') + '</span>';
+      (key === 'all' ? allTeamsGridSvg('w-3.5 h-3.5') : svgIcon(teamspaceIconName(key), 'w-3.5 h-3.5')) + '</span>';
   }
   function departmentChipHtml(key) {
     return '<span class="inline-flex items-center gap-1 text-xs font-bold px-1.5 py-0.5 rounded ' + DEPARTMENT_BADGE[key] + '">' +
@@ -3711,7 +3725,7 @@
       tileWrap.setAttribute('data-key', currentTeamspace);
       tileWrap.innerHTML = teamspaceTileHtml(currentTeamspace);
       var mark = document.getElementById('teamspace-watermark');
-      if (mark) mark.innerHTML = DEPARTMENT_RGB[currentTeamspace] ? svgIcon(teamspaceIconName(currentTeamspace), 'w-full h-full') : '';
+      if (mark) mark.innerHTML = DEPARTMENT_RGB[currentTeamspace] ? svgIcon(teamspaceIconName(currentTeamspace), 'w-full h-full') : currentTeamspace === 'all' ? allTeamsGridSvg('w-full h-full') : '';
     }
     if (trigger) {
       // A coloured button always means "you are seeing one team"; All and Unassigned stay neutral.
@@ -3720,8 +3734,9 @@
       (neutral + ' ' + Object.keys(DEPARTMENT_TRIGGER_TINT).map(function (k) { return DEPARTMENT_TRIGGER_TINT[k]; }).join(' ')).split(' ')
         .forEach(function (c) { trigger.classList.remove(c); });
       tint.split(' ').forEach(function (c) { trigger.classList.add(c); });
-      var rgb = DEPARTMENT_RGB[currentTeamspace];
+      var rgb = DEPARTMENT_RGB[currentTeamspace] || (currentTeamspace === 'all' ? '113 113 122' : null);
       trigger.classList.toggle('ts-patterned', !!rgb);
+      trigger.classList.toggle('ts-patterned-all', currentTeamspace === 'all');
       if (rgb) trigger.style.setProperty('--ts-c', rgb); else trigger.style.removeProperty('--ts-c');
     }
 
@@ -15911,6 +15926,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-08o', date: '2026-10-08', items: [
+      { type: 'improved', title: 'All teamspaces gets its own look', text: 'When you are viewing every team, the switcher shows a grid with one square in each team\'s colour on a matching four-colour background. The New Updates bar picks up the same dot pattern while there is something new.' }
+    ] },
     { id: '2026-10-08n', date: '2026-10-08', items: [
       { type: 'improved', title: 'New Updates folds by day', text: 'Only the newest day is open when you come here. Click another day to open it, and the others fold away. A folded day shows how many of its updates are new to you.' }
     ] },
@@ -19662,7 +19680,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-08T08:26:57Z";
+  var CURRENT_BUILD_VERSION = "2026-10-08T08:35:56Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
