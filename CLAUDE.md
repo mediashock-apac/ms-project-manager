@@ -3625,8 +3625,14 @@ decides what to move.
 - **Known limits**: (1) someone who has never signed in has no roster doc, so there's nowhere to
   attach their leave — the `+ Time off` button is disabled with a title saying so; (2) the People
   tab only lists people with tasks matching the current filters, so you can't book leave for
-  someone with no active work; (3) the roster listener now calls `renderAll()`, so another
-  person signing in mid-edit will clear the date inputs you were typing into.
+  someone with no active work. (3) **Fixed (2026-10-08): the leave form no longer resets.** Any
+  teammate's change (a chat read, a Monday update, a task edit) re-rendered People and rebuilt
+  the form empty, reported as "I have to retype each time". `renderPeople` now holds the render
+  while focus is inside `.leave-editor` (`peopleRenderPending`, run on `focusout`), because a
+  half-typed date has no value to restore; `leaveDraft` keeps the start/end/note across any
+  render that does run, and is cleared on open, cancel and save. Covered by
+  `tests/leave-form.test.js`. Any other inline form inside a page that re-renders on snapshots
+  needs the same treatment (WIP's `wipDraft` is the earlier example).
 - `logActivity` fires **inside `saveLeave`'s success path**, not at the call site, so a rules
   denial or dropped connection can't log something that never happened. Its own
   `leave_changed` activity type, amber, matching the Away chip and the Gantt note — one colour

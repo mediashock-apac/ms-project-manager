@@ -13115,6 +13115,14 @@
   // date boxes on every person card reads as a form you are required to fill in, for a value most
   // people do not have set at any given moment.
   var leaveEditingFor = null;
+  // What's typed into the open leave form. People re-renders on any teammate's change (a chat
+  // read, a Monday update, a task edit), and each render rebuilt the form empty -- reported:
+  // "filling up leave keeps getting reset and I have to retype each time". So: a render is held
+  // while focus is inside the form (a half-typed date has no value yet, so restoring values
+  // alone wouldn't save it), caught up on leaving it, and the values survive any render that does
+  // run.
+  var leaveDraft = {};
+  var peopleRenderPending = false;
 
   // Rendered above the Time off section on a People card. Self-or-admin, exactly like leave --
   // it writes to the same people/{uid} doc, which firestore.rules already scopes that way, so
@@ -13159,11 +13167,11 @@
     var editorForm = '';
     if (editable && leaveEditingFor === name) {
       editorForm =
-        '<div class="flex flex-wrap items-center gap-1.5 mt-1.5">' +
-          '<input type="date" class="leave-start text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-500/40" data-leave-name="' + escapeHtml(name) + '">' +
+        '<div class="leave-editor flex flex-wrap items-center gap-1.5 mt-1.5">' +
+          '<input type="date" class="leave-start text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-500/40" data-leave-name="' + escapeHtml(name) + '" value="' + escapeHtml(leaveDraft.start || '') + '">' +
           '<span class="text-xs text-zinc-400 dark:text-zinc-500">to</span>' +
-          '<input type="date" class="leave-end text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-500/40" data-leave-name="' + escapeHtml(name) + '">' +
-          '<input type="text" maxlength="40" placeholder="Reason (optional)" class="leave-note flex-1 min-w-[7rem] text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-500/40" data-leave-name="' + escapeHtml(name) + '">' +
+          '<input type="date" class="leave-end text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-500/40" data-leave-name="' + escapeHtml(name) + '" value="' + escapeHtml(leaveDraft.end || '') + '">' +
+          '<input type="text" maxlength="40" placeholder="Reason (optional)" class="leave-note flex-1 min-w-[7rem] text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-500/40" data-leave-name="' + escapeHtml(name) + '" value="' + escapeHtml(leaveDraft.note || '') + '">' +
           '<button type="button" class="leave-save text-xs font-semibold px-2 py-1 rounded-lg bg-brand-600 text-white hover:bg-brand-700" data-leave-name="' + escapeHtml(name) + '">Add</button>' +
           '<button type="button" class="leave-cancel text-xs font-medium px-2 py-1 rounded-lg text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">Cancel</button>' +
         '</div>';
@@ -13195,6 +13203,7 @@
     if (!person) { showToast('No roster entry for ' + name + ' yet -- they need to sign in once.', 'error'); return; }
     updateDoc(doc(peopleCol, person.id), { leave: periods }).then(function () {
       leaveEditingFor = null;
+      leaveDraft = {};
       // Logged here, not at the call site: a rules denial or a dropped connection would otherwise
       // leave an activity entry claiming something happened that never did.
       if (summary) logActivity('leave_changed', summary);
@@ -13207,6 +13216,10 @@
   }
 
   function renderPeople() {
+    // Hold the render while someone is typing in the open leave form (see leaveDraft).
+    var ae = document.activeElement;
+    if (leaveEditingFor && ae && ae.closest && ae.closest('#people-grid .leave-editor')) { peopleRenderPending = true; return; }
+    peopleRenderPending = false;
     var filtered = applyFilters(activeTasks());
     var container = document.getElementById('people-grid');
     // Two ways onto this list, unioned: people with work here, and people who BELONG here.
@@ -13374,12 +13387,29 @@
     }).join('');
   }
 
+  // Keep what's typed in the leave form (see leaveDraft), and run any render that was held while
+  // focus was in it once focus leaves the form.
+  document.getElementById('people-grid').addEventListener('input', function (e) {
+    var t = e.target;
+    if (!t.classList) return;
+    if (t.classList.contains('leave-start')) leaveDraft.start = t.value;
+    else if (t.classList.contains('leave-end')) leaveDraft.end = t.value;
+    else if (t.classList.contains('leave-note')) leaveDraft.note = t.value;
+  });
+  document.getElementById('people-grid').addEventListener('focusout', function () {
+    setTimeout(function () {
+      var ae = document.activeElement;
+      if (peopleRenderPending && !(ae && ae.closest && ae.closest('#people-grid .leave-editor'))) renderPeople();
+    }, 0);
+  });
+
   // Delegated on the container, not bound per card -- renderPeople replaces its innerHTML on
   // every snapshot, same reasoning as the Projects tab's deadline handlers.
   document.getElementById('people-grid').addEventListener('click', function (e) {
     var toggle = e.target.closest('.leave-add-toggle');
     if (toggle) {
       leaveEditingFor = toggle.getAttribute('data-leave-name');
+      leaveDraft = {};
       renderPeople();
       var firstInput = document.querySelector('#people-grid .leave-start');
       if (firstInput) firstInput.focus();
@@ -13388,6 +13418,7 @@
 
     if (e.target.closest('.leave-cancel')) {
       leaveEditingFor = null;
+      leaveDraft = {};
       renderPeople();
       return;
     }
@@ -15658,6 +15689,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-08f', date: '2026-10-08', items: [
+      { type: 'fixed', title: 'Adding leave no longer clears itself', text: 'On the People page, the Add leave form used to empty itself whenever a teammate changed something. What you type now stays until you click Add or Cancel.' }
+    ] },
     { id: '2026-10-08e', date: '2026-10-08', items: [
       { type: 'improved', title: 'Monday Meeting in one column', text: 'Monday Meeting now lists everyone in a single column, so the room reads down it in order. Admins can drag a person\'s card by the dots on the left to change the order within their team, and everyone sees the same order.' },
       { type: 'improved', title: 'Team names', text: 'Production is now called Creative/Post, and there\'s a new Copy/Production team. If you\'re in Copy/Production, choose it in your profile menu under your departments.' }
@@ -19351,7 +19385,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-08T02:03:22Z";
+  var CURRENT_BUILD_VERSION = "2026-10-08T02:59:07Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
