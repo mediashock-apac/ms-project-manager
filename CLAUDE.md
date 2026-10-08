@@ -3888,8 +3888,10 @@ their week into a cell before the Monday meeting. Asked: "Is there a way to inte
   with date and first name) plus "Use this" to copy it into the note; "Coming up:" = your next
   three dated tasks/steps there. Muted, and only when there's something to show.
 - **Reading it:** Needs help from everyone first, then one card per person grouped by department
-  (like the sheet's blocks; **Admin always last**, after people with no department, and someone in
-  Suits + Admin sits with Suits: `weeklyGroupDept`/`weeklyDeptRank`), rows always in the order needs help, waiting on us, waiting on
+  (like the sheet's blocks; **Admin always last**, after people with no department, and **anyone
+  with Admin among their departments sits under Admin**, e.g. Suits + Admin: `weeklyGroupDept`/
+  `weeklyDeptRank`; it first put them with Suits and was corrected, "Ming Song should be under
+  Admin"), rows always in the order needs help, waiting on us, waiting on
   client, on track, on hold, done, with the next date in a fixed right column. NEW marks a row that
   differs from that person's previous week (nothing is marked if there was no previous update).
   A person with no update shows "Not in yet" plus what's due for them this week from the board;

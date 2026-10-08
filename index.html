@@ -12497,12 +12497,13 @@
     return list.sort(function (a, b) { return (weeklyDeptRank(a) - weeklyDeptRank(b)) || a.localeCompare(b); });
   }
 
-  // The group a person is read out in: their first department that isn't Admin, so someone in
-  // Suits + Admin sits with Suits. Admin always goes last, after people with no department
+  // The group a person is read out in: Admin if they have it at all, else their first department.
+  // So someone in Suits + Admin sits with Admin (asked for: "Ming Song should be under Admin"; it
+  // used to put them with Suits). Admin always goes last, after people with no department
   // (asked for: "Admin should go last").
   function weeklyGroupDept(n) {
     var ds = personDepartments(n);
-    return ds.find(function (d) { return d !== 'admin'; }) || ds[0] || '';
+    return ds.indexOf('admin') !== -1 ? 'admin' : (ds[0] || '');
   }
   function weeklyDeptRank(n) {
     var d = weeklyGroupDept(n);
@@ -15528,6 +15529,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-08d', date: '2026-10-08', items: [
+      { type: 'improved', title: 'Admin group on Monday Meeting', text: 'Anyone who has Admin as one of their departments now sits in the Admin group on Monday Meeting, which is always last. Before, someone in both Suits and Admin was listed under Suits.' }
+    ] },
     { id: '2026-10-08c', date: '2026-10-08', items: [
       { type: 'improved', title: 'A calmer welcome tour', text: "The welcome tour (profile menu > Take the tour) now moves across the screen in one sweep, from the top bar down to the sidebar, instead of hopping back and forth. It's 7 steps again, and now includes Ctrl K." }
     ] },
@@ -19214,7 +19218,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-07T16:45:50Z";
+  var CURRENT_BUILD_VERSION = "2026-10-08T01:19:02Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

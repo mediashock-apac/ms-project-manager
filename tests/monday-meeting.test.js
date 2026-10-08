@@ -124,7 +124,8 @@ async function skipTours(page) {
   const heads = await page.$$eval('#weekly-view h3', hs => hs.map(h => h.textContent));
   check('groups: Suits, Production, No department, Admin last', JSON.stringify(heads) === JSON.stringify(['Suits', 'Production', 'No department', 'Admin']), JSON.stringify(heads));
   const suitsNames = await page.$$eval('#weekly-view h3', hs => hs[0].nextElementSibling.innerText);
-  check('Suits + Admin person stays under Suits', suitsNames.includes('Mychelle Chen'));
+  const adminNames = await page.$$eval('#weekly-view h3', hs => hs[hs.length - 1].nextElementSibling.innerText);
+  check('Suits + Admin person goes under Admin, not Suits', adminNames.includes('Mychelle Chen') && !suitsNames.includes('Mychelle Chen'), adminNames);
   check('my card asks for update', view.includes("Your update isn't in yet"));
   check('also line', view.includes('New biz: follow up with Fugro'));
   check('On hold shows, read after On track', view.includes('On hold') && view.indexOf('Client check-in later') < view.indexOf('Client paused till Nov') && view.indexOf('Client paused till Nov') < view.indexOf('New biz: follow up'));
