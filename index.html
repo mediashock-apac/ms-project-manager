@@ -7440,7 +7440,7 @@
   }
   // `people`: names every step in the group shares, shown once here instead of under each row
   // (asked: "if same name, can group together?" from six ad sizes all for one person).
-  function checklistGroupHeadHtml(key, members, people) {
+  function checklistGroupHeadHtml(key, members, people, link) {
     var count = members.length > 1 ? ' · ' + members.length : '';
     var label, cls = 'text-zinc-500 dark:text-zinc-400', note = '';
     if (key === 'none') label = 'No date';
@@ -7455,12 +7455,12 @@
     var who = people && people.length
       ? '<span class="inline-flex items-center gap-1 ml-2 font-medium text-zinc-500 dark:text-zinc-400">' + people.map(function (n) { return avatarHtml(n, 'w-3.5 h-3.5 shrink-0', 'text-[8px]'); }).join('') + escapeHtml(stepPeopleLabel({ assignees: people })) + '</span>'
       : '';
-    return '<div class="checklist-group-head flex items-center flex-wrap px-2 pt-2 first:pt-0 text-[11px] font-bold ' + cls + '"><span>' + escapeHtml(label + note) + '<span class="font-semibold text-zinc-400 dark:text-zinc-500">' + count + '</span></span>' + who + '</div>';
+    return '<div class="checklist-group-head flex items-center flex-wrap px-2 pt-2 first:pt-0 text-[11px] font-bold ' + cls + '"><span>' + escapeHtml(label + note) + '<span class="font-semibold text-zinc-400 dark:text-zinc-500">' + count + '</span></span>' + who + (link ? '<span class="ml-2 min-w-0 max-w-full font-normal">' + linkChipHtml(link) + '</span>' : '') + '</div>';
   }
 
   function renderChecklistEditor() {
     var el = document.getElementById('task-checklist-editor');
-    function rowHtml(item, i, inGroup, peopleOnHead) {
+    function rowHtml(item, i, inGroup, peopleOnHead, linkOnHead) {
           var editing = checklistEditIndex === i;
           var itemMinutes = checklistItemMinutes(item.id);
           return '<div class="checklist-item-row rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-700/50' + (justCheckedItemIds[item.id] ? ' checklist-just-checked' : '') + '" data-checklist-i="' + i + '" data-flip="' + escapeHtml(item.id || '') + '">' +
@@ -7480,7 +7480,7 @@
                   '</div>'
                 : '<div class="flex-1 min-w-0">' +
                   '<span class="block text-sm ' + (item.done ? 'line-through text-zinc-400 dark:text-zinc-500' : 'text-zinc-700 dark:text-zinc-200') + '">' + escapeHtml(item.text) + '</span>' +
-                  (item.link ? '<div>' + linkChipHtml(item.link) + '</div>' : '') +
+                  (item.link && !linkOnHead ? '<div>' + linkChipHtml(item.link) + '</div>' : '') +
                   (stepPeople(item).length && !peopleOnHead ? '<span class="flex items-center gap-1 text-[11px] text-zinc-500 dark:text-zinc-400">' + stepPeople(item).map(function (n) { return avatarHtml(n, 'w-3.5 h-3.5 shrink-0', 'text-[8px]'); }).join('') + escapeHtml(stepPeopleLabel(item)) + '</span>' : '') +
                   (inGroup ? '' : checklistDueLabelHtml(item, i)) +
                 '</div>') +
@@ -7513,8 +7513,11 @@
         // Same people on every step in the group (2+ steps): named once on the heading.
         var first = JSON.stringify(stepPeople(groups[k][0].item));
         var shared = groups[k].length > 1 && first !== '[]' && groups[k].every(function (x) { return JSON.stringify(stepPeople(x.item)) === first; });
-        openRows.push(checklistGroupHeadHtml(k, groups[k], shared ? stepPeople(groups[k][0].item) : null));
-        groups[k].forEach(function (x) { openRows.push(rowHtml(x.item, x.i, true, shared && checklistEditIndex !== x.i)); });
+        // Same for a link: one shared link (e.g. one folder for six ad sizes) shows once on the heading.
+        var firstLink = groups[k][0].item.link || '';
+        var sharedLink = groups[k].length > 1 && firstLink && groups[k].every(function (x) { return (x.item.link || '') === firstLink; });
+        openRows.push(checklistGroupHeadHtml(k, groups[k], shared ? stepPeople(groups[k][0].item) : null, sharedLink ? firstLink : null));
+        groups[k].forEach(function (x) { var notEditing = checklistEditIndex !== x.i; openRows.push(rowHtml(x.item, x.i, true, shared && notEditing, sharedLink && notEditing)); });
       });
     }
     var doneToggle = doneRows.length
@@ -15730,6 +15733,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-08i', date: '2026-10-08', items: [
+      { type: 'improved', title: 'A shared link shows once per checklist group', text: 'When every step due on the same day has the same link (one folder for six ad sizes, say), the link sits once on the date heading instead of under each step. Different links still show on their own steps.' }
+    ] },
     { id: '2026-10-08h', date: '2026-10-08', items: [
       { type: 'fixed', title: 'Clicking outside a window no longer closes it', text: 'A stray click outside the task window, your Monday update or a brief you are writing used to close it, and the Monday update lost what you had typed. Now only the X, Cancel or Escape close them.' }
     ] },
@@ -19432,7 +19438,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-08T06:38:56Z";
+  var CURRENT_BUILD_VERSION = "2026-10-08T07:17:16Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

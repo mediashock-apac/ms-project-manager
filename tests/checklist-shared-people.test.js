@@ -81,10 +81,10 @@ async function newPage(browser, when, opts) {
 function extra() {
   var T = window.__fb.data.tasks;
   var sizes = ['1080x1080px', '1080x1920px', '300x250px', '728x90px', '300x600px', '320x50px'];
-  T.t1.checklist = sizes.map(function (s, i) { return { id: 'ad' + i, text: 'Ad creative #' + (i + 1) + ' ' + s, due: '2026-10-09', done: false, assignee: 'Chloe Hu', assignees: ['Chloe Hu'] }; })
+  T.t1.checklist = sizes.map(function (s, i) { return { id: 'ad' + i, text: 'Ad creative #' + (i + 1) + ' ' + s, due: '2026-10-09', link: 'https://drive.google.com/drive/folders/adsizes', done: false, assignee: 'Chloe Hu', assignees: ['Chloe Hu'] }; })
     .concat([
-      { id: 'm1', text: 'Client review call', due: '2026-10-12', done: false, assignee: 'Mychelle Chen', assignees: ['Mychelle Chen'] },
-      { id: 'm2', text: 'Final export', due: '2026-10-12', done: false, assignee: 'Arvind Kumaraguru', assignees: ['Arvind Kumaraguru'] }
+      { id: 'm1', text: 'Client review call', due: '2026-10-12', link: 'https://docs.google.com/document/d/agenda', done: false, assignee: 'Mychelle Chen', assignees: ['Mychelle Chen'] },
+      { id: 'm2', text: 'Final export', due: '2026-10-12', link: 'https://frame.io/export', done: false, assignee: 'Arvind Kumaraguru', assignees: ['Arvind Kumaraguru'] }
     ]);
   var seen = ['board','gantt','calendar','people','projects','chat','wip','weekly','activity','archived','suggestions','updates'].map(function (v) { return 'page:' + v; });
   'abcdefghij'.split('').forEach(function (c) { seen.push('cl-2026-10-07' + c); });
@@ -101,6 +101,9 @@ function extra() {
     if (!dark) {
       check('shared person named once (on the heading)', (txt.match(/Chloe Hu/g) || []).length === 1, (txt.match(/Chloe Hu/g) || []).length);
       check('mixed group keeps each person on their row', /Mychelle Chen/.test(txt) && /Arvind Kumaraguru/.test(txt));
+      const linkCount = h => page.$$eval('#task-checklist-editor a[href="' + h + '"]', a => a.length);
+      check('shared link shown once (on the heading)', (await linkCount('https://drive.google.com/drive/folders/adsizes')) === 1 && !!(await page.$('#task-checklist-editor .checklist-group-head a[href*="adsizes"]')));
+      check('different links stay on their rows', (await linkCount('https://docs.google.com/document/d/agenda')) === 1 && (await linkCount('https://frame.io/export')) === 1 && !(await page.$('#task-checklist-editor .checklist-group-head a[href*="frame.io"]')));
       // editing a step in the shared group shows its people again in the editor
       await page.click('#task-checklist-editor .checklist-edit-toggle[data-checklist-i="0"]'); await page.waitForTimeout(200);
       check('editor still shows the step\'s people', !!(await page.$('#task-checklist-editor [data-checklist-editor-i] .checklist-person-chip')));

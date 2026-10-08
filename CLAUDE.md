@@ -4135,6 +4135,11 @@ draws one Timeline diamond instead of six, and hides a late size inside the batc
   their own people line. Asked "if same name, can group together?" from six ad sizes each
   repeating "Aqila Ramadhani". Mixed groups keep a name per row; a step being edited shows its
   people in the editor as usual.
+- **The same goes for a link** (asked from the same six ad sizes: "If these deliverables share the same
+  link?"): when 2+ steps in a group all carry the identical link, the chip sits once on the heading
+  (`checklistGroupHeadHtml`'s 4th argument) and the rows drop theirs; a step being edited shows its
+  link field as usual. To set one link on several steps at once, paste it in the add row before adding
+  them (it applies to every line added in that go).
 - **Dragging an item into another date's group gives it that date** (in the drop handler);
   otherwise it would jump straight back to its old group. A toast always says so ("... is now due
   Oct 9"), so a drag meant only to reorder never changes a date silently.
