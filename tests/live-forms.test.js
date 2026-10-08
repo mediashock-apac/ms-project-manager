@@ -189,6 +189,45 @@ async function skipTours(page) {
     check('Monday editor: X still closes it', !(await page.isVisible('#weekly-modal')));
   }
 
+  // Unsent comment kept as a draft per task, no "discard?" question about it
+  await page.click('[data-view-btn="board"]'); await page.waitForTimeout(800); await skipTours(page);
+  await page.evaluate(() => document.querySelector('[data-open-task="t1"]').click()); await page.waitForTimeout(500);
+  await page.fill('#task-comment-input', 'Half a thought about the rough cut');
+  await page.click('#task-modal-close'); await page.waitForTimeout(300);
+  check('closing with an unsent comment asks nothing', !(await page.isVisible('#task-modal')) && !(await page.isVisible('#confirm-modal')));
+  check('it says the comment is kept', /unsent comment is kept/.test(await page.textContent('#toast-container')));
+  await page.evaluate(() => document.querySelector('[data-open-task="t2"]').click()); await page.waitForTimeout(400);
+  check('another task starts with an empty box', (await page.inputValue('#task-comment-input')) === '');
+  await page.click('#task-modal-close'); await page.waitForTimeout(300);
+  await page.evaluate(() => document.querySelector('[data-open-task="t1"]').click()); await page.waitForTimeout(400);
+  check('reopening the task brings the draft back', (await page.inputValue('#task-comment-input')) === 'Half a thought about the rough cut');
+  await page.click('#task-comment-add-btn'); await page.waitForTimeout(500);
+  await page.click('#task-modal-close'); await page.waitForTimeout(300);
+  await page.evaluate(() => document.querySelector('[data-open-task="t1"]').click()); await page.waitForTimeout(400);
+  check('sending clears the draft', (await page.inputValue('#task-comment-input')) === '');
+  await page.click('#task-modal-close'); await page.waitForTimeout(300);
+
+  // Chat drafts per chat
+  await page.evaluate(() => window.__fb.remote(function (d) {
+    d.projects.p1 = { name: 'GWS recording', deadline: null, chat: [], links: [] };
+    d.projects.p2 = { name: 'SMB webinars', deadline: null, chat: [], links: [] };
+  })); await page.waitForTimeout(300);
+  await page.click('[data-view-btn="chat"]'); await page.waitForTimeout(900); await skipTours(page);
+  await page.click('.chat-project-row:has-text("GWS recording")'); await page.waitForTimeout(300);
+  await page.fill('#project-chat-input', 'Draft for GWS');
+  await page.click('.chat-project-row:has-text("SMB webinars")'); await page.waitForTimeout(300);
+  check('switching chats: the other chat starts empty', (await page.inputValue('#project-chat-input')) === '');
+  await page.click('.chat-project-row:has-text("GWS recording")'); await page.waitForTimeout(300);
+  check('switching back brings the chat draft back', (await page.inputValue('#project-chat-input')) === 'Draft for GWS');
+
+  // Offline notice
+  await page.context().setOffline(true); await page.waitForTimeout(300);
+  check('offline: notice shows', await page.isVisible('#offline-notice') && /offline/i.test(await page.textContent('#offline-notice')));
+  await page.context().setOffline(false); await page.waitForTimeout(300);
+  check('back online: says so, then goes', /Back online/.test(await page.textContent('#offline-notice')));
+  await page.waitForTimeout(3800);
+  check('online notice hides by itself', !(await page.isVisible('#offline-notice')));
+
   check('no page errors', errors.length === 0, errors.join(' | '));
 
   console.log(results.join('\n'));

@@ -583,6 +583,8 @@ to bottom:
 4. **Pure helpers** — date/time/formatting/sanitization utilities (no DOM or Firestore access).
 5. **Modal + UI helpers** — task modal, checklist editor, time-entry editor, "enhanced select"
    dropdown widget, mention autocomplete menu.
+   - **Superseded (2026-10-08): an unsent comment is now kept as a draft** (see "Quality-of-life
+     batch"), so the `commentDraft` snapshot field and the Save confirm described below are gone.
    - **A typed-but-unsent comment used to vanish silently on Cancel *or* Save** — reported
      directly. Root cause: comments write straight to Firestore the instant Add is clicked (their
      own `arrayUnion`/full-array-rewrite calls, entirely separate from the task-form save flow),
@@ -2738,6 +2740,23 @@ needs revisiting.
   row's content ever needs to grow taller than 64px, both heights need to move together or this
   drifts out of alignment again.
 
+### Quality-of-life batch (2026-10-08)
+
+Asked "what other quality of life changes or fixes can be made?", then "your picks".
+
+- **Offline notice** (OFFLINE NOTICE, `#offline-notice`; Notion/Linear). Firestore keeps edits made
+  offline in the tab and sends them when the connection returns, but only while the tab stays open,
+  and nothing said so. An amber pill at the top appears only while offline ("Keep this tab open and
+  your changes will save when you're back"), then "Back online" in emerald for 3.5s.
+- **Unsent comments and chat messages are kept** (UNSENT DRAFTS: `draftGet`/`draftSet`,
+  localStorage `flowboard_drafts`, keys `task:<id>` / `chat:<project>`, 30 days, newest 60; Linear,
+  Slack). Desktop task window, desktop chat and the phone's comment and chat boxes share the keys.
+  This replaced the "Save without sending this comment?" confirm and took `commentDraft` out of
+  `taskFormSnapshot` (closing no longer asks "Discard changes?" about a comment); closing with one
+  shows "Your unsent comment is kept". A chat message being edited is not a draft; the draft comes
+  back after the edit. This browser only.
+- Monday Meeting: "Delete update" and no board list on not-in-yet cards (see that section).
+
 ### Features in sync (2026-10-07)
 
 Asked: "Make sure all the features in the PM tool work together syncronisingly and not in
@@ -3996,13 +4015,16 @@ their week into a cell before the Monday meeting. Asked: "Is there a way to inte
   Admin"), rows always in the order needs help, waiting on us, waiting on
   client, on track, on hold, done, with the next date in a fixed right column. NEW marks a row that
   differs from that person's previous week (nothing is marked if there was no previous update).
-  A person with no update shows "Not in yet" plus what's due for them this week from the board;
-  someone whose booked leave covers the whole Mon-Fri week shows "Away this week" and doesn't count as waiting
+  A person with no update shows only "Not in yet" on their card header. **The "From the board, due
+  this week" list that used to fill those cards was removed (2026-10-08)**: the page shows only what
+  people typed (asked earlier: "I don't want any information that has not been keyed in"). Your own
+  card still has the Write prompt. Someone whose booked leave covers the whole Mon-Fri week shows "Away this week" and doesn't count as waiting
   (a day or two off still expects an update; see "Features in sync"). The two chips look deliberately
   different (reported as "almost the same" when both were amber): Away is amber, the app-wide
-  "not available" colour; Not in yet is a dashed neutral outline with a clock. That due list shows
-  everything (a "+N more" cap shipped first; asked: "just show all?"); a task and its own step with
-  the same name and date are listed once. Below `sm` the status
+  "not available" colour; Not in yet is a dashed neutral outline with a clock.
+  **"Delete update"** in the editor (only when one exists, `deleteWeeklyUpdate`) removes your update
+  for that week and any leave it booked, with Undo on the toast (the confirm modal sits under this
+  editor, and Undo is the app's pattern for reversible actions). Below `sm` the status
   label takes its own line so the text keeps the card's width.
 - **Present mode was built and removed before shipping** ("Present mode is not necessary").
 - **Company-wide, ignores the teamspace switcher**, same reasoning as WIP: one shared meeting.

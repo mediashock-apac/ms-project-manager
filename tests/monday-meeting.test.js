@@ -116,11 +116,10 @@ async function skipTours(page) {
   console.log('TOUR AFTER', await page.$eval('#tour-title', e => e.textContent).catch(() => 'none'));
   await skipTours(page);
   check('Chloe (Tue-Fri off) not shown as away all week', !view.includes('Away this week'));
-  check('Zenon not in yet with board item', view.includes('Not in yet') && view.includes('Carousel'));
+  check('Zenon not in yet, nothing from the board listed', view.includes('Not in yet') && !view.includes('Carousel') && !view.includes('From the board'));
   const zen = async () => page.$$eval("#weekly-view section", ss => { var z = ss.find(s => s.textContent.includes("Zenon Kwok")); return z ? z.innerText : ""; });
   let z1 = await zen();
-  check("duplicate task+step listed once", (z1.match(/Kickoff discussion/g) || []).length === 1, z1);
-  check("all 7 due items shown, no cap", (z1.match(/Oct \d+/g) || []).length === 7 && !z1.includes("more") && !(await page.$("[data-weekly-more]")), z1);
+  check("a card that is not in yet shows only its header", !/Kickoff discussion|Oct \d+/.test(z1), z1);
   const heads = await page.$$eval('#weekly-view h3', hs => hs.map(h => h.textContent));
   check('groups: Suits, Creative/Post, Copy/Production, No department, Admin last', JSON.stringify(heads) === JSON.stringify(['Suits', 'Creative/Post', 'Copy/Production', 'No department', 'Admin']), JSON.stringify(heads));
   const suitsNames = await page.$$eval('#weekly-view h3', hs => hs[0].nextElementSibling.innerText);
@@ -211,6 +210,17 @@ async function skipTours(page) {
   const view3 = await page.textContent('#weekly-view');
   check('edited mark shows', /Edited Tue/.test(view3));
   check('Escape closes editor', await (async () => { await page.click('#weekly-bar [data-weekly-write]'); await page.keyboard.press('Escape'); await page.waitForTimeout(100); return page.$eval('#weekly-modal', e => e.classList.contains('hidden')); })());
+
+  // Delete my update, then Undo
+  const myWeeks = () => page.evaluate(() => (window.__fb.data.people.u1.weekly || []).map(w => w.week));
+  const weeksBefore = await myWeeks();
+  await page.click('#weekly-bar [data-weekly-write]'); await page.waitForSelector('#weekly-modal:not(.hidden)');
+  check('editor offers Delete update when one exists', !!(await page.$('#weekly-modal [data-weekly-delete]')));
+  await page.click('#weekly-modal [data-weekly-delete]'); await page.waitForTimeout(500);
+  const weeksAfter = await myWeeks();
+  check('delete removes only this week', weeksAfter.length === weeksBefore.length - 1 && (await page.textContent('#weekly-view')).includes('Your update isn'), JSON.stringify(weeksAfter));
+  await page.click('#toast-container button:has-text("Undo")'); await page.waitForTimeout(500);
+  check('Undo brings it back', JSON.stringify((await myWeeks()).sort()) === JSON.stringify(weeksBefore.slice().sort()) && /Edited Tue/.test(await page.textContent('#weekly-view')));
 
   // Previous week
   await page.click('#weekly-bar [data-weekly-nav="-1"]');

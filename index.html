@@ -3089,7 +3089,7 @@
     document.getElementById('chat-empty-state').classList.add('hidden');
     document.getElementById('chat-detail').classList.remove('hidden');
     document.getElementById('chat-detail').classList.add('flex');
-    document.getElementById('project-chat-input').value = '';
+    document.getElementById('project-chat-input').value = draftGet('chat:' + name);
     renderChatProjectList();
     renderChatDetail();
     subscribeProjectChatTyping(name);
@@ -4741,8 +4741,10 @@
     var user = auth.currentUser;
     var newMessage = { id: uid(), text: text, date: new Date().toISOString(), author: user ? (user.displayName || user.email) : null };
     if (chatReplyTarget) newMessage.replyTo = chatReplyTarget.id;
+    var sentToChat = currentChatProjectName;
     updateDoc(doc(projectsCol, pdoc.id), { chat: arrayUnion(newMessage) }).then(function () {
       input.value = '';
+      draftSet('chat:' + sentToChat, '');
       cancelChatReply();
       projectChatMentions.close();
       clearProjectChatTyping();
@@ -4985,7 +4987,7 @@
     chatEditTarget = null;
     document.getElementById('chat-edit-preview').hidden = true;
     document.getElementById('chat-edit-preview').classList.remove('flex');
-    document.getElementById('project-chat-input').value = '';
+    document.getElementById('project-chat-input').value = currentChatProjectName ? draftGet('chat:' + currentChatProjectName) : '';
   }
   document.getElementById('chat-edit-cancel').addEventListener('click', cancelChatEdit);
 
@@ -5483,6 +5485,7 @@
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendProjectChatMessage(); }
   });
   document.getElementById('project-chat-input').addEventListener('input', function () {
+    if (currentChatProjectName && !chatEditTarget) draftSet('chat:' + currentChatProjectName, this.value);
     var now = Date.now();
     if (now - lastTypingHeartbeatAt < PROJECT_CHAT_TYPING_HEARTBEAT_MS) return;
     lastTypingHeartbeatAt = now;
@@ -6514,6 +6517,27 @@
     }, 0);
   }, true);
 
+  /* UNSENT DRAFTS -- a comment or chat message typed but not sent stays in its box for next time
+     (Linear/Slack do this). Before, closing a task asked "Save without sending this comment?" and
+     switching chats silently dropped what you'd typed. Per box: 'task:<id>' / 'chat:<project>'.
+     This browser only (localStorage); kept 30 days, newest 60. */
+  var DRAFTS_KEY = 'flowboard_drafts';
+  function draftsAll() { try { return JSON.parse(localStorage.getItem(DRAFTS_KEY) || '{}') || {}; } catch (e) { return {}; } }
+  function draftGet(key) { var d = draftsAll()[key]; return d && typeof d.text === 'string' ? d.text : ''; }
+  function draftSet(key, text) {
+    try {
+      var all = draftsAll();
+      if (text && text.trim()) all[key] = { text: String(text).slice(0, 4000), at: Date.now() };
+      else delete all[key];
+      var cutoff = Date.now() - 30 * 86400000;
+      var keys = Object.keys(all).filter(function (k) { return all[k] && all[k].at > cutoff; })
+        .sort(function (a, b) { return all[b].at - all[a].at; }).slice(0, 60);
+      var kept = {};
+      keys.forEach(function (k) { kept[k] = all[k]; });
+      localStorage.setItem(DRAFTS_KEY, JSON.stringify(kept));
+    } catch (e) { /* storage off: drafts simply aren't kept */ }
+  }
+
   function escapeHtml(str) {
     return String(str == null ? '' : str)
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -7178,13 +7202,9 @@
       driveLink: document.getElementById('task-drive').value,
       repeat: document.getElementById('task-repeat').value,
       checklist: currentChecklist,
-      timeEntries: currentTimeEntries,
-      // A typed-but-not-yet-Added comment previously fell straight through this whole mechanism:
-      // comments write to Firestore immediately on Add, not through this snapshot/Save flow, so
-      // an in-progress draft looked identical to "no changes" and vanished silently on Cancel.
-      // openTaskModal clears this field before capturing the baseline, so a fresh open always
-      // starts at '' here.
-      commentDraft: document.getElementById('task-comment-input').value
+      timeEntries: currentTimeEntries
+      // No commentDraft here any more: an unsent comment is kept as a draft (UNSENT DRAFTS), so
+      // closing the window loses nothing and shouldn't ask "Discard changes?" about it.
     });
   }
 
@@ -7292,7 +7312,7 @@
     // no id yet to link to.
     if (task) history.replaceState(null, '', '#task=' + task.id);
     document.getElementById('task-comments-section').classList.toggle('hidden', !task);
-    document.getElementById('task-comment-input').value = '';
+    document.getElementById('task-comment-input').value = task ? draftGet('task:' + task.id) : '';
     if (task) {
       var backfilledComments = backfillCommentThreading(task.comments);
       // Only write back if the backfill actually changed something -- most tasks opened after
@@ -7360,6 +7380,8 @@
   }
 
   function closeTaskModal() {
+    var leftComment = editingTaskId && document.getElementById('task-comment-input').value.trim();
+    if (leftComment) showToast('Your unsent comment is kept. It\'ll be here when you open this task again.', 'info');
     taskModal.classList.add('hidden');
     taskModal.classList.remove('flex');
     editingTaskId = null;
@@ -9963,17 +9985,8 @@
     // Escape had before commentDraft was added to taskFormSnapshot). Save gets its own explicit
     // check rather than reusing that snapshot comparison, since here the answer isn't "discard or
     // keep editing" -- it's "discard the draft specifically, or go click Add first."
-    var draftComment = document.getElementById('task-comment-input').value.trim();
-    if (draftComment) {
-      var draftSnippet = draftComment.length > 60 ? draftComment.slice(0, 60) + '…' : draftComment;
-      openConfirm(
-        'Save without sending this comment?',
-        'You started typing a comment ("' + draftSnippet + '") but never clicked Add. Saving now will lose it.',
-        function () { commitTaskSave(); },
-        { tone: 'question', confirmText: 'Save without it', cancelText: 'Go back' }
-      );
-      return;
-    }
+    // An unsent comment used to trigger "Save without sending this comment?" here. It's kept as a
+    // draft now (UNSENT DRAFTS), and closeTaskModal says so.
     commitTaskSave();
   });
 
@@ -10193,6 +10206,9 @@
   }
 
   var taskCommentMentions = wireMentionAutocomplete(document.getElementById('task-comment-input'), document.getElementById('mention-menu'));
+  document.getElementById('task-comment-input').addEventListener('input', function () {
+    if (editingTaskId) draftSet('task:' + editingTaskId, this.value);
+  });
 
   document.getElementById('task-comment-add-btn').addEventListener('click', function () {
     var input = document.getElementById('task-comment-input');
@@ -10206,12 +10222,14 @@
     var newComment = {
       id: uid(), text: text, date: new Date().toISOString(), author: user ? (user.displayName || user.email) : null
     };
+    var sentFromTask = editingTaskId;
     var replyTo = inferReplyTarget(t ? (t.comments || []) : [], text);
     if (replyTo) newComment.replyTo = replyTo;
     updateDoc(doc(tasksCol, editingTaskId), {
       comments: arrayUnion(newComment)
     }).then(function () {
       input.value = '';
+      draftSet('task:' + sentFromTask, '');
       taskCommentMentions.close();
       notifyOnComment(text, t);
       var snippet = text.length > 60 ? text.slice(0, 60) + '…' : text;
@@ -12886,28 +12904,14 @@
         // (reported). A dashed neutral outline says "this slot is still empty" without a second
         // warning colour; rose is taken by overdue/High.
         : '<span class="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full border border-dashed border-zinc-400 text-zinc-600 dark:border-zinc-500 dark:text-zinc-300">' + weeklyIcon('client', 'w-3 h-3') + 'Not in yet</span>';
-      var due = [];
-      // A task and its own checklist step often share a name and date ("Kickoff discussion");
-      // list that once.
-      var dueSeen = {};
-      board.forEach(function (g) { g.dueThisWeek.forEach(function (d) {
-        var k = d.date + '|' + g.project + '|' + String(d.text || '').trim().toLowerCase();
-        if (dueSeen[k]) return;
-        dueSeen[k] = true;
-        due.push({ date: d.date, text: d.text, project: g.project });
-      }); });
-      due.sort(function (a, b) { return a.date < b.date ? -1 : 1; });
+      // No "From the board, due this week" list any more: the page shows only what people typed
+      // (asked: "I don't want any information that has not been keyed in"). The card is just its
+      // header with "Not in yet" / "Away this week"; your own card keeps the Write prompt.
       var isMe = name === me && key === weeklyCurrentKey();
-      body = '<div class="px-4 py-3 flex flex-col gap-2">' +
+      body = !isMe ? '' : '<div class="px-4 py-3 flex flex-col gap-2">' +
         (isMe ? '<div class="flex flex-wrap items-center gap-3 rounded-xl border border-dashed border-brand-300 dark:border-brand-500/40 bg-brand-50 dark:bg-brand-500/10 px-3.5 py-3">' +
             '<p class="flex-1 min-w-[12rem] text-sm text-zinc-700 dark:text-zinc-200"><span class="font-bold">Your update isn\'t in yet.</span> Your projects are already listed, so it\'s one tap each.</p>' +
             '<button type="button" data-weekly-write class="text-sm font-bold px-3.5 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white">Write my update</button></div>' : '') +
-        (due.length
-          ? '<p class="text-xs text-zinc-500 dark:text-zinc-400">From the board, due this week:</p>' +
-            due.map(function (d) {
-              return '<div class="grid grid-cols-[3.5rem_minmax(0,1fr)] gap-3 items-baseline text-sm"><span class="text-xs text-zinc-500 dark:text-zinc-400">' + escapeHtml(formatShortDate(d.date)) + '</span><span class="text-zinc-600 dark:text-zinc-300 min-w-0 break-words"><span class="font-semibold text-zinc-800 dark:text-zinc-100">' + projectNameHtml(d.project) + '</span> – ' + escapeHtml(d.text) + '</span></div>';
-            }).join('')
-          : (isMe ? '' : '<p class="text-sm text-zinc-400 dark:text-zinc-500">Nothing on the board due this week.</p>')) +
       '</div>';
     }
     var chips = personDepartments(name).map(function (k) {
@@ -13071,6 +13075,7 @@
       (!d.leave && d.rows.length ? '<span class="text-sm text-zinc-500 dark:text-zinc-400"><b class="text-zinc-800 dark:text-zinc-100">' + answered + ' of ' + d.rows.length + '</b> answered</span>' : '') +
       (!d.leave && open > 0 && answered > 0 ? '<button type="button" data-weekly-rest class="text-[13px] font-bold text-brand-600 dark:text-brand-400 hover:underline">Mark the rest On track</button>' : '') +
       '<span class="flex-1"></span>' +
+      (d.existing ? '<button type="button" data-weekly-delete class="text-sm font-semibold text-rose-600 dark:text-rose-400 hover:underline px-2 py-2">Delete update</button>' : '') +
       '<button type="button" data-weekly-cancel class="text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 px-2 py-2">Later</button>' +
       '<button type="button" data-weekly-send class="text-sm font-bold px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white">' + (d.existing ? 'Save changes' : 'Send update') + '</button>';
   }
@@ -13084,6 +13089,28 @@
     });
     var ex = document.getElementById('weekly-extra');
     if (ex) weeklyDraft.extra = ex.value;
+  }
+
+  // Removes your update for the week being edited (asked for: a way to take one back), plus the
+  // leave it booked, if any. Undo on the toast instead of a confirm: the confirm modal sits under
+  // this editor, and the app uses Undo for anything reversible.
+  function deleteWeeklyUpdate() {
+    var d = weeklyDraft;
+    var me = myPersonDoc();
+    if (!d || !d.existing || !me) return;
+    var before = { weekly: weeklyListOf(me).slice(), leave: Array.isArray(me.leave) ? me.leave.slice() : [] };
+    var weekEndKey = toDateInputValue(addDays(parseDate(d.week), 4));
+    var ours = function (l) { return l && l.note === WEEKLY_LEAVE_NOTE && l.start === d.week && l.end === weekEndKey; };
+    var patch = { weekly: before.weekly.filter(function (e) { return e && e.week !== d.week; }) };
+    if (before.leave.some(ours)) patch.leave = before.leave.filter(function (l) { return !ours(l); });
+    setDoc(doc(peopleCol, me.id), patch, { merge: true }).then(function () {
+      closeWeeklyEditor();
+      showToast('Update deleted', 'info', { action: { label: 'Undo', onClick: function () {
+        var undo = { weekly: before.weekly };
+        if (patch.leave) undo.leave = before.leave;
+        setDoc(doc(peopleCol, me.id), undo, { merge: true }).catch(function (err) { showToast('Could not undo: ' + err.message, 'error'); });
+      } } });
+    }).catch(function (err) { showToast('Could not delete your update: ' + err.message, 'error'); });
   }
 
   function saveWeeklyUpdate() {
@@ -13162,6 +13189,8 @@
         closeWeeklyEditor();
       } else if (t.hasAttribute('data-weekly-send')) {
         saveWeeklyUpdate();
+      } else if (t.hasAttribute('data-weekly-delete')) {
+        deleteWeeklyUpdate();
       }
     });
     weeklyModal.addEventListener('keydown', function (e) {
@@ -15928,6 +15957,11 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-08q', date: '2026-10-08', items: [
+      { type: 'new', title: 'Know when you are offline', text: 'If your connection drops, a note at the top says so. Keep the tab open and your changes save as soon as you are back online.' },
+      { type: 'improved', title: 'Unsent comments are kept', text: 'Start a comment or a chat message and leave without sending it: it will still be in the box when you come back to that task or chat, on desktop or phone.' },
+      { type: 'improved', title: 'Monday Meeting shows only what people wrote', text: 'A card whose update is not in yet no longer lists tasks from the board. You can also delete your own update from the editor, with Undo.' }
+    ] },
     { id: '2026-10-08p', date: '2026-10-08', items: [
       { type: 'improved', title: 'People filter is easier to spot', text: 'The people filter above the board now reads All people, next to All priorities and All projects. Tick the people you want to see.' }
     ] },
@@ -18040,6 +18074,9 @@
         '<div class="m-bar-title">' + escapeHtml(opts.title || '') + '</div><div class="m-bar-side m-right">' + (opts.actions || '') + '</div></header>' +
       '<div class="m-screen-body"></div>' + (opts.footer ? '<div class="m-footer">' + opts.footer + '</div>' : '');
     mRoot.appendChild(el);
+    var draftTa = el.querySelector('.m-compose textarea');
+    var draftKey = draftTa && mDraftKey(draftTa.form);
+    if (draftKey && draftGet(draftKey)) { draftTa.value = draftGet(draftKey); mAutosize(draftTa); }
     var s = { el: el, body: el.querySelector('.m-screen-body'), render: opts.render, after: opts.after, key: opts.key, first: true };
     mStack.push(s);
     mRenderScreen(s);
@@ -18478,6 +18515,7 @@
     updateDoc(doc(projectsCol, pd.id), { chat: arrayUnion(msg) }).then(function () {
       var ta = form.querySelector('textarea');
       ta.value = '';
+      draftSet('chat:' + name, '');
       mAutosize(ta);
       mCloseMentions();
       notifyOnProjectChat(text, name, false);
@@ -18603,6 +18641,7 @@
     updateDoc(doc(tasksCol, t.id), { comments: arrayUnion(c) }).then(function () {
       var ta = form.querySelector('textarea');
       ta.value = '';
+      draftSet('task:' + t.id, '');
       mAutosize(ta);
       mCloseMentions();
       ta.blur();
@@ -18978,10 +19017,22 @@
     var btn = ta.form && ta.form.querySelector('.m-send');
     if (btn) btn.disabled = !ta.value.trim();
   }
+  // Same unsent-draft store as the desktop boxes (UNSENT DRAFTS), same keys.
+  function mDraftKey(form) {
+    if (!form) return null;
+    var kind = form.getAttribute('data-m-form');
+    if (kind === 'comment') return 'task:' + form.getAttribute('data-task');
+    if (kind === 'chat') return 'chat:' + form.getAttribute('data-project');
+    return null;
+  }
   function mOnInput(e) {
     var el = e.target;
     if (el.id === 'm-task-search') { mTaskQuery = el.value; mRenderTab('tasks'); return; }
-    if (el.matches && el.matches('.m-compose textarea')) mAutosize(el);
+    if (el.matches && el.matches('.m-compose textarea')) {
+      mAutosize(el);
+      var dk = mDraftKey(el.form);
+      if (dk) draftSet(dk, el.value);
+    }
   }
   function mOnChange(e) {
     var input = e.target;
@@ -19676,6 +19727,47 @@
   });
 
   /* =========================================================
+     OFFLINE NOTICE
+     When the connection drops, Firestore keeps your edits in this tab and sends them once you're
+     back -- but only while the tab stays open, and nothing used to say so: people kept working
+     (or closed the laptop) believing it had saved. A small pill at the top says it, only while
+     offline, then "Back online" for a few seconds. Notion/Linear do the same. Amber = "not
+     available", the app's colour for that.
+  ========================================================= */
+  (function () {
+    var el = null, hideTimer = null;
+    var WIFI_OFF = '<svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h.01"></path><path d="M8.5 16.43a5 5 0 0 1 7 0"></path><path d="M5 12.86a10 10 0 0 1 5.17-2.69"></path><path d="M19 12.86a10 10 0 0 0-2-1.43"></path><path d="M2 8.82a15 15 0 0 1 4.18-2.65"></path><path d="M22 8.82a15 15 0 0 0-11.29-3.76"></path><path d="m2 2 20 20"></path></svg>';
+    function pill() {
+      if (el) return el;
+      el = document.createElement('div');
+      el.id = 'offline-notice';
+      el.setAttribute('role', 'status');
+      el.setAttribute('aria-live', 'polite');
+      el.className = 'hidden fixed left-1/2 -translate-x-1/2 z-[80] items-center gap-2 px-3.5 py-2 rounded-full border text-sm font-semibold shadow-pop panel-pop-in';
+      el.style.top = 'calc(env(safe-area-inset-top, 0px) + 0.6rem)';
+      document.body.appendChild(el);
+      return el;
+    }
+    var OFF = 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-zinc-800 dark:text-amber-300 dark:border-amber-500/40';
+    var ON = 'bg-emerald-50 text-emerald-800 border-emerald-300 dark:bg-zinc-800 dark:text-emerald-300 dark:border-emerald-500/40';
+    function show(online) {
+      var p = pill();
+      clearTimeout(hideTimer);
+      (OFF + ' ' + ON).split(' ').forEach(function (c) { p.classList.remove(c); });
+      (online ? ON : OFF).split(' ').forEach(function (c) { p.classList.add(c); });
+      p.innerHTML = online
+        ? svgIcon('check', 'w-4 h-4 shrink-0') + '<span>Back online. Your changes are saving.</span>'
+        : WIFI_OFF + '<span>You\'re offline. Keep this tab open and your changes will save when you\'re back.</span>';
+      p.classList.remove('hidden'); p.classList.add('flex');
+      if (online) hideTimer = setTimeout(function () { p.classList.add('hidden'); p.classList.remove('flex'); }, 3500);
+    }
+    var wasOffline = false;
+    window.addEventListener('offline', function () { wasOffline = true; show(false); });
+    window.addEventListener('online', function () { if (wasOffline) show(true); wasOffline = false; });
+    if (navigator.onLine === false) { wasOffline = true; show(false); }
+  })();
+
+  /* =========================================================
      LIVE UPDATE: prompt to refresh when a new version is deployed
      GitHub Pages has no push mechanism, so this polls a tiny version.txt
      (bumped on every push, alongside the same stamp baked into this page)
@@ -19685,7 +19777,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-08T08:58:53Z";
+  var CURRENT_BUILD_VERSION = "2026-10-08T09:15:16Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
