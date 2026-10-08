@@ -198,6 +198,10 @@ async function skipTours(page) {
   check('progress now 3 of 6 + Edit button', bar2.includes('3 of 6') && bar2.includes('Edit my update'), bar2);
   const view2 = await page.textContent('#weekly-view');
   check('needs help now 2', view2.includes('Needs help · 2') && view2.includes('Final speaker list by Wed'));
+  const deaneCard = await page.$$eval('#weekly-view section', ss => { const c = ss.find(s => s.textContent.includes('Deane Cheng')); return c ? c.innerText : ''; });
+  check('rows show next steps from the board', /Next:[\s\S]*Post assets/.test(deaneCard), deaneCard);
+  check('a row with no note shows something more than the project name', /SMB webinars[\s\S]*Next:/.test(deaneCard));
+  { const el = await page.$$('#weekly-view section'); for (const s of el) { if ((await s.innerText()).includes('Deane Cheng')) { await s.screenshot({ path: path.join(OUT, 'wk-rows-context.png') }); break; } } }
 
   // Edit after the meeting started (Tue 11:00 > Mon 10:00)
   await page.click('#weekly-bar [data-weekly-write]');

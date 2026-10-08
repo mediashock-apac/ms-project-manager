@@ -4048,6 +4048,13 @@ their week into a cell before the Monday meeting. Asked: "Is there a way to inte
   (a day or two off still expects an update; see "Features in sync"). The two chips look deliberately
   different (reported as "almost the same" when both were amber): Away is amber, the app-wide
   "not available" colour; Not in yet is a dashed neutral outline with a clock.
+  **Each row shows where the project stands** (2026-10-08, asked: "It doesn't help by just listing
+  the project name. It needs to show the current status. Can it show what is on the checklist items
+  or next steps?"): `weeklyRowContextHtml` adds "Next:" with this person's late (rose, "late, was
+  …") then upcoming steps/tasks there, then undated steps, up to 3 plus "+N more"; and "Latest
+  status:" (the newest WIP status line) when they wrote no note. Current meeting week only (the board
+  is now, not last week), not on Done rows. It replaced the right-hand next-date column. This is
+  text people typed on the board, unlike the removed "From the board" list on cards with no update.
   **"Delete update"** in the editor (only when one exists, `deleteWeeklyUpdate`) removes your update
   for that week and any leave it booked, with Undo on the toast (the confirm modal sits under this
   editor, and Undo is the app's pattern for reversible actions). Below `sm` the status

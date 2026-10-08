@@ -12688,7 +12688,7 @@
       });
       if (!owns && !involved && !steps.length) return;
       var p = t.project || 'No project';
-      var g = by[p] || (by[p] = { project: p, dates: [], lateDates: [], dueThisWeek: [], items: [] });
+      var g = by[p] || (by[p] = { project: p, dates: [], lateDates: [], dueThisWeek: [], items: [], undated: [] });
       if (t.deadline && owns) {
         g.dates.push(t.deadline);
         if (dueUrgency(t).overdue) g.lateDates.push(t.deadline);
@@ -12696,7 +12696,7 @@
         if (t.deadline >= key && t.deadline <= weekEnd) g.dueThisWeek.push({ date: t.deadline, text: t.name });
       }
       steps.forEach(function (it) {
-        if (!it.due) return;
+        if (!it.due) { if (it.text) g.undated.push(it.text); return; }
         g.dates.push(it.due);
         if (it.due < today) g.lateDates.push(it.due);
         g.items.push({ date: it.due, text: it.text });
@@ -12870,16 +12870,50 @@
     bar.innerHTML = html;
   }
 
-  function weeklyRowHtml(name, key, row, nextDate) {
+  // Under each project: where it stands, from what's already written on the board (asked: "It
+  // doesn't help by just listing the project name. It needs to show the current status. Can it show
+  // what is on the checklist items or next steps?"). This person's late and next steps/tasks there
+  // (up to 3, dated first, then undated steps), and the latest WIP status line when they wrote no
+  // note of their own. Only for the current meeting week: the board shows now, not last week.
+  function weeklyRowContextHtml(row, g) {
+    if (!g || row.status === 'done') return '';
+    var today = toDateInputValue(todayMidnight());
+    var seen = {}, items = [];
+    function push(x, late) {
+      var k = String(x.text || '').trim().toLowerCase();
+      if (!k || seen[k]) return;
+      seen[k] = true; items.push({ text: x.text, date: x.date, late: late });
+    }
+    g.items.filter(function (x) { return x.date < today; }).sort(function (a, b) { return a.date < b.date ? -1 : 1; }).forEach(function (x) { push(x, true); });
+    g.items.filter(function (x) { return x.date >= today; }).sort(function (a, b) { return a.date < b.date ? -1 : 1; }).forEach(function (x) { push(x, false); });
+    (g.undated || []).forEach(function (t) { push({ text: t, date: '' }, false); });
+    var shown = items.slice(0, 3), more = items.length - shown.length;
+    var out = '';
+    if (shown.length) {
+      out += '<span class="flex flex-wrap gap-x-3 gap-y-0.5 mt-1 text-xs text-zinc-500 dark:text-zinc-400"><span class="font-semibold">Next:</span>' +
+        shown.map(function (x) {
+          return '<span class="' + (x.late ? 'text-rose-600 dark:text-rose-400 font-semibold' : '') + '">' + escapeHtml(x.text) +
+            (x.date ? ' <span class="whitespace-nowrap">· ' + (x.late ? 'late, was ' : '') + escapeHtml(formatShortDate(x.date)) + '</span>' : '') + '</span>';
+        }).join('') +
+        (more > 0 ? '<span>+' + more + ' more</span>' : '') + '</span>';
+    }
+    if (!row.note && g.latest && g.latest.text) {
+      out += '<span class="block mt-0.5 text-xs text-zinc-500 dark:text-zinc-400"><span class="font-semibold">Latest status:</span> ' + escapeHtml(g.latest.text) +
+        ' <span class="whitespace-nowrap">· ' + escapeHtml(String(g.latest.author || '').split(' ')[0]) + (g.latest.date ? ', ' + escapeHtml(formatShortDate(g.latest.date)) : '') + '</span></span>';
+    }
+    return out;
+  }
+  function weeklyRowHtml(name, key, row, g) {
     var meta = WEEKLY_STATUS[row.status];
     var isNew = weeklyRowIsNew(name, key, row);
     // Below sm the status label takes its own line, so the project text keeps the card's width.
-    return '<div class="grid grid-cols-[minmax(0,1fr)_3.5rem] sm:grid-cols-[8.5rem_minmax(0,1fr)_3.5rem] gap-x-3 gap-y-0.5 items-baseline px-4 py-2.5 ' + (meta.row || '') + '">' +
-      '<span class="col-span-2 sm:col-span-1 flex items-center gap-1.5 text-xs font-bold ' + meta.text + '">' + weeklyIcon(row.status) + meta.label + '</span>' +
+    // The old right-hand date column is gone: the Next line carries the dates now.
+    return '<div class="grid grid-cols-1 sm:grid-cols-[8.5rem_minmax(0,1fr)] gap-x-3 gap-y-0.5 items-baseline px-4 py-2.5 ' + (meta.row || '') + '">' +
+      '<span class="flex items-center gap-1.5 text-xs font-bold ' + meta.text + '">' + weeklyIcon(row.status) + meta.label + '</span>' +
       '<span class="text-sm leading-snug min-w-0 break-words"><span class="font-semibold text-zinc-900 dark:text-white">' + projectNameHtml(row.project) + '</span>' +
         (row.note ? ' <span class="text-zinc-600 dark:text-zinc-300">– ' + escapeHtml(row.note) + '</span>' : '') +
-        (isNew ? ' <span class="align-middle text-[10px] font-bold px-1.5 py-px rounded-full bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300">NEW</span>' : '') + '</span>' +
-      '<span class="text-xs text-zinc-500 dark:text-zinc-400 text-right whitespace-nowrap">' + (nextDate ? escapeHtml(formatShortDate(nextDate)) : '') + '</span>' +
+        (isNew ? ' <span class="align-middle text-[10px] font-bold px-1.5 py-px rounded-full bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300">NEW</span>' : '') +
+        (key === weeklyCurrentKey() ? weeklyRowContextHtml(row, g) : '') + '</span>' +
     '</div>';
   }
 
@@ -12887,8 +12921,8 @@
     var entry = weeklyEntryFor(name, key);
     var me = weeklyMe();
     var board = weeklyBoardProjects(name, key);
-    var nextOf = {};
-    board.forEach(function (g) { nextOf[g.project] = g.next || g.late; });
+    var boardOf = {};
+    board.forEach(function (g) { boardOf[projectKey(g.project)] = g; });
     var right = '';
     var body = '';
     if (entry) {
@@ -12899,7 +12933,7 @@
       } else {
         var rows = weeklyRowsSorted(entry.rows);
         body = '<div class="divide-y divide-zinc-100 dark:divide-zinc-700/60">' +
-          rows.map(function (r) { return weeklyRowHtml(name, key, r, nextOf[r.project]); }).join('') +
+          rows.map(function (r) { return weeklyRowHtml(name, key, r, boardOf[projectKey(r.project)]); }).join('') +
           (entry.extra ? '<div class="grid grid-cols-1 sm:grid-cols-[8.5rem_minmax(0,1fr)] gap-x-3 gap-y-0.5 items-baseline px-4 py-2.5"><span class="flex items-center gap-1.5 text-xs font-bold text-zinc-500 dark:text-zinc-400">' + weeklyIcon('extra') + 'Also</span><span class="text-sm text-zinc-600 dark:text-zinc-300 break-words">' + escapeHtml(entry.extra) + '</span></div>' : '') +
           (!rows.length && !entry.extra ? '<p class="px-4 py-3 text-sm text-zinc-400">Nothing to report.</p>' : '') +
         '</div>';
@@ -16053,6 +16087,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-08t', date: '2026-10-08', items: [
+      { type: 'improved', title: 'Monday Meeting shows what is next', text: 'Each project in an update now lists that person\'s next checklist steps and tasks with their dates (late ones in red), and the latest status line when they did not write a note.' }
+    ] },
     { id: '2026-10-08s', date: '2026-10-08', items: [
       { type: 'new', title: 'Every link in a project, in one place', text: 'On Projects, each card now has "N files & links": the Drive folder, links on checklist steps, pinned links, brief links, and links pasted into comments, status updates and the chat, grouped by kind. Nothing to file: it fills itself in. On the phone it is on the project page.' }
     ] },
@@ -19885,7 +19922,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-08T09:48:50Z";
+  var CURRENT_BUILD_VERSION = "2026-10-08T09:56:57Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
