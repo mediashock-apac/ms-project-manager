@@ -105,7 +105,8 @@ function extra() {
       check('shared link shown once (on the heading)', (await linkCount('https://drive.google.com/drive/folders/adsizes')) === 1 && !!(await page.$('#task-checklist-editor .checklist-group-head a[href*="adsizes"]')));
       check('different links stay on their rows', (await linkCount('https://docs.google.com/document/d/agenda')) === 1 && (await linkCount('https://frame.io/export')) === 1 && !(await page.$('#task-checklist-editor .checklist-group-head a[href*="frame.io"]')));
       // editing a step in the shared group shows its people again in the editor
-      await page.click('#task-checklist-editor .checklist-edit-toggle[data-checklist-i="0"]'); await page.waitForTimeout(200);
+      await page.click('#task-checklist-editor .checklist-name[data-checklist-i="0"]'); await page.waitForTimeout(200);
+      check('clicking a step name opens its editor', await page.evaluate(() => document.activeElement && document.activeElement.classList.contains('checklist-text-input') && document.activeElement.value === 'Ad creative #1 1080x1080px'));
       check('editor still shows the step\'s people', !!(await page.$('#task-checklist-editor [data-checklist-editor-i] .checklist-person-chip')));
       await page.keyboard.press('Escape'); await page.waitForTimeout(150);
     }

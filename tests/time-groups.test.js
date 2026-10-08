@@ -134,7 +134,7 @@ function extra() {
 
   // edit the old single 30m entry: add Mychelle
   const oldIdx = await page.evaluate(() => [...document.querySelectorAll('#task-time-log > div')].findIndex(d => /30m\s+Briefing/.test(d.innerText)));
-  await page.click(`#task-time-log > div:nth-child(${oldIdx + 1}) .time-entry-edit`); await page.waitForTimeout(150);
+  await page.click(`#task-time-log > div:nth-child(${oldIdx + 1}) .time-entry-edit-text`); await page.waitForTimeout(150);
   const shown = await page.$$eval('#task-time-people .time-person-toggle', els => els.map(e => e.dataset.name + ':' + e.getAttribute('aria-pressed')));
   check('old entry: author ticked, step people offered', shown.join() === 'Deane Cheng:true,Mychelle Chen:false,Arvind Kumaraguru:false', shown.join());
   await page.click('#task-time-people .time-person-toggle[data-name="Mychelle Chen"]');

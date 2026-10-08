@@ -94,7 +94,12 @@ function extra() {
   await page.evaluate(() => { document.querySelector('[data-open-task="t1"]').click(); });
   await page.waitForTimeout(500); await skipTours(page);
   check('one dated item: no headings', (await page.$$('#task-checklist-editor .checklist-group-head')).length === 0 && (await page.textContent('#task-checklist-editor')).includes('Due Oct 7'));
+  check('several-at-once hint hidden at rest', !(await page.isVisible('#task-checklist-hint')));
   // bulk add with Shift+Enter typing
+  await page.click('#task-checklist-input');
+  check('hint shows while typing in the add row', await page.isVisible('#task-checklist-hint'));
+  await page.focus('#task-checklist-link-input');
+  check('hint stays while moving along the add row', await page.isVisible('#task-checklist-hint'));
   await page.click('#task-checklist-input');
   await page.keyboard.type('Ad creative #1 1080x1080px');
   await page.keyboard.press('Shift+Enter');

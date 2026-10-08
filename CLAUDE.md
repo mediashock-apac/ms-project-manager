@@ -4145,6 +4145,14 @@ draws one Timeline diamond instead of six, and hides a late size inside the batc
   Oct 9"), so a drag meant only to reorder never changes a date silently.
 - **The Add button says "Add 6"** once the box holds several lines, so a paragraph pasted by
   mistake shows what it would do before it's done.
+- **A hint shows only while the add row has focus** (`#task-checklist-hint`, focusin/focusout on
+  `#task-checklist-add-row`): "Shift+Enter for a new line, or paste a list; the link, date and people
+  set here go on every step". Added after the owner asked for "multiple items in one Add", which
+  already existed: an ability nobody can find counts as missing. Not shown at rest (clutter rule).
+- **Clicking a step's name edits it** (`.checklist-name`, same handler as the pencil), on request,
+  chosen over double-click (undiscoverable, poor on touch; Asana/Todoist and WIP's status lines use
+  a single click). **Time entries got the same** (`.time-entry-edit-text` on the duration and note),
+  so both lists in the task window behave alike. The pencils stay.
 - The last three were found by a usability check the owner had to ask for before pushing ("I
   should not need to remind"): run that check before proposing any UI change.
 - Verified in Chromium, light and dark, and at phone width (12 checks: Add N label, Shift+Enter,

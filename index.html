@@ -1792,7 +1792,7 @@
       <div class="pt-1 border-t border-zinc-100 dark:border-zinc-700">
         <label class="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mt-3 mb-1.5">Checklist</label>
         <div id="task-checklist-editor" class="flex flex-col gap-1.5 mb-2"></div>
-        <div class="flex flex-wrap items-start gap-2">
+        <div id="task-checklist-add-row" class="flex flex-wrap items-start gap-2">
           <!-- A textarea so several items can go in at once, one per line (typed with Shift+Enter or
                pasted). Enter adds them all. -->
           <textarea id="task-checklist-input" rows="1" placeholder="Add checklist items…" title="Enter adds. Shift+Enter or pasting several lines adds one item per line, all with the date and link set here." class="flex-[2] min-w-[9rem] text-sm leading-5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 resize-none overflow-y-auto max-h-40 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400"></textarea>
@@ -1803,6 +1803,9 @@
           <label title="Add to Google Calendar once a date is set" id="task-checklist-gcal-label" class="h-[38px] flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 opacity-50"><input type="checkbox" id="task-checklist-gcal-check" disabled class="brand-checkbox w-3.5 h-3.5 rounded border border-zinc-300 dark:border-zinc-600"> Calendar</label>
           <button type="button" id="task-checklist-add-btn" class="shrink-0 text-sm font-semibold px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">Add</button>
         </div>
+        <!-- Shown only while the add row has focus: adding several steps at once was asked for when it
+             already existed, so the ability needed saying where it is used, without noise at rest. -->
+        <p id="task-checklist-hint" class="hidden mt-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">Adding several? Shift+Enter for a new line, or paste a list. The link, date and people set here go on every step.</p>
       </div>
 
       <div id="task-time-section" class="pt-1 border-t border-zinc-100 dark:border-zinc-700">
@@ -7479,7 +7482,7 @@
                     checklistPeopleEditorHtml(stepPeople(item)) +
                   '</div>'
                 : '<div class="flex-1 min-w-0">' +
-                  '<span class="block text-sm ' + (item.done ? 'line-through text-zinc-400 dark:text-zinc-500' : 'text-zinc-700 dark:text-zinc-200') + '">' + escapeHtml(item.text) + '</span>' +
+                  '<span class="checklist-name block w-fit max-w-full cursor-text text-sm ' + (item.done ? 'line-through text-zinc-400 dark:text-zinc-500' : 'text-zinc-700 dark:text-zinc-200 hover:text-zinc-900 dark:hover:text-white') + '" data-checklist-i="' + i + '" title="Click to edit">' + escapeHtml(item.text) + '</span>' +
                   (item.link && !linkOnHead ? '<div>' + linkChipHtml(item.link) + '</div>' : '') +
                   (stepPeople(item).length && !peopleOnHead ? '<span class="flex items-center gap-1 text-[11px] text-zinc-500 dark:text-zinc-400">' + stepPeople(item).map(function (n) { return avatarHtml(n, 'w-3.5 h-3.5 shrink-0', 'text-[8px]'); }).join('') + escapeHtml(stepPeopleLabel(item)) + '</span>' : '') +
                   (inGroup ? '' : checklistDueLabelHtml(item, i)) +
@@ -7607,7 +7610,8 @@
       } } });
       return;
     }
-    var editToggle = e.target.closest('.checklist-edit-toggle');
+    // Clicking a step's name edits it, same as the pencil (asked; Asana/Todoist work this way).
+    var editToggle = e.target.closest('.checklist-edit-toggle, .checklist-name');
     if (editToggle) {
       checklistEditIndex = parseInt(editToggle.dataset.checklistI, 10);
       renderChecklistEditor();
@@ -8020,6 +8024,11 @@
       return line.replace(/^\s*(?:[-*\u2022\u00b7]|\d+[.)])\s+/, '').trim();
     }).filter(Boolean).slice(0, 50);
   }
+  (function () {
+    var row = document.getElementById('task-checklist-add-row'), hint = document.getElementById('task-checklist-hint');
+    row.addEventListener('focusin', function () { hint.classList.remove('hidden'); });
+    row.addEventListener('focusout', function (e) { if (!row.contains(e.relatedTarget)) hint.classList.add('hidden'); });
+  })();
   function autosizeChecklistInput() {
     var input = document.getElementById('task-checklist-input');
     input.style.height = 'auto';
@@ -8166,10 +8175,10 @@
           // Fixed-width avatar slot, so the duration column starts at the same x on every row.
           return '<div class="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-700/50">' +
             '<span class="tooltip-top shrink-0 w-10 flex -space-x-1" data-tooltip="' + escapeHtml(who) + '">' + timeGroupAvatarsHtml(people) + '</span>' +
-            '<span class="shrink-0 w-14 text-sm font-semibold text-zinc-700 dark:text-zinc-200">' + formatDuration(e.minutes) + '</span>' +
+            '<span class="time-entry-edit-text cursor-text shrink-0 w-14 text-sm font-semibold text-zinc-700 dark:text-zinc-200" data-i="' + i + '" title="Click to edit">' + formatDuration(e.minutes) + '</span>' +
             (label
-              ? '<span class="min-w-0 flex-1 truncate text-sm text-zinc-600 dark:text-zinc-300" title="' + escapeHtml(label) + '">' + escapeHtml(label) + '</span>'
-              : '<span class="min-w-0 flex-1 truncate text-sm text-zinc-400 dark:text-zinc-500">General</span>') +
+              ? '<span class="time-entry-edit-text cursor-text min-w-0 flex-1 truncate text-sm text-zinc-600 dark:text-zinc-300" data-i="' + i + '" title="' + escapeHtml(label) + ' (click to edit)">' + escapeHtml(label) + '</span>'
+              : '<span class="time-entry-edit-text cursor-text min-w-0 flex-1 truncate text-sm text-zinc-400 dark:text-zinc-500" data-i="' + i + '" title="Click to edit">General</span>') +
             (people.length > 1 ? '<span class="shrink-0 text-xs text-zinc-500 dark:text-zinc-400">' + people.length + ' people · ' + formatDuration(e.minutes * people.length) + '</span>' : '') +
             (e.billable && !allBillable ? '<span class="shrink-0 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-400">Billable</span>' : '') +
             (e.overtime ? '<span class="shrink-0 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-400">Overtime</span>' : '') +
@@ -8439,7 +8448,8 @@
 
   document.getElementById('task-time-log').addEventListener('click', function (e) {
     var rowIdx = function (btn) { return btn.dataset.i.split(',').map(function (x) { return parseInt(x, 10); }); };
-    var editBtn = e.target.closest('.time-entry-edit');
+    // Clicking the time or its note edits the entry, same as the pencil (and as a step's name).
+    var editBtn = e.target.closest('.time-entry-edit, .time-entry-edit-text');
     if (editBtn) {
       enterTimeEntryEditMode(rowIdx(editBtn));
       return;
@@ -15733,6 +15743,10 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-08j', date: '2026-10-08', items: [
+      { type: 'improved', title: 'Click a step or a logged time to edit it', text: 'In the task window, clicking a checklist step\'s name opens it for editing, and so does clicking a logged time or its note. The pencil still works too.' },
+      { type: 'improved', title: 'Adding several steps at once is easier to find', text: 'While you type in the checklist\'s add box, a short note now says how: Shift+Enter for a new line or paste a list, and the link, date and people you set go on every step.' }
+    ] },
     { id: '2026-10-08i', date: '2026-10-08', items: [
       { type: 'improved', title: 'A shared link shows once per checklist group', text: 'When every step due on the same day has the same link (one folder for six ad sizes, say), the link sits once on the date heading instead of under each step. Different links still show on their own steps.' }
     ] },
@@ -19438,7 +19452,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-08T07:17:16Z";
+  var CURRENT_BUILD_VERSION = "2026-10-08T07:33:02Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
