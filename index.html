@@ -3259,10 +3259,10 @@
   // Colour alone fails for colour-blind people and on the collapsed rail, so the icon carries it too.
   var DEPARTMENT_ICON = { suits: 'teamSuits', production: 'teamCreative', copy: 'teamCopy', admin: 'teamAdmin' };
   var DEPARTMENT_TRIGGER_TINT = {
-    suits: 'border-sky-300 bg-sky-50 dark:border-sky-500/40 dark:bg-sky-500/10',
+    suits: 'border-blue-300 bg-blue-50 dark:border-blue-500/40 dark:bg-blue-500/10',
     production: 'border-violet-300 bg-violet-50 dark:border-violet-500/40 dark:bg-violet-500/10',
     copy: 'border-teal-300 bg-teal-50 dark:border-teal-500/40 dark:bg-teal-500/10',
-    admin: 'border-stone-300 bg-stone-100 dark:border-stone-500/40 dark:bg-stone-500/15'
+    admin: 'border-lime-400 bg-lime-50 dark:border-lime-500/40 dark:bg-lime-500/10'
   };
   function teamspaceIconName(key) {
     return DEPARTMENT_ICON[key] || (key === 'unassigned' ? 'teamNone' : 'grid');
@@ -3403,10 +3403,12 @@
   // would make a teamspace chip read as a priority or as a project identity. Fixed, not hashed:
   // there are exactly three, and they should look the same on every card.
   var DEPARTMENT_BADGE = {
-    suits: 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300',
+    // Blue, violet, teal, lime: four hues far apart on the wheel (Suits was sky, too close to teal,
+    // and the same blue as Low priority; Admin was grey, which read as no team at all).
+    suits: 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300',
     production: 'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300',
     copy: 'bg-teal-100 text-teal-800 dark:bg-teal-500/15 dark:text-teal-300',
-    admin: 'bg-stone-200 text-stone-700 dark:bg-stone-500/20 dark:text-stone-300'
+    admin: 'bg-lime-100 text-lime-800 dark:bg-lime-500/15 dark:text-lime-300'
   };
 
   /* ---------------------------------------------------------
@@ -15850,7 +15852,7 @@
   ========================================================= */
   var CHANGELOG = [
     { id: '2026-10-08k', date: '2026-10-08', items: [
-      { type: 'improved', title: 'Each team has its own colour and icon', text: 'Suits is a blue briefcase, Creative/Post a violet clapperboard, Copy/Production a teal pen and Admin a clipboard. You see them in the team switcher (which takes your team\'s colour while you\'re viewing one team), on People and Monday Meeting, and in the profile menu. Switching teams plays a short animation.' },
+      { type: 'improved', title: 'Each team has its own colour and icon', text: 'Suits is a blue briefcase, Creative/Post a violet clapperboard, Copy/Production a teal pen and Admin a lime-green clipboard. You see them in the team switcher (which takes your team\'s colour while you\'re viewing one team), on People and Monday Meeting, and in the profile menu. Switching teams plays a short animation.' },
       { type: 'improved', title: 'New notifications are easier to notice', text: 'When something new arrives, the bell now rings and its red count pops. The This Week and Chat counts pop too whenever their number goes up.' }
     ] },
     { id: '2026-10-08j', date: '2026-10-08', items: [
@@ -19565,7 +19567,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-08T07:46:55Z";
+  var CURRENT_BUILD_VERSION = "2026-10-08T07:55:34Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

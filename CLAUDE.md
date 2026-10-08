@@ -3446,6 +3446,11 @@ plays a one-off animation (`.ts-anim`: tile pops, briefcase hops, clapper snaps,
 ticks), menu rows nudge their icon on hover; nothing loops, since the switcher is on screen all day.
 The button tile is redrawn only when the team changes, so a re-render can't restart the animation.
 A new department needs an entry in `DEPARTMENT_ICON` and `DEPARTMENT_TRIGGER_TINT` too.
+**Colours: Suits blue, Creative/Post violet, Copy/Production teal, Admin lime** (same day, reported:
+"Suits and copy/production colours are too close. Admin can do with a better colour besides grey").
+Suits was sky (too near teal, and the same blue as Low priority); Admin was stone grey, which read as
+"no team" next to the neutral All/Unassigned tiles. Pink was ruled out for Admin (sits beside the
+rose overdue chip on People cards). Keep the four hues far apart on the wheel.
 `tests/team-tiles.test.js`.
 
 **Current departments (2026-10-08):** Suits, **Creative/Post** (key `production`, renamed from

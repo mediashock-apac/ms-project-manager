@@ -107,12 +107,12 @@ async function skipTours(page) {
     await page.click('#teamspace-menu [data-teamspace="suits"]'); await page.waitForTimeout(80);
     if (!dark) {
       check('switching plays the one-off animation', await page.$eval('#teamspace-tile-wrap', e => e.classList.contains('ts-anim')));
-      check('button takes the team tint', await page.$eval('#teamspace-trigger', e => e.classList.contains('bg-sky-50')));
+      check('button takes the team tint', await page.$eval('#teamspace-trigger', e => e.classList.contains('bg-blue-50')));
       check('button tile is the Suits one', !!(await page.$('#teamspace-trigger .ts-suits')));
       await page.waitForTimeout(1100);
       check('animation class removed afterwards', !(await page.$eval('#teamspace-tile-wrap', e => e.classList.contains('ts-anim'))));
       await page.click('#teamspace-trigger'); await page.click('#teamspace-menu [data-teamspace="all"]'); await page.waitForTimeout(200);
-      check('All is neutral again', await page.$eval('#teamspace-trigger', e => !e.className.includes('sky-50') && e.classList.contains('bg-zinc-50')));
+      check('All is neutral again', await page.$eval('#teamspace-trigger', e => !e.className.includes('blue-50') && e.classList.contains('bg-zinc-50')));
       await page.click('#teamspace-trigger'); await page.click('#teamspace-menu [data-teamspace="production"]'); await page.waitForTimeout(300);
     } else { await page.waitForTimeout(1100); }
     await page.screenshot({ path: path.join(OUT, 'team-button' + (dark ? '-dark' : '') + '.png'), clip: { x: 0, y: 0, width: 300, height: 120 } });
