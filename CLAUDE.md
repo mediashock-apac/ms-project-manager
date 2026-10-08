@@ -3034,6 +3034,26 @@ Asked "what can be improved here?" against a 4K screenshot, then "build all seve
 - **Teamspace button**: light fill and a firmer border so it lifts off the sidebar; icon centred on
   the collapsed rail (`#sidebar.collapsed #teamspace-trigger`).
 
+### Project files & links (2026-10-08)
+
+Asked: "There should be a Shared files tab or combine with Projects so that all files or links used in
+that project are compiled and easy to access." Built as a section of the Projects card, not a tab
+(a tab would repeat Projects and add a sidebar row). PROJECT FILES & LINKS in index.html.
+
+- **Derived, never stored** (`projectLinks(name)`): the project's pinned links (`projects.links`,
+  shared with chat Pinned links and WIP Contact & links), brief Links rows (never the budget), every
+  task's Drive folder, checklist-step links, and URLs pasted into task comments, WIP status lines and
+  the project chat. Active and archived tasks. Deduped by URL (query/hash ignored); pinned wins.
+- **Grouped by kind** (`linkChipLabel`: Drive, Docs, Sheets, Slides, Forms, Frame.io, Figma, Canva,
+  YouTube, Vimeo, Dropbox, then Other links), pinned first then newest. Each row: a name from where
+  it was used (pinned label, step text, the message around the link), and "source · person · date".
+- **Card:** "N files & links" under the Brief button (only when there's at least one), opening a
+  two-column panel above the tasks (`projectFilesOpen`, session-only). **Phone project page:** a
+  "Files & links" section; its old "Contact & links" became "Client contact", since the links are in
+  the new section.
+- Can't list files that only live inside a Drive folder (that needs Google sign-in for Drive); the
+  folder link shows. `tests/project-files.test.js`.
+
 ### Creative briefs (version 1, built to be reverted cleanly)
 
 Briefs are written here instead of a Google Doc: one per project, `projects/{id}.brief`. Asked for after

@@ -9241,6 +9241,14 @@
       projectsCompletedOpen = !completedSummary.parentNode.open;
       return;
     }
+    var filesBtn = e.target.closest('.project-files-toggle');
+    if (filesBtn) {
+      var fName = filesBtn.getAttribute('data-project');
+      projectFilesOpen[fName] = !projectFilesOpen[fName];
+      if (projectFilesOpen[fName]) markJustOpened('files:' + fName);
+      renderProjects();
+      return;
+    }
     var expandBtn = e.target.closest('.project-expand-toggle');
     if (expandBtn) {
       var expName = expandBtn.getAttribute('data-project');
@@ -13754,6 +13762,92 @@
     return '<span class="text-xs font-bold px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300">' + n + '</span>';
   }
 
+  /* =========================================================
+     PROJECT FILES & LINKS -- every link used in a project, gathered in one place (asked: "all files or
+     links used in that project are compiled and easy to access"; built as a section of the Projects
+     card rather than its own tab). DERIVED, never stored: pinned links, brief links, task Drive
+     folders, checklist-step links, and links pasted into comments, WIP status lines and the chat.
+     Nothing to file or keep up to date. Asana's project Files view / Basecamp Docs & Files / Slack's
+     channel Files work the same way. The brief's budget link is never included.
+  ========================================================= */
+  var projectFilesOpen = {};   // project name -> true while its list is open (session only)
+  var FILE_GROUP_ORDER = ['Google Drive', 'Google Docs', 'Google Sheets', 'Google Slides', 'Google Forms', 'Frame.io', 'Figma', 'Canva', 'YouTube', 'Vimeo', 'Dropbox'];
+  function urlsIn(text) {
+    var out = [];
+    String(text || '').replace(/https?:\/\/[^\s<>"'\]\)]+/g, function (m) { out.push(m.replace(/[.,;:!?]+$/, '')); return m; });
+    return out;
+  }
+  function linkKey(url) { return String(url || '').trim().replace(/[#?].*$/, '').replace(/\/+$/, '').toLowerCase(); }
+  function projectLinks(name) {
+    var found = {}, list = [];
+    function add(url, title, source, by, when, pinned) {
+      if (!url) return;
+      var k = linkKey(url);
+      if (!k) return;
+      if (found[k]) { found[k].seen++; if (pinned && !found[k].pinned) { found[k].pinned = true; found[k].title = title; } return; }
+      var item = { url: url, title: title, source: source, by: by || '', when: when || '', pinned: !!pinned, seen: 1, type: linkChipLabel(url) };
+      found[k] = item; list.push(item);
+    }
+    function around(text, url) {
+      var t = String(text || '').replace(url, ' ').replace(/https?:\/\/\S+/g, ' ').replace(/\s+/g, ' ').trim().replace(/[\s:;,–—-]+$/, '');
+      return t.length > 70 ? t.slice(0, 70).replace(/\s+\S*$/, '') + '…' : t;
+    }
+    var pd = projectDeadlineDoc(name) || {};
+    (pd.links || []).forEach(function (l) { add(normalizeUrl(l.url), l.label || '', 'Pinned link', '', '', true); });
+    var b = pd.brief;
+    if (b && Array.isArray(b.sections)) b.sections.forEach(function (sec) {
+      if (sec.type !== 'links') return;
+      (sec.rows || []).forEach(function (r) { if (r.b) add(normalizeUrl(r.b), r.a || '', 'Brief', '', '', false); });
+    });
+    var own = tasks.concat(archivedTasks).filter(function (t) { return t.project === name; });
+    own.forEach(function (t) {
+      if (t.driveLink) add(t.driveLink, 'Project folder', 'Task: ' + t.name, t.assignee, t.createdAt, false);
+      (t.checklist || []).forEach(function (it) { if (it.link) add(normalizeUrl(it.link), it.text || '', 'Step in ' + t.name, stepPeopleLabel(it), it.due || '', false); });
+      (t.comments || []).forEach(function (c) { urlsIn(c.text).forEach(function (u) { add(u, around(c.text, u), 'Comment on ' + t.name, c.author, c.date, false); }); });
+      (t.statusUpdates || []).forEach(function (u0) { urlsIn(u0.text).forEach(function (u) { add(u, around(u0.text, u), 'Status on ' + t.name, u0.author, u0.at || u0.date, false); }); });
+    });
+    (pd.chat || []).forEach(function (m) { urlsIn(m.text).forEach(function (u) { add(u, around(m.text, u), 'Chat', m.author, m.date, false); }); });
+    return list;
+  }
+  function projectLinkGroups(list) {
+    var groups = {};
+    list.forEach(function (x) { var g = FILE_GROUP_ORDER.indexOf(x.type) !== -1 ? x.type : 'Other links'; (groups[g] = groups[g] || []).push(x); });
+    return FILE_GROUP_ORDER.concat(['Other links']).filter(function (g) { return groups[g]; }).map(function (g) {
+      // Pinned first, then newest.
+      return { label: g, items: groups[g].sort(function (a, b) { return (b.pinned - a.pinned) || String(b.when).localeCompare(String(a.when)); }) };
+    });
+  }
+  function projectLinkMeta(x) {
+    var bits = [x.source];
+    if (x.by) bits.push(x.by.split(' ')[0]);
+    var d = x.when ? String(x.when).slice(0, 10) : '';
+    if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) bits.push(formatShortDate(d));
+    return bits.join(' · ');
+  }
+  function projectFilesRowHtml(name) {
+    var n = projectLinks(name).length;
+    if (!n) return '';
+    var open = !!projectFilesOpen[name];
+    return '<button type="button" class="project-files-toggle mt-1.5 text-[11px] font-semibold flex items-center gap-1 ' +
+      (open ? 'text-brand-700 dark:text-brand-300' : 'text-zinc-500 dark:text-zinc-400 hover:text-brand-600 dark:hover:text-brand-400') + '" data-project="' + escapeHtml(name) + '" aria-expanded="' + open + '">' +
+      svgIcon('link', 'w-3 h-3') + n + (n === 1 ? ' file or link' : ' files & links') +
+      svgIcon('chevronDown', 'w-3 h-3 transition-transform' + (open ? ' rotate-180' : '')) + '</button>';
+  }
+  function projectFilesPanelHtml(name) {
+    var groups = projectLinkGroups(projectLinks(name));
+    return '<div class="px-4 py-3 border-b border-zinc-100 dark:border-zinc-700 bg-zinc-50/70 dark:bg-zinc-900/30 grid gap-3 sm:grid-cols-2' + openAnimClass('files:' + name) + '">' +
+      groups.map(function (g) {
+        return '<div class="min-w-0"><p class="text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500 mb-1">' + escapeHtml(g.label) + ' · ' + g.items.length + '</p>' +
+          g.items.map(function (x) {
+            var title = x.title || (x.type === 'Google Drive' ? 'Drive link' : x.type);
+            return '<a href="' + escapeHtml(x.url) + '" target="_blank" rel="noopener noreferrer" data-tooltip="' + escapeHtml(x.url) + '" class="tooltip-top group flex items-start gap-2 rounded-md px-1.5 py-1 -mx-1.5 hover:bg-white dark:hover:bg-zinc-700/60">' +
+              svgIcon(x.pinned ? 'pin' : 'link', 'w-3.5 h-3.5 mt-0.5 shrink-0 text-brand-600 dark:text-brand-400') +
+              '<span class="min-w-0"><span class="block text-sm font-medium text-zinc-800 dark:text-zinc-100 truncate group-hover:text-brand-700 dark:group-hover:text-brand-300">' + escapeHtml(title) + '</span>' +
+              '<span class="block text-[11px] text-zinc-500 dark:text-zinc-400 truncate">' + escapeHtml(projectLinkMeta(x)) + '</span></span></a>';
+          }).join('') + '</div>';
+      }).join('') + '</div>';
+  }
+
   function projectCardHtml(p) {
     var rowsHtml = p.rows.length
       ? p.rows.map(projectTaskRowHtml).join('')
@@ -13853,7 +13947,7 @@
     var isCompleted = p.activeCount === 0;
     return (
       '<div class="bg-white dark:bg-zinc-800 border ' + (isCompleted ? 'border-emerald-200 dark:border-emerald-500/30' : 'border-zinc-200 dark:border-zinc-700') + ' rounded-xl shadow-card overflow-hidden flex flex-col">' +
-        '<div class="flex items-center gap-2.5 px-4 py-3' + (isCompleted ? ' bg-emerald-50 dark:bg-emerald-500/10' : '') + (expanded ? ' border-b border-zinc-100 dark:border-zinc-700' : '') + '">' +
+        '<div class="flex items-center gap-2.5 px-4 py-3' + (isCompleted ? ' bg-emerald-50 dark:bg-emerald-500/10' : '') + (expanded && !projectFilesOpen[p.name] ? ' border-b border-zinc-100 dark:border-zinc-700' : '') + (projectFilesOpen[p.name] ? ' border-b border-zinc-100 dark:border-zinc-700' : '') + '">' +
           '<div class="min-w-0 flex-1">' +
             // The name toggles too, as a shortcut; the labelled pill on the right is the obvious
             // control (a bare chevron beside the name was reported as too easy to miss).
@@ -13866,6 +13960,7 @@
             '</div>' +
             deadlineRow +
             briefCardRowHtml(p.name) +   // creative brief (see CREATIVE BRIEFS)
+            projectFilesRowHtml(p.name) +   // see PROJECT FILES & LINKS
             (readyToArchive
               ? '<button type="button" class="project-archive-btn text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 flex items-center gap-1 mt-1.5" ' +
                 'data-project="' + escapeHtml(p.name) + '" title="Archive every task in this project and move it to Completed">' +
@@ -13885,6 +13980,7 @@
             '</button>' +
           '</div>' +
         '</div>' +
+        (projectFilesOpen[p.name] && projectLinks(p.name).length ? projectFilesPanelHtml(p.name) : '') +
         (expanded ? '<div class="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-700 flex-1' + openAnimClass('proj:' + p.name) + '">' + rowsHtml + '</div>' : '') +
       '</div>'
     );
@@ -15957,6 +16053,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-08s', date: '2026-10-08', items: [
+      { type: 'new', title: 'Every link in a project, in one place', text: 'On Projects, each card now has "N files & links": the Drive folder, links on checklist steps, pinned links, brief links, and links pasted into comments, status updates and the chat, grouped by kind. Nothing to file: it fills itself in. On the phone it is on the project page.' }
+    ] },
     { id: '2026-10-08r', date: '2026-10-08', items: [
       { type: 'fixed', title: 'Small fixes from a dark-mode check', text: 'The Timeline month heading no longer wraps onto two lines, the people filter list stays on screen and its tick boxes match the rest, and the Admin rights label on People no longer shares a colour with a team.' }
     ] },
@@ -16664,7 +16763,7 @@
       { target: '#weekly-view', title: "Going through it together", text: "Needs help comes first, then one card per person, grouped by team, each in the same order." }
     ] },
     projects: { since: PAGE_TOURS_EXISTING, steps: [
-      { target: '#projects-grid', title: "All your projects in one place", text: "Ongoing projects come first, nearest deadline on top. Open a card to see its tasks and hours, or give the project a deadline of its own. When every task is done, \"Ready to archive\" tidies the project away." },
+      { target: '#projects-grid', title: "All your projects in one place", text: "Ongoing projects come first, nearest deadline on top. Open a card to see its tasks and hours, or give the project a deadline of its own. \"Files & links\" gathers every link used in the project. When every task is done, \"Ready to archive\" tidies the project away." },
       { target: '#projects-grid [data-open-brief]', title: "Write the brief here", text: "Every project can have a creative brief. Click \"+ Brief\", pick a template and add only the sections the job needs. Everyone on the job can open it from the project and its tasks." }
     ] },
     chat: { since: PAGE_TOURS_EXISTING, steps: [
@@ -18915,12 +19014,18 @@
       return '<div class="m-comment"><div style="min-width:0;flex:1"><div style="font-size:12.5px;color:var(--m-sub);font-weight:600">' + escapeHtml(h.who) + ' · Monday update</div><div class="m-comment-text">' + escapeHtml(h.note || 'Asked for help') + '</div></div></div>';
     }).join('')));
     if (pd.wipNote) html += mSection('Notes', mGroup('<div class="m-comment"><div class="m-comment-text">' + escapeHtml(pd.wipNote) + '</div></div>'));
-    if (typeof wipCanSeeDetails === 'function' && wipCanSeeDetails() && (pd.clientContact || (pd.links || []).length)) {
-      html += mSection('Contact & links', mGroup(
-        (pd.clientContact ? '<div class="m-comment"><div class="m-comment-text">' + escapeHtml(pd.clientContact) + '</div></div>' : '') +
-        (pd.links || []).map(function (l) {
-          return '<a class="m-row m-tap" href="' + escapeHtml(l.url) + '" target="_blank" rel="noopener"><span class="m-row-main"><span class="m-row-title" style="color:var(--m-brand)">' + escapeHtml(l.label || linkChipLabel(l.url)) + '</span></span>' + mIcon('external', 'm-chev') + '</a>';
-        }).join('')));
+    if (typeof wipCanSeeDetails === 'function' && wipCanSeeDetails() && pd.clientContact) {
+      html += mSection('Client contact', mGroup(
+        '<div class="m-comment"><div class="m-comment-text">' + escapeHtml(pd.clientContact) + '</div></div>'));
+    }
+    var mLinks = projectLinks(name);
+    if (mLinks.length) {
+      html += mSection('Files & links · ' + mLinks.length, mGroup(projectLinkGroups(mLinks).map(function (g) {
+        return g.items.map(function (x) {
+          return '<a class="m-row m-tap" href="' + escapeHtml(x.url) + '" target="_blank" rel="noopener"><span class="m-row-main"><span class="m-row-title" style="color:var(--m-brand)">' +
+            escapeHtml(x.title || x.type) + '</span><span class="m-row-sub">' + escapeHtml(g.label + ' · ' + projectLinkMeta(x)) + '</span></span></a>';
+        }).join('');
+      }).join('')));
     }
     html += mSection('Open tasks · ' + open.length, open.length ? mGroup(open.map(function (t) { return mTaskRow(t, { owner: true }); }).join('')) : mEmpty('', 'Nothing open.'));
     var dels = Array.isArray(pd.wipDeliverables) ? pd.wipDeliverables : [];
@@ -19780,7 +19885,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-08T09:23:35Z";
+  var CURRENT_BUILD_VERSION = "2026-10-08T09:48:50Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
