@@ -1216,7 +1216,7 @@
              toolbar sits ABOVE the chart in the DOM, so at z-20 the header painted straight
              through an open dropdown on the Timeline tab (reported from a screenshot). 28 clears
              the chart while staying under the app header's own panels at z-30. -->
-        <div id="filter-people-menu" class="float-panel hidden absolute left-0 mt-1 z-[28] min-w-full w-[min(16rem,calc(100vw-2rem))] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 max-h-72 overflow-y-auto panel-pop-in">
+        <div id="filter-people-menu" class="float-panel hidden absolute right-0 mt-1 z-[28] min-w-full w-[min(16rem,calc(100vw-2rem))] bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 max-h-72 overflow-y-auto panel-pop-in">
           <div class="flex items-center justify-between px-3 py-1.5 border-b border-zinc-100 dark:border-zinc-700">
             <button type="button" id="filter-people-select-all" class="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300">Select all</button>
             <button type="button" id="filter-people-clear" class="text-xs font-semibold text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">Clear</button>
@@ -9063,7 +9063,7 @@
       ? roster.map(function (name) {
           var checked = filters.assignees.indexOf(name) !== -1;
           return '<label class="flex items-center gap-2 px-3 py-1.5 text-sm text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700/60 cursor-pointer">' +
-            '<input type="checkbox" data-filter-person="' + escapeHtml(name) + '"' + (checked ? ' checked' : '') + ' class="rounded border-zinc-300 dark:border-zinc-600 text-brand-600 focus:ring-brand-500/40">' +
+            '<input type="checkbox" data-filter-person="' + escapeHtml(name) + '"' + (checked ? ' checked' : '') + ' class="brand-checkbox w-4 h-4 shrink-0 rounded border border-zinc-300 dark:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500/40">' +
             '<span class="truncate">' + escapeHtml(name) + '</span>' +
           '</label>';
         }).join('')
@@ -11822,7 +11822,7 @@
       var label = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
       var last = monthSpans[monthSpans.length - 1];
       if (last && last.label === label) last.span++;
-      else monthSpans.push({ label: label, span: 1 });
+      else monthSpans.push({ label: label, span: 1, short: d.toLocaleDateString('en-US', { month: 'short' }) });
     });
 
     var headerRowsHeight = 64;
@@ -11925,7 +11925,7 @@
       // dark:bg-zinc-800 either, or the month row would coincidentally match "weekend" in light
       // mode -- three genuinely distinct tones now: month (lightest in dark mode, most
       // prominent) > weekday > weekend (darkest/most muted), an ascending step in light mode.
-      html += '<div class="sticky top-0 z-[25] bg-zinc-200 dark:bg-zinc-600 border-b border-l border-zinc-300 dark:border-zinc-500 gantt-month-divider flex items-center px-2 text-xs font-semibold text-zinc-600 dark:text-zinc-200" style="grid-column:' + colCursor + ' / span ' + m.span + ';grid-row:1;">' + m.label + '</div>';
+      html += '<div class="sticky top-0 z-[25] bg-zinc-200 dark:bg-zinc-600 border-b border-l border-zinc-300 dark:border-zinc-500 gantt-month-divider flex items-center px-2 text-xs font-semibold text-zinc-600 dark:text-zinc-200" style="grid-column:' + colCursor + ' / span ' + m.span + ';grid-row:1;white-space:nowrap;overflow:hidden;" title="' + m.label + '">' + (m.span >= 6 ? m.label : m.short) + '</div>';
       colCursor += m.span;
     });
 
@@ -13612,7 +13612,7 @@
       });
       // Admin belongs with identity, not workload -- a standing fact about the person.
       // Read-only: see isAdminName's own comment on why this can't be clicked to change.
-      if (isAdminName(p.name)) identityChips += '<span class="text-xs font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300" title="Admin rights are set in firestore.rules, not from this app.">Admin rights</span>';
+      if (isAdminName(p.name)) identityChips += '<span class="text-xs font-bold px-1.5 py-0.5 rounded border border-zinc-300 text-zinc-600 dark:border-zinc-600 dark:text-zinc-300" title="Admin rights are set in firestore.rules, not from this app.">Admin rights</span>';
       // Away reads before overdue: "3 overdue" means something quite different once you know the
       // person is not at their desk, so the qualifier has to arrive first.
       var awayNow = leavePeriodOn(p.name, toDateInputValue(todayMidnight()));
@@ -15957,6 +15957,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-08r', date: '2026-10-08', items: [
+      { type: 'fixed', title: 'Small fixes from a dark-mode check', text: 'The Timeline month heading no longer wraps onto two lines, the people filter list stays on screen and its tick boxes match the rest, and the Admin rights label on People no longer shares a colour with a team.' }
+    ] },
     { id: '2026-10-08q', date: '2026-10-08', items: [
       { type: 'new', title: 'Know when you are offline', text: 'If your connection drops, a note at the top says so. Keep the tab open and your changes save as soon as you are back online.' },
       { type: 'improved', title: 'Unsent comments are kept', text: 'Start a comment or a chat message and leave without sending it: it will still be in the box when you come back to that task or chat, on desktop or phone.' },
@@ -19777,7 +19780,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-08T09:15:16Z";
+  var CURRENT_BUILD_VERSION = "2026-10-08T09:23:35Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

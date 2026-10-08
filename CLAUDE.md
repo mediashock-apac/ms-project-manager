@@ -2756,6 +2756,12 @@ Asked "what other quality of life changes or fixes can be made?", then "your pic
   shows "Your unsent comment is kept". A chat message being edited is not a draft; the draft comes
   back after the edit. This browser only.
 - Monday Meeting: "Delete update" and no board list on not-in-yet cards (see that section).
+- **Dark-mode sweep** (every page and the main pop-ups screenshotted in dark). Found and fixed: the
+  Timeline month header wrapped ("September / 2026") over a 2-day stretch (now the short name under
+  6 days, as WIP already did, full name on hover); the "Admin rights" chip was the same violet as the
+  Creative/Post team chip (now a neutral outline: it's a role, not a team); the people filter list ran
+  off the right edge (now right-anchored) and its tick boxes were plain white (now `brand-checkbox`).
+  Plus `.float-panel` (see "Popups that open over the sidebar"). Rest looked right.
 
 ### Features in sync (2026-10-07)
 
