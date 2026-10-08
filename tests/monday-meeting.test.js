@@ -26,7 +26,7 @@ function seed() {
           ] }),
         u3: P({ name: 'Mychelle Chen', email: 'mychelle@mediashock.com.sg', departments: ['suits', 'admin'],
           weekly: [{ week: '2026-10-05', rows: [{ project: 'Paused thing', status: 'hold', note: 'Client paused till Nov' }, { project: 'GC GWS 8-9 Oct event', status: 'client', note: 'Client to share the brief' }, { project: 'GC TH podcast series', status: 'ontrack', note: 'Client check-in later this week' }], extra: 'New biz: follow up with Fugro', leave: false, at: '2026-10-05T01:12:00Z' }] }),
-        u4: P({ name: 'Zenon Kwok Ze Yong', email: 'zenon@mediashock.com.sg', departments: ['production'] }),
+        u4: P({ name: 'Zenon Kwok Ze Yong', email: 'zenon@mediashock.com.sg', departments: ['copy'] }),
         u5: P({ name: 'Chloe Hu', email: 'chloe@mediashock.com.sg', departments: ['admin'], leave: [{ id: 'l1', start: '2026-10-06', end: '2026-10-09', note: '' }] }),
         u7: P({ name: 'Nora NoDept', email: 'nora@mediashock.com.sg', departments: [] }),
         u6: P({ name: 'Old Leaver', email: 'old@mediashock.com.sg', departments: ['suits'], lastSeen: '2025-01-01T00:00:00Z' })
@@ -108,7 +108,7 @@ async function skipTours(page) {
   check('no Present button', !(await page.$('[data-weekly-present]')));
   const view = await page.textContent('#weekly-view');
   check('needs help box', view.includes('Needs help · 1') && view.includes('Need B-roll footage by Thursday'));
-  check('department headings', view.includes('Suits') && view.includes('Production') && view.includes('Admin'));
+  check('department headings', view.includes('Suits') && view.includes('Creative/Post') && view.includes('Copy/Production') && view.includes('Admin'));
   check('Arvind rows read help first', view.indexOf('Need B-roll') < view.indexOf('Dry run today'));
   check('NEW mark on changed row only', (await page.$$eval('#weekly-view section', ss => { var a = ss.find(s => s.textContent.includes('Arvind Kumaraguru')); return a ? (a.textContent.match(/NEW/g) || []).length : -1; })) === 2);
   console.log('ARVIND', await page.$$eval('#weekly-view section', ss => { var a = ss.find(s => s.textContent.includes('Arvind Kumaraguru')); return a ? a.innerText : 'none'; }));
@@ -122,7 +122,7 @@ async function skipTours(page) {
   check("duplicate task+step listed once", (z1.match(/Kickoff discussion/g) || []).length === 1, z1);
   check("all 7 due items shown, no cap", (z1.match(/Oct \d+/g) || []).length === 7 && !z1.includes("more") && !(await page.$("[data-weekly-more]")), z1);
   const heads = await page.$$eval('#weekly-view h3', hs => hs.map(h => h.textContent));
-  check('groups: Suits, Production, No department, Admin last', JSON.stringify(heads) === JSON.stringify(['Suits', 'Production', 'No department', 'Admin']), JSON.stringify(heads));
+  check('groups: Suits, Creative/Post, Copy/Production, No department, Admin last', JSON.stringify(heads) === JSON.stringify(['Suits', 'Creative/Post', 'Copy/Production', 'No department', 'Admin']), JSON.stringify(heads));
   const suitsNames = await page.$$eval('#weekly-view h3', hs => hs[0].nextElementSibling.innerText);
   const adminNames = await page.$$eval('#weekly-view h3', hs => hs[hs.length - 1].nextElementSibling.innerText);
   check('Suits + Admin person goes under Admin, not Suits', adminNames.includes('Mychelle Chen') && !suitsNames.includes('Mychelle Chen'), adminNames);
@@ -130,6 +130,27 @@ async function skipTours(page) {
   check('also line', view.includes('New biz: follow up with Fugro'));
   check('On hold shows, read after On track', view.includes('On hold') && view.indexOf('Client check-in later') < view.indexOf('Client paused till Nov') && view.indexOf('Client paused till Nov') < view.indexOf('New biz: follow up'));
   await page.screenshot({ path: path.join(OUT, 'wk-1-meeting.png'), fullPage: true });
+
+  // One column, and admins can reorder cards within a group
+  const xs = await page.$$eval('#weekly-view [data-weekly-card]', cs => cs.map(c => Math.round(c.getBoundingClientRect().left)));
+  check('one column: every card starts at the same x', xs.length > 3 && xs.every(x => x === xs[0]), JSON.stringify(xs));
+  const cardW = await page.$eval('#weekly-view [data-weekly-card]', c => c.getBoundingClientRect().width);
+  check('column capped at 64rem', cardW <= 1024 && cardW > 700, String(cardW));
+  check('admin sees drag handles', (await page.$$('#weekly-view [data-weekly-drag]')).length >= 5);
+  const adminOrder = async () => page.$$eval('#weekly-view h3', hs => Array.from(hs[hs.length - 1].nextElementSibling.querySelectorAll('[data-weekly-card]')).map(c => c.getAttribute('data-weekly-card')));
+  check('admin group starts alphabetical', JSON.stringify(await adminOrder()) === JSON.stringify(['Chloe Hu', 'Mychelle Chen']), JSON.stringify(await adminOrder()));
+  await page.focus('[data-weekly-drag="Mychelle Chen"]');
+  await page.keyboard.press('ArrowUp');
+  await page.waitForTimeout(400);
+  check('arrow key moves a card up', JSON.stringify(await adminOrder()) === JSON.stringify(['Mychelle Chen', 'Chloe Hu']), JSON.stringify(await adminOrder()));
+  const ranks = await page.evaluate(() => [window.__fb.data.people.u3.weeklyRank, window.__fb.data.people.u5.weeklyRank]);
+  check('order saved on each person (weeklyRank)', ranks[0] === 10 && ranks[1] === 20, JSON.stringify(ranks));
+  await page.dragAndDrop('[data-weekly-drag="Chloe Hu"]', '[data-weekly-card="Mychelle Chen"]', { targetPosition: { x: 200, y: 8 } });
+  await page.waitForTimeout(500);
+  check('drag moves a card above another', JSON.stringify(await adminOrder()) === JSON.stringify(['Chloe Hu', 'Mychelle Chen']), JSON.stringify(await adminOrder()));
+  await page.dragAndDrop('[data-weekly-drag="Chloe Hu"]', '[data-weekly-card="Arvind Kumaraguru"]', { targetPosition: { x: 200, y: 8 } });
+  await page.waitForTimeout(500);
+  check('cannot drag into another group', (await page.$$eval('#weekly-view h3', hs => hs[0].nextElementSibling.innerText)).includes('Chloe Hu') === false);
 
   // People is untouched
   await page.click('[data-view-btn="people"]');

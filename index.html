@@ -89,6 +89,11 @@
      row and the checklist-drag row do not, see below), so transform/opacity/box-shadow changes
      on .dragging animate smoothly with no extra transition rule needed here. */
   .task-card.dragging { opacity: 0.55; transform: scale(1.02); box-shadow: 0 10px 22px rgba(0, 0, 0, 0.25); }
+  /* Monday Meeting card reorder: the dragged card fades, and a brand line in the gap shows where
+     it will land (a shadow, since the card clips anything positioned outside it). */
+  .weekly-dragging { opacity: 0.45; }
+  .weekly-drop-before { box-shadow: 0 -9px 0 -6px #ff4e20 !important; }
+  .weekly-drop-after { box-shadow: 0 9px 0 -6px #ff4e20 !important; }
   /* [data-column] (the column wrapper) has no Tailwind `transition` class of its own, unlike
      .task-card, so the drop-target highlight needs an explicit one to fade in/out instead of
      snapping on/off. Only background-color is transitioned -- outline-style/width don't animate
@@ -1515,8 +1520,12 @@
 
     <!-- ============ MONDAY MEETING VIEW (weekly updates; see WEEKLY UPDATE) ============ -->
     <section id="view-weekly" data-view class="flex-1">
+      <!-- One column, capped at 64rem: full width on a wide screen would put each row's date far
+           from its project. -->
+      <div class="w-full max-w-5xl mx-auto">
       <div id="weekly-bar" class="flex flex-wrap items-center gap-3 mb-4"></div>
       <div id="weekly-view"></div>
+      </div>
     </section>
 
     <!-- ============ ACTIVITY VIEW ============ -->
@@ -3161,9 +3170,13 @@
   // none, which puts their tasks in Unassigned until they pick again. Stale values are left in
   // Firestore rather than cleaned up -- a person's row is writable only by themselves or an
   // admin, so there is no safe way to rewrite everyone's, and reading already ignores them.
+  // 'production' is labelled Creative/Post (renamed 2026-10-08, on request); the key stays
+  // 'production' so everyone already in it moves with no data change. Copy/Production ('copy') is
+  // a separate, newer team (asked for with Kan as its first member).
   var DEPARTMENTS = [
     { key: 'suits', label: 'Suits' },
-    { key: 'production', label: 'Production' },
+    { key: 'production', label: 'Creative/Post' },
+    { key: 'copy', label: 'Copy/Production' },
     { key: 'admin', label: 'Admin' }
   ];
   // 'all' and 'unassigned' are teamspaces you can be IN, but never values stored on a project:
@@ -3314,6 +3327,7 @@
   var DEPARTMENT_BADGE = {
     suits: 'bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300',
     production: 'bg-violet-100 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300',
+    copy: 'bg-teal-100 text-teal-800 dark:bg-teal-500/15 dark:text-teal-300',
     admin: 'bg-stone-200 text-stone-700 dark:bg-stone-500/20 dark:text-stone-300'
   };
 
@@ -12493,8 +12507,48 @@
     }).map(function (p) { return p.name; });
     var seenName = {};
     list = list.filter(function (n) { if (seenName[n]) return false; seenName[n] = true; return true; });
-    // Grouped by department like the sheet's SUIT block (see weeklyDeptRank), then by name.
-    return list.sort(function (a, b) { return (weeklyDeptRank(a) - weeklyDeptRank(b)) || a.localeCompare(b); });
+    // Grouped by department like the sheet's SUIT block (see weeklyDeptRank), then in the order an
+    // admin has dragged them into (weeklyRankOf), then by name for anyone not placed yet.
+    return list.sort(function (a, b) {
+      return (weeklyDeptRank(a) - weeklyDeptRank(b)) || (weeklyRankOf(a) - weeklyRankOf(b)) || a.localeCompare(b);
+    });
+  }
+
+  // Card order on Monday Meeting (asked for: "make the person's card rearrangeable"). One shared
+  // order for the whole room, stored as `weeklyRank` on each person's own roster doc -- the only
+  // team-shared place that needs no rules change, and one that only the person or an admin can
+  // write. So rearranging is for admins: they get a drag handle (and arrow keys on it), and a drop
+  // renumbers just that department's cards. Within a department only; moving someone to another
+  // group is their department, set in their profile menu.
+  function weeklyRankOf(n) {
+    var p = weeklyPersonDocByName(n);
+    return p && typeof p.weeklyRank === 'number' ? p.weeklyRank : 1e9;
+  }
+  function weeklyCanArrange() {
+    return isAdminUser() && !(typeof mActive === 'function' && mActive());
+  }
+  var weeklyDragName = null;
+  var weeklyRenderPending = false;
+  function weeklySaveOrder(names) {
+    var writes = [];
+    names.forEach(function (n, i) {
+      var p = weeklyPersonDocByName(n);
+      var rank = (i + 1) * 10;
+      if (!p || p.weeklyRank === rank) return;
+      p.weeklyRank = rank;   // show the new order at once; the snapshot confirms it
+      writes.push(setDoc(doc(peopleCol, p.id), { weeklyRank: rank }, { merge: true }));
+    });
+    renderWeeklyView();
+    if (writes.length) Promise.all(writes).catch(function (err) { showToast('Could not save the order: ' + err.message, 'error'); });
+  }
+  // Move `name` before `beforeName` (or to the end of the group when null), within its group.
+  function weeklyMoveCard(name, beforeName) {
+    var group = weeklyGroupDept(name);
+    var names = weeklyPeople(weeklyShownKey()).filter(function (n) { return weeklyGroupDept(n) === group && n !== name; });
+    var at = beforeName ? names.indexOf(beforeName) : names.length;
+    if (at < 0) return;
+    names.splice(at, 0, name);
+    weeklySaveOrder(names);
   }
 
   // The group a person is read out in: Admin if they have it at all, else their first department.
@@ -12626,9 +12680,12 @@
     var chips = personDepartments(name).map(function (k) {
       return '<span class="text-xs font-bold px-1.5 py-0.5 rounded ' + DEPARTMENT_BADGE[k] + '">' + escapeHtml(departmentLabel(k)) + '</span>';
     }).join('');
-    return '<section class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card overflow-hidden">' +
+    var grip = weeklyCanArrange()
+      ? '<button type="button" draggable="true" data-weekly-drag="' + escapeHtml(name) + '" data-tooltip="Drag to reorder (or use the arrow keys)" aria-label="Move ' + escapeHtml(name) + ' (arrow keys)" class="tooltip-top -ml-1.5 w-6 h-7 shrink-0 flex items-center justify-center rounded-md cursor-grab active:cursor-grabbing text-zinc-400 dark:text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-600">' + svgIcon('grip', 'w-3.5 h-3.5') + '</button>'
+      : '';
+    return '<section data-weekly-card="' + escapeHtml(name) + '" class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card overflow-hidden">' +
       '<div class="flex items-center gap-2.5 px-4 py-2.5 bg-zinc-100 dark:bg-zinc-700/60 border-b border-zinc-200 dark:border-zinc-600">' +
-        avatarHtml(name, 'w-7 h-7 shrink-0', 'text-xs') +
+        grip + avatarHtml(name, 'w-7 h-7 shrink-0', 'text-xs') +
         '<p class="text-base font-bold text-zinc-900 dark:text-white truncate min-w-0" data-tooltip="' + escapeHtml(name) + '">' + escapeHtml(name) + '</p>' +
         chips + '<span class="flex-1"></span>' + right +
       '</div>' + body +
@@ -12653,6 +12710,8 @@
   }
 
   function renderWeeklyView() {
+    // A redraw mid-drag would replace the card being dragged and cancel the drag.
+    if (weeklyDragName) { weeklyRenderPending = true; return; }
     var wrap = document.getElementById('weekly-view');
     var key = weeklyShownKey();
     var people = weeklyPeople(key);
@@ -12680,7 +12739,8 @@
     var showHeads = groups.length > 1;
     wrap.innerHTML = helpHtml + groups.map(function (g) {
       return (showHeads ? '<h3 class="text-sm font-bold text-zinc-500 dark:text-zinc-400 mt-1 mb-2.5">' + escapeHtml(g.dept ? departmentLabel(g.dept) : 'No department') + '</h3>' : '') +
-        '<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start mb-6">' + g.names.map(function (n) { return weeklyCardHtml(n, key); }).join('') + '</div>';
+        // One column (asked for directly): read down the room in order, and draggable within it.
+        '<div class="flex flex-col gap-4 mb-6">' + g.names.map(function (n) { return weeklyCardHtml(n, key); }).join('') + '</div>';
     }).join('');
   }
 
@@ -12890,6 +12950,75 @@
     });
     document.getElementById('weekly-view').addEventListener('click', function (e) {
       if (e.target.closest('[data-weekly-write]')) openWeeklyEditor();
+    });
+
+    // Rearranging cards (admins): drag a card by its grip onto another card in the same group, or
+    // focus the grip and press Up/Down.
+    var weeklyViewEl = document.getElementById('weekly-view');
+    function weeklyClearDropMarks() {
+      weeklyViewEl.querySelectorAll('.weekly-drop-before, .weekly-drop-after').forEach(function (el) {
+        el.classList.remove('weekly-drop-before', 'weekly-drop-after');
+      });
+    }
+    function weeklyDropTarget(e) {
+      var card = e.target.closest('[data-weekly-card]');
+      if (!card || !weeklyDragName) return null;
+      var over = card.getAttribute('data-weekly-card');
+      if (over === weeklyDragName || weeklyGroupDept(over) !== weeklyGroupDept(weeklyDragName)) return null;
+      var r = card.getBoundingClientRect();
+      return { card: card, name: over, after: e.clientY > r.top + r.height / 2 };
+    }
+    weeklyViewEl.addEventListener('dragstart', function (e) {
+      var h = e.target.closest && e.target.closest('[data-weekly-drag]');
+      if (!h) return;
+      weeklyDragName = h.getAttribute('data-weekly-drag');
+      var card = h.closest('[data-weekly-card]');
+      if (card) { card.classList.add('weekly-dragging'); try { e.dataTransfer.setDragImage(card, 24, 20); } catch (err) { /* ignore */ } }
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', weeklyDragName); } catch (err) { /* ignore */ }
+    });
+    weeklyViewEl.addEventListener('dragover', function (e) {
+      var t = weeklyDropTarget(e);
+      weeklyClearDropMarks();
+      if (!t) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      t.card.classList.add(t.after ? 'weekly-drop-after' : 'weekly-drop-before');
+    });
+    weeklyViewEl.addEventListener('drop', function (e) {
+      var t = weeklyDropTarget(e);
+      weeklyClearDropMarks();
+      if (!t) return;
+      e.preventDefault();
+      var dragged = weeklyDragName;
+      var group = weeklyGroupDept(dragged);
+      var names = weeklyPeople(weeklyShownKey()).filter(function (n) { return weeklyGroupDept(n) === group && n !== dragged; });
+      var idx = names.indexOf(t.name) + (t.after ? 1 : 0);
+      weeklyDragName = null;
+      weeklyRenderPending = false;
+      weeklyMoveCard(dragged, names[idx] || null);
+    });
+    weeklyViewEl.addEventListener('dragend', function () {
+      weeklyClearDropMarks();
+      weeklyViewEl.querySelectorAll('.weekly-dragging').forEach(function (el) { el.classList.remove('weekly-dragging'); });
+      weeklyDragName = null;
+      if (weeklyRenderPending) { weeklyRenderPending = false; renderWeeklyView(); }
+    });
+    weeklyViewEl.addEventListener('keydown', function (e) {
+      var h = e.target.closest && e.target.closest('[data-weekly-drag]');
+      if (!h || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+      e.preventDefault();
+      var name = h.getAttribute('data-weekly-drag');
+      var group = weeklyGroupDept(name);
+      var names = weeklyPeople(weeklyShownKey()).filter(function (n) { return weeklyGroupDept(n) === group; });
+      var i = names.indexOf(name);
+      var j = e.key === 'ArrowUp' ? i - 1 : i + 1;
+      if (i < 0 || j < 0 || j >= names.length) return;
+      names.splice(i, 1);
+      names.splice(j, 0, name);
+      weeklySaveOrder(names);
+      var again = weeklyViewEl.querySelector('[data-weekly-drag="' + (window.CSS && CSS.escape ? CSS.escape(name) : name) + '"]');
+      if (again) again.focus();
     });
   }
 
@@ -15529,6 +15658,10 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-08e', date: '2026-10-08', items: [
+      { type: 'improved', title: 'Monday Meeting in one column', text: 'Monday Meeting now lists everyone in a single column, so the room reads down it in order. Admins can drag a person\'s card by the dots on the left to change the order within their team, and everyone sees the same order.' },
+      { type: 'improved', title: 'Team names', text: 'Production is now called Creative/Post, and there\'s a new Copy/Production team. If you\'re in Copy/Production, choose it in your profile menu under your departments.' }
+    ] },
     { id: '2026-10-08d', date: '2026-10-08', items: [
       { type: 'improved', title: 'Admin group on Monday Meeting', text: 'Anyone who has Admin as one of their departments now sits in the Admin group on Monday Meeting, which is always last. Before, someone in both Suits and Admin was listed under Suits.' }
     ] },
@@ -19218,7 +19351,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-08T01:19:02Z";
+  var CURRENT_BUILD_VERSION = "2026-10-08T02:03:22Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

@@ -3413,8 +3413,15 @@ happens to be.
 
 ### Teamspaces (departments)
 
-Notion-style teamspaces — Suits, Production, Marketing, Admin. Pick one in the sidebar switcher
+Notion-style teamspaces — Suits, Creative/Post, Copy/Production, Admin. Pick one in the sidebar switcher
 and the whole app scopes to it.
+
+**Current departments (2026-10-08):** Suits, **Creative/Post** (key `production`, renamed from
+"Production" on request; the key was kept so nobody's saved department changed), **Copy/Production**
+(key `copy`, new, teal badge; asked for with Kan as its first member), Admin. Older notes below that
+say "Production" mean Creative/Post. Someone appears on Monday Meeting only once they've signed in
+(they need a roster row), and picks their own department from the first-login prompt or the profile
+menu.
 
 **A task belongs to the teamspace of whoever it is assigned to.** That is the entire scoping
 rule, and it is the *second* rule this feature had.
@@ -3887,6 +3894,15 @@ their week into a cell before the Monday meeting. Asked: "Is there a way to inte
   "Latest:" = the newest WIP status line on any of the project's open tasks (`weeklyLatestStatus`,
   with date and first name) plus "Use this" to copy it into the note; "Coming up:" = your next
   three dated tasks/steps there. Muted, and only when there's something to show.
+- **One column, capped at 64rem, and admins can reorder cards** (both asked for directly,
+  2026-10-08). Two columns made the room read left-right-left; full width on a wide screen put each
+  row's date far from its project. The order is shared: `people/{uid}.weeklyRank` (10, 20, …) on
+  each person's own doc, the only team-shared place needing no rules change, writable by the person
+  or an admin -- so only admins get the grip (`weeklyCanArrange`, not on the phone layout). Drag
+  onto another card (an orange line shows where it lands) or focus the grip and press Up/Down;
+  `weeklySaveOrder` renumbers that department only. Moves stay within a department (that's set in
+  the profile menu). Unranked people sort by name after ranked ones. A redraw mid-drag is held
+  until the drag ends (`weeklyRenderPending`), or it would cancel the drag.
 - **Reading it:** Needs help from everyone first, then one card per person grouped by department
   (like the sheet's blocks; **Admin always last**, after people with no department, and **anyone
   with Admin among their departments sits under Admin**, e.g. Suits + Admin: `weeklyGroupDept`/
