@@ -3514,14 +3514,14 @@ and the whole app scopes to it.
 **Each team has a colour AND an icon (2026-10-08)** (asked "make it obvious which department", then
 "will a design or icon be included? Besides just using colour cues"): `teamspaceTileHtml(key)` draws a
 square in the team's `DEPARTMENT_BADGE` colour with its icon (`DEPARTMENT_ICON`: Suits briefcase,
-Creative/Post clapperboard, Copy/Production pen nib, Admin clipboard; All = grid, Unassigned = dashed
+Creative/Post paint palette, Copy/Production clapperboard (swapped on request the same day), Admin clipboard; All = grid, Unassigned = dashed
 circle, both neutral). Icon as well as colour because colour alone fails for colour-blind people and
 on the collapsed rail. Used in the switcher button and menu, the profile menu, the first-login prompt
 and Monday group headings; `departmentChipHtml(key)` puts the icon in the People/Monday chips. The
 switcher button takes the team's tint (`DEPARTMENT_TRIGGER_TINT`) only while ONE team is chosen, so a
 coloured button always means "you're seeing one team"; the selected menu row lost its orange label
 (orange is the brand/button colour), the tick marks it. **Motion only on change**: a pick in the menu
-plays a one-off animation (`.ts-anim`: tile pops, briefcase hops, clapper snaps, pen writes, clipboard
+plays a one-off animation (`.ts-anim`: tile pops, briefcase hops, clapper snaps, palette wobbles, clipboard
 ticks), menu rows nudge their icon on hover; nothing loops, since the switcher is on screen all day.
 The button tile is redrawn only when the team changes, so a re-render can't restart the animation.
 A new department needs an entry in `DEPARTMENT_ICON` and `DEPARTMENT_TRIGGER_TINT` too.
