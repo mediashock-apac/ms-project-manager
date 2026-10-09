@@ -94,6 +94,7 @@ async function skipTours(page) {
     await page.evaluate(() => window.__fb.remote(function (d) {
       const t1 = d.tasks.t1;
       t1.driveLink = 'https://drive.google.com/drive/folders/gws';
+      t1.timeEntries = [{ minutes: 600, author: 'Deane Cheng', date: '2026-10-05T02:00:00Z', note: 'Edit' }, { minutes: 135, author: 'Mychelle Chen', date: '2026-10-05T03:00:00Z', note: 'Review' }, { minutes: 60, author: 'Deane Cheng', date: '2026-10-06T03:00:00Z', note: 'Fixes' }];
       t1.checklist = [
         { id: 'c1', text: 'Final deck', due: '2026-10-08', done: false, link: 'https://docs.google.com/presentation/d/deck1/edit' },
         { id: 'c2', text: 'Cut v2', due: '2026-10-09', done: false, link: 'https://next.frame.io/project/cut2' },
@@ -137,6 +138,16 @@ async function skipTours(page) {
       check('it shows under client assets', /Font files/.test(await cardText()));
       await page.click('#projects-grid .project-link-remove[data-link-id="l1"]'); await page.waitForTimeout(500);
       check('a pinned link can be removed', !(await page.evaluate(() => (window.__fb.data.projects.p1.links || []).some(l => l.id === 'l1'))));
+    }
+    if (!dark) {
+      const cardEl = async () => page.$eval(card, b => b.closest('.rounded-xl').innerText);
+      check('project total still shown (13h 15m)', /13h 15m/.test(await cardEl()), (await cardEl()).slice(0, 200));
+      await page.$eval(card, b => b.closest('.rounded-xl').querySelector('.project-expand-toggle[aria-expanded="false"]').click()); await page.waitForTimeout(400);
+      const byp = await page.$eval(card, b => { const e = b.closest('.rounded-xl').querySelector('.project-time-by-person'); return e ? e.innerText : ''; });
+      check('opening the tasks shows time by person, most first', /Deane\s*11h[\s\S]*Mychelle\s*2h 15m/.test(byp), byp);
+      check('total still shown with the breakdown open', /13h 15m/.test(await cardEl()));
+      const tip = await page.$eval(card, b => b.closest('.rounded-xl').querySelector('.text-lg[data-tooltip]').getAttribute('data-tooltip'));
+      check('hovering the total names each person', tip === 'Deane Cheng 11h · Mychelle Chen 2h 15m', tip);
     }
     const box = await page.$eval(card, b => { const r = b.closest('.rounded-xl').getBoundingClientRect(); return { x: r.x - 8, y: r.y - 8, width: r.width + 16, height: Math.min(r.height + 16, 900) }; });
     await page.screenshot({ path: path.join(OUT, 'project-files' + (dark ? '-dark' : '') + '.png'), clip: box });

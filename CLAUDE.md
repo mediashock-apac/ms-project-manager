@@ -1005,6 +1005,12 @@ to bottom:
        `bg-emerald-50 dark:bg-emerald-500/10` wash `boardTaskRowHtml`'s `rowBg` uses, on the card
        header, plus an emerald border. One colour for "finished" across views. Header only: the
        expanded task rows stay neutral so an open card doesn't turn into a block of green.
+   - **Time by person** (2026-10-09, asked: "this does not breakdown the time tracked for each person
+     attached?", then "It should still show the total hrs on that project"). The card's big total is
+     unchanged; `timeByPerson(tasks)` adds (1) a "Time by person" line at the top of the opened task
+     list (avatar, first name, hours, most first) and (2) the same split as a hover on the total and
+     on any task's hours that two or more people logged. By each entry's `author` (who the time is
+     for), active and archived tasks, so it always adds up to the total. Nothing new at rest.
    - `renderProjects`: splits into **Ongoing** (sorted by `nextDeadline` ascending) and **Completed**
      (sorted by `lastArchivedAt` descending, collapsible) stacked sections (formerly side by side), not one flat list —
      each task/project row also has a separate amber "OT" badge (`taskOvertimeMinutes`) next to its
