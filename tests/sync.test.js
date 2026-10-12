@@ -151,7 +151,7 @@ function extra() {
   await page.click('#weekly-modal-foot [data-weekly-send]'); await page.waitForTimeout(600);
   const myLeave = await page.evaluate(() => Object.values(window.__fb.data.people).find(p => p.name === 'Deane Cheng').leave || []);
   check('"I\'m on leave this week" books Mon-Fri leave', myLeave.some(l => l.start === '2026-10-05' && l.end === '2026-10-09'), JSON.stringify(myLeave));
-  await page.click('[data-weekly-write]'); await page.waitForTimeout(300);
+  await page.click('[data-weekly-edit="Deane Cheng"]'); await page.waitForTimeout(300);
   check('editor shows it ticked from the booked leave', /On leave this week/.test(await page.textContent('#weekly-modal')));
   await page.click('[data-weekly-leave]'); await page.waitForTimeout(150);
   await page.fill('#weekly-extra', 'Back after all');

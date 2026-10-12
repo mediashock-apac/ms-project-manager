@@ -12650,6 +12650,7 @@
     ontrack: '<path d="M20 6 9 17l-5-5"></path>',
     hold: '<circle cx="12" cy="12" r="10"></circle><path d="M10 9v6"></path><path d="M14 9v6"></path>',
     done: '<circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path>',
+    away: '<rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M16 2v4"></path><path d="M8 2v4"></path><path d="M3 10h18"></path>',
     extra: '<path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"></path>'
   };
   // Label colours avoid the priority hues (rose/amber/sky) and purple (ready for review):
@@ -12729,6 +12730,7 @@
       if (!owns && !involved && !steps.length) return;
       var p = t.project || 'No project';
       var g = by[p] || (by[p] = { project: p, dates: [], lateDates: [], dueThisWeek: [], items: [], undated: [] });
+      if (owns) g.owns = true;
       if (t.deadline && owns) {
         g.dates.push(t.deadline);
         if (dueUrgency(t).overdue) g.lateDates.push(t.deadline);
@@ -12880,6 +12882,47 @@
     return !old || old.status !== row.status || String(old.note || '') !== String(row.note || '');
   }
 
+  /* The owner answers for the project (asked: "If the project owner updates the project, it should
+     reflect automatically onto the update of people attached. Not needing to ask again").
+     A project's owners are the people who own a task in it. Someone only attached to it (involved,
+     or on its steps) is not asked about it while an owner's update covers it: their entry stores
+     the project under `follows`, and their card shows the owner's current row, read live, so the
+     owner changing it later changes it everywhere. Nothing is copied. Answering it yourself
+     ("Answer myself") puts your own row in `rows`, which always wins. */
+  function weeklyProjectOwners(project) {
+    var k = projectKey(project), out = [];
+    activeTasks().concat(archivedTasks).forEach(function (t) {
+      if (t && t.assignee && projectKey(t.project || 'No project') === k && out.indexOf(t.assignee) === -1) out.push(t.assignee);
+    });
+    return out;
+  }
+  // The owner's own row for `project` in week `key` (never someone else's followed one), newest
+  // update first when there are several owners. null when no owner has said anything yet.
+  function weeklyOwnerRow(project, key, notName) {
+    var k = projectKey(project), best = null, bestAt = '';
+    weeklyProjectOwners(project).forEach(function (owner) {
+      if (owner === notName) return;
+      var e = weeklyEntryFor(owner, key);
+      if (!e || e.leave) return;
+      var r = (e.rows || []).find(function (x) { return x && projectKey(x.project) === k && WEEKLY_STATUS[x.status]; });
+      var at = e.editedAt || e.at || '';
+      if (r && (!best || at > bestAt)) { best = { project: r.project, status: r.status, note: r.note || '', from: owner }; bestAt = at; }
+    });
+    return best;
+  }
+  // An entry's rows as read: its own answers plus the owners' rows for the projects it follows.
+  function weeklyRowsWithFollowed(name, key, entry) {
+    var rows = (entry.rows || []).slice();
+    var have = {};
+    rows.forEach(function (r) { if (r) have[projectKey(r.project)] = true; });
+    (entry.follows || []).forEach(function (p) {
+      if (have[projectKey(p)]) return;
+      var r = weeklyOwnerRow(p, key, name);
+      if (r) { have[projectKey(p)] = true; rows.push(r); }
+    });
+    return rows;
+  }
+
   function renderWeeklyBar() {
     var bar = document.getElementById('weekly-bar');
     var html = '';
@@ -12888,8 +12931,6 @@
     var people = weeklyPeople(key).filter(function (n) { return !!weeklyEntryFor(n, key) || !weeklyAwayDuring(n, key); });
     var inCount = people.filter(function (n) { return !!weeklyEntryFor(n, key); }).length;
     var waiting = people.filter(function (n) { return !weeklyEntryFor(n, key); });
-    var me = weeklyMe();
-    var mine = me ? weeklyEntryFor(me, key) : null;
     var pct = people.length ? Math.round(inCount / people.length * 100) : 0;
     html +=
       '<div class="flex items-center gap-0.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 p-0.5">' +
@@ -12902,11 +12943,10 @@
         '<div class="w-28 h-2 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden shrink-0"><div class="h-full bg-zinc-800 dark:bg-zinc-200" style="width:' + pct + '%"></div></div>' +
         '<span class="text-sm text-zinc-600 dark:text-zinc-300 truncate"><b class="text-zinc-900 dark:text-white">' + inCount + ' of ' + people.length + '</b> in' +
           (waiting.length && waiting.length <= 4 ? ' · waiting on ' + escapeHtml(waiting.map(function (n) { return n.split(' ')[0]; }).join(', ')) : waiting.length ? ' · ' + waiting.length + ' to go' : '') + '</span>' +
-      '</div>' +
-      '<span class="flex-1"></span>' +
-      (me ? '<button type="button" data-weekly-write class="text-sm font-semibold px-3.5 py-2 rounded-lg ' +
-        (mine ? 'border border-zinc-300 dark:border-zinc-600 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700' : 'bg-brand-500 hover:bg-brand-600 text-white') + '">' +
-        (mine ? 'Edit my update' : 'Write my update') + '</button>' : '');
+      '</div>';
+    // No Write/Edit button here any more: it sits on each person's card (asked: "Make the button
+    // within each person's line instead of one button on top"). The top one always opened THIS
+    // week even while an older week was on screen, so a past update looked editable and wasn't.
     bar.innerHTML = html;
   }
 
@@ -12949,13 +12989,15 @@
   }
   function weeklyRowHtml(name, key, row, g) {
     var meta = WEEKLY_STATUS[row.status];
-    var isNew = weeklyRowIsNew(name, key, row);
+    // A followed row is the owner's: it's marked NEW on the owner's own card, not repeated here.
+    var isNew = !row.from && weeklyRowIsNew(name, key, row);
     // Below sm the status label takes its own line, so the project text keeps the card's width.
     // The old right-hand date column is gone: the Next line carries the dates now.
     return '<div class="grid grid-cols-1 sm:grid-cols-[8.5rem_minmax(0,1fr)] gap-x-3 gap-y-0.5 items-baseline px-4 py-2.5 ' + (meta.row || '') + '">' +
       '<span class="flex items-center gap-1.5 text-xs font-bold ' + meta.text + '">' + weeklyIcon(row.status) + meta.label + '</span>' +
       '<span class="text-sm leading-snug min-w-0 break-words"><span class="font-semibold text-zinc-900 dark:text-white">' + projectNameHtml(row.project) + '</span>' +
         (row.note ? ' <span class="text-zinc-600 dark:text-zinc-300">– ' + escapeHtml(row.note) + '</span>' : '') +
+        (row.from ? ' <span class="text-xs text-zinc-500 dark:text-zinc-400 whitespace-nowrap" data-tooltip="' + escapeHtml(row.from) + ' owns this project; their update shows here">· from ' + escapeHtml(String(row.from).split(' ')[0]) + '</span>' : '') +
         (isNew ? ' <span class="align-middle text-[10px] font-bold px-1.5 py-px rounded-full bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300">NEW</span>' : '') +
         (key === weeklyCurrentKey() ? weeklyRowContextHtml(row, g) : '') + '</span>' +
     '</div>';
@@ -12970,12 +13012,14 @@
     var right = '';
     var body = '';
     if (entry) {
-      var edited = entry.editedAt && new Date(entry.editedAt) > weeklyMeetingStart(key);
-      right = '<span class="text-xs text-zinc-500 dark:text-zinc-400">' + (edited ? 'Edited ' + escapeHtml(weeklyStamp(entry.editedAt)) : 'Updated ' + escapeHtml(weeklyStamp(entry.at))) + '</span>';
+      // An admin's edit to someone else's update always shows, with who made it.
+      var byOther = entry.editedBy && entry.editedBy !== name;
+      var edited = entry.editedAt && (byOther || new Date(entry.editedAt) > weeklyMeetingStart(key));
+      right = '<span class="text-xs text-zinc-500 dark:text-zinc-400">' + (edited ? 'Edited ' + escapeHtml(weeklyStamp(entry.editedAt)) + (byOther ? ' by ' + escapeHtml(String(entry.editedBy).split(' ')[0]) : '') : 'Updated ' + escapeHtml(weeklyStamp(entry.at))) + '</span>';
       if (entry.leave) {
         body = '<p class="px-4 py-3 text-sm text-zinc-600 dark:text-zinc-300"><span class="font-semibold text-amber-800 dark:text-amber-300">On leave this week.</span>' + (entry.extra ? ' ' + escapeHtml(entry.extra) : '') + '</p>';
       } else {
-        var rows = weeklyRowsSorted(entry.rows);
+        var rows = weeklyRowsSorted(weeklyRowsWithFollowed(name, key, entry));
         body = '<div class="divide-y divide-zinc-100 dark:divide-zinc-700/60">' +
           rows.map(function (r) { return weeklyRowHtml(name, key, r, boardOf[projectKey(r.project)]); }).join('') +
           (entry.extra ? '<div class="grid grid-cols-1 sm:grid-cols-[8.5rem_minmax(0,1fr)] gap-x-3 gap-y-0.5 items-baseline px-4 py-2.5"><span class="flex items-center gap-1.5 text-xs font-bold text-zinc-500 dark:text-zinc-400">' + weeklyIcon('extra') + 'Also</span><span class="text-sm text-zinc-600 dark:text-zinc-300 break-words">' + escapeHtml(entry.extra) + '</span></div>' : '') +
@@ -13000,17 +13044,32 @@
             '<button type="button" data-weekly-write class="text-sm font-bold px-3.5 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white">Write my update</button></div>' : '') +
       '</div>';
     }
+    // Their upcoming leave, last on the card. No "This week" tag when the header already says
+    // "Away this week" (one fact once).
+    var awayRow = weeklyPersonAwayHtml(name, key, !(!entry && weeklyAwayDuring(name, key)));
+    if (awayRow) body += body ? '<div class="border-t border-zinc-100 dark:border-zinc-700/60">' + awayRow + '</div>' : awayRow;
     var chips = personDepartments(name).map(function (k) {
       return departmentChipHtml(k);
     }).join('');
     var grip = weeklyCanArrange()
       ? '<button type="button" draggable="true" data-weekly-drag="' + escapeHtml(name) + '" data-tooltip="Drag to reorder (or use the arrow keys)" aria-label="Move ' + escapeHtml(name) + ' (arrow keys)" class="tooltip-top -ml-1.5 w-6 h-7 shrink-0 flex items-center justify-center rounded-md cursor-grab active:cursor-grabbing text-zinc-400 dark:text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-600">' + svgIcon('grip', 'w-3.5 h-3.5') + '</button>'
       : '';
+    // Edit sits on the card it edits, for the week on screen: your own card, and (admins) anyone's.
+    // Yours is a labelled pill; on other people's cards an admin gets just the pencil, so a screen
+    // of cards doesn't turn into a column of Edit buttons.
+    // Not on the phone layout, which reuses these cards and keeps its own Write/Edit button.
+    var edit = '';
+    if (typeof mActive === 'function' && mActive()) edit = '';
+    else if (entry && name === me) {
+      edit = '<button type="button" data-weekly-edit="' + escapeHtml(name) + '" class="shrink-0 inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg border border-zinc-300 dark:border-zinc-500 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700">' + svgIcon('pencil', 'w-3 h-3') + 'Edit</button>';
+    } else if (entry && isAdminUser()) {
+      edit = '<button type="button" data-weekly-edit="' + escapeHtml(name) + '" data-tooltip="Edit ' + escapeHtml(name.split(' ')[0]) + '\'s update" aria-label="Edit ' + escapeHtml(name) + '\'s update" class="tooltip-top shrink-0 w-7 h-7 flex items-center justify-center rounded-md text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-600">' + svgIcon('pencil', 'w-3.5 h-3.5') + '</button>';
+    }
     return '<section data-weekly-card="' + escapeHtml(name) + '" class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card overflow-hidden">' +
       '<div class="flex items-center gap-2.5 px-4 py-2.5 bg-zinc-100 dark:bg-zinc-700/60 border-b border-zinc-200 dark:border-zinc-600">' +
         grip + avatarHtml(name, 'w-7 h-7 shrink-0', 'text-xs') +
         '<p class="text-base font-bold text-zinc-900 dark:text-white truncate min-w-0" data-tooltip="' + escapeHtml(name) + '">' + escapeHtml(name) + '</p>' +
-        chips + '<span class="flex-1"></span>' + right +
+        chips + '<span class="flex-1"></span>' + right + edit +
       '</div>' + body +
     '</section>';
   }
@@ -13025,6 +13084,28 @@
       (e.rows || []).forEach(function (r) { if (r && r.status === 'help') out.push({ name: n, project: r.project, note: r.note }); });
     });
     return out;
+  }
+
+  // A person's leave from the meeting week through the next 3, as a row on their own card (asked:
+  // "Monday meeting should also include upcoming leaves", then "The leave should be under each
+  // person and not colated on the top"). Booked leave from People > Time off, the same periods
+  // WIP's Away card reads (wipAwayRows), so the two meetings can't disagree. No row when they have
+  // none. `tagThisWeek` is false when the card header already says "Away this week".
+  var WEEKLY_AWAY_WEEKS = 4;
+  function weeklyPersonAwayHtml(name, key, tagThisWeek) {
+    var to = toDateInputValue(addDays(parseDate(key), WEEKLY_AWAY_WEEKS * 7 - 1));
+    var weekEnd = toDateInputValue(addDays(parseDate(key), 6));
+    var rows = (typeof wipAwayRows === 'function' ? wipAwayRows(key, to) : []).filter(function (r) { return r.name === name; });
+    if (!rows.length) return '';
+    return '<div class="grid grid-cols-1 sm:grid-cols-[8.5rem_minmax(0,1fr)] gap-x-3 gap-y-0.5 items-baseline px-4 py-2.5">' +
+      '<span class="flex items-center gap-1.5 text-xs font-bold text-amber-700 dark:text-amber-400">' + weeklyIcon('away') + 'Away</span>' +
+      '<span class="flex flex-col gap-0.5 text-sm text-zinc-700 dark:text-zinc-200 min-w-0">' + rows.map(function (r) {
+        var span = daysBetween(parseDate(r.start), parseDate(r.end)) + 1;
+        var thisWeek = tagThisWeek && r.start <= weekEnd && r.end >= key;
+        return '<span class="break-words">' + escapeHtml(formatShortDate(r.start) + (r.end !== r.start ? ' – ' + formatShortDate(r.end) : '')) +
+          ' <span class="text-zinc-500 dark:text-zinc-400">· ' + span + ' day' + (span === 1 ? '' : 's') + (r.note ? ' · ' + escapeHtml(r.note) : '') + '</span>' +
+          (thisWeek ? ' <span class="align-middle text-[10px] font-bold px-1.5 py-px rounded-full bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/30">This week</span>' : '') + '</span>';
+      }).join('') + '</span></div>';
   }
 
   function renderWeeklyPage() {
@@ -13070,10 +13151,20 @@
   /* ---------- Your own update ---------- */
   var weeklyModal = document.getElementById('weekly-modal');
 
-  function openWeeklyEditor() {
-    var me = weeklyMe();
-    if (!me || !myPersonDoc()) { showToast('Your profile is still loading. Try again in a moment.', 'info'); return; }
-    var key = weeklyCurrentKey();
+  // The roster doc an update is written to: your own by uid, or (admins only) someone else's by name.
+  function weeklyTargetDoc(name) {
+    if (name === weeklyMe()) return myPersonDoc();
+    return isAdminUser() ? weeklyPersonDocByName(name) : null;
+  }
+
+  // Opens the editor for `name`'s update for week `key` (default: you, this meeting week). Called
+  // with no arguments by the reminder, the phone and the "Write my update" prompt.
+  function openWeeklyEditor(name, key) {
+    var self = weeklyMe();
+    var me = name || self;
+    key = key || weeklyCurrentKey();
+    var target = me ? weeklyTargetDoc(me) : null;
+    if (!target) { showToast(me === self ? 'Your profile is still loading. Try again in a moment.' : 'Only admins can edit someone else\'s update.', 'info'); return; }
     var existing = weeklyEntryFor(me, key);
     var prev = weeklyEntryFor(me, weeklyShiftKey(key, -1));
     var board = weeklyBoardProjects(me, key);
@@ -13094,7 +13185,15 @@
       var row = add(r.project, null);
       row.status = r.status; row.note = r.note || '';
     });
-    weeklyDraft = { week: key, rows: rows, extra: existing ? (existing.extra || '') : '', leave: existing ? !!existing.leave : weeklyAwayDuring(me, key), existing: existing };
+    // Projects you're only attached to: while an owner's update covers one, it's answered for you
+    // (see weeklyOwnerRow). `mine` = you answered it yourself, which wins over the owner's.
+    rows.forEach(function (r) {
+      var owners = weeklyProjectOwners(r.project);
+      r.attached = owners.length > 0 && owners.indexOf(me) === -1;
+      r.cover = r.attached ? weeklyOwnerRow(r.project, key, me) : null;
+      r.mine = !!r.status;
+    });
+    weeklyDraft = { week: key, person: me, personId: target.id, rows: rows, extra: existing ? (existing.extra || '') : '', leave: existing ? !!existing.leave : weeklyAwayDuring(me, key), existing: existing };
     renderWeeklyEditor();
     weeklyModal.classList.remove('hidden');
     weeklyModal.classList.add('flex');
@@ -13109,28 +13208,51 @@
   function renderWeeklyEditor() {
     var d = weeklyDraft;
     if (!d) return;
-    document.getElementById('weekly-modal-title').textContent = 'Your update · ' + weeklyLabel(d.week).replace('Week of ', 'week of ');
+    var mine = d.person === weeklyMe();
+    var first = String(d.person).split(' ')[0];
+    var covered = d.rows.filter(weeklyRowFollowsOwner).length;
+    document.getElementById('weekly-modal-title').textContent = (mine ? 'Your update' : first + '\'s update') + ' · ' + weeklyLabel(d.week).replace('Week of ', 'week of ');
     document.getElementById('weekly-modal-sub').textContent = d.leave
       ? 'Marked as on leave. Add a note if anyone needs to know something.'
       : d.rows.length
-        ? d.rows.length + (d.rows.length === 1 ? ' project' : ' projects') + ' from the board. One tap each; add a note only if it helps.'
-        : 'Nothing open on the board for you. Add anything worth saying below.';
+        ? d.rows.length + (d.rows.length === 1 ? ' project' : ' projects') + ' from the board' +
+          (covered ? ', ' + covered + ' already answered by ' + (covered === 1 ? 'its owner' : 'their owners') : '') +
+          '. One tap each; add a note only if it helps.'
+        : 'Nothing open on the board for ' + (mine ? 'you' : first) + '. Add anything worth saying below.';
     var body = '';
     if (!d.leave) {
       body += d.rows.map(function (r, i) {
         var sub = r.late ? 'Late since ' + formatShortDate(r.late) : '';
+        var upcomingHtml = r.upcoming && r.upcoming.length
+          ? '<p class="min-w-0 break-words"><span class="font-semibold text-zinc-600 dark:text-zinc-300">Coming up:</span> ' +
+            r.upcoming.map(function (x) { return escapeHtml(x.text) + ' <span class="text-zinc-400 dark:text-zinc-500">' + escapeHtml(formatShortDate(x.date)) + '</span>'; }).join('<span class="text-zinc-300 dark:text-zinc-600"> · </span>') + '</p>'
+          : '';
+        var ownerFirst = r.cover ? String(r.cover.from).split(' ')[0] : '';
+        var head = '<div class="flex items-baseline gap-2.5 flex-wrap"><span class="text-[15px] font-bold text-zinc-900 dark:text-white break-words min-w-0">' + projectNameHtml(r.project) + '</span>' +
+          (sub ? '<span class="text-xs font-semibold text-rose-600 dark:text-rose-400">' + escapeHtml(sub) + '</span>' : '') + '</div>';
+        // Covered by the owner: nothing to ask, just what they said and a way to say your own.
+        if (weeklyRowFollowsOwner(r)) {
+          var cm = WEEKLY_STATUS[r.cover.status];
+          return '<div class="px-5 py-3.5 border-b border-zinc-100 dark:border-zinc-700/60 flex flex-col gap-2">' + head +
+            '<div class="flex flex-wrap items-baseline gap-x-2 gap-y-1 rounded-lg bg-zinc-50 dark:bg-zinc-700/40 px-3 py-2 text-sm">' +
+              '<span class="text-zinc-500 dark:text-zinc-400">' + escapeHtml(ownerFirst) + '\'s update:</span>' +
+              '<span class="inline-flex items-center gap-1 text-xs font-bold ' + cm.text + '">' + weeklyIcon(r.cover.status) + cm.label + '</span>' +
+              (r.cover.note ? '<span class="min-w-0 break-words text-zinc-700 dark:text-zinc-200">– ' + escapeHtml(r.cover.note) + '</span>' : '') +
+              '<span class="flex-1"></span><button type="button" data-weekly-own="' + i + '" class="text-xs font-bold text-brand-600 dark:text-brand-400 hover:underline">Answer myself</button>' +
+            '</div>' +
+            (upcomingHtml ? '<div class="flex flex-col gap-0.5 text-xs text-zinc-500 dark:text-zinc-400">' + upcomingHtml + '</div>' : '') +
+          '</div>';
+        }
         // Reference lines, muted, only when there is something to show: the newest status line on
         // the project (with "Use this" to copy it into the note) and what's coming up for you there.
         var refs = '';
         if (r.latest) refs += '<p class="min-w-0 break-words"><span class="font-semibold text-zinc-600 dark:text-zinc-300">Latest:</span> ' + escapeHtml(r.latest.text) +
           ' <span class="text-zinc-400 dark:text-zinc-500">· ' + escapeHtml(formatShortDate(r.latest.date)) + (r.latest.author ? ' · ' + escapeHtml(String(r.latest.author).split(' ')[0]) : '') + '</span>' +
           (r.note === r.latest.text ? '' : ' <button type="button" data-weekly-use="' + i + '" class="font-bold text-brand-600 dark:text-brand-400 hover:underline">Use this</button>') + '</p>';
-        if (r.upcoming && r.upcoming.length) refs += '<p class="min-w-0 break-words"><span class="font-semibold text-zinc-600 dark:text-zinc-300">Coming up:</span> ' +
-          r.upcoming.map(function (x) { return escapeHtml(x.text) + ' <span class="text-zinc-400 dark:text-zinc-500">' + escapeHtml(formatShortDate(x.date)) + '</span>'; }).join('<span class="text-zinc-300 dark:text-zinc-600"> · </span>') + '</p>';
-        return '<div class="px-5 py-3.5 border-b border-zinc-100 dark:border-zinc-700/60 flex flex-col gap-2.5">' +
-          '<div class="flex items-baseline gap-2.5 flex-wrap"><span class="text-[15px] font-bold text-zinc-900 dark:text-white break-words min-w-0">' + projectNameHtml(r.project) + '</span>' +
-            (sub ? '<span class="text-xs font-semibold text-rose-600 dark:text-rose-400">' + escapeHtml(sub) + '</span>' : '') + '</div>' +
+        refs += upcomingHtml;
+        return '<div class="px-5 py-3.5 border-b border-zinc-100 dark:border-zinc-700/60 flex flex-col gap-2.5">' + head +
           (refs ? '<div class="flex flex-col gap-0.5 text-xs text-zinc-500 dark:text-zinc-400">' + refs + '</div>' : '') +
+          (r.cover ? '<p class="text-xs text-zinc-500 dark:text-zinc-400">Answering yourself. <button type="button" data-weekly-follow="' + i + '" class="font-bold text-brand-600 dark:text-brand-400 hover:underline">Use ' + escapeHtml(ownerFirst) + '\'s update instead</button></p>' : '') +
           (r.last && !r.status
             ? '<div class="flex flex-wrap items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400"><span class="min-w-0 break-words">Last week: <b class="text-zinc-700 dark:text-zinc-200">' + escapeHtml(WEEKLY_STATUS[r.last.status] ? WEEKLY_STATUS[r.last.status].label : '') + '</b>' + (r.last.note ? ' – ' + escapeHtml(r.last.note) : '') + '</span>' +
               '<button type="button" data-weekly-same="' + i + '" class="font-bold text-brand-600 dark:text-brand-400 hover:underline">Same as last week</button></div>'
@@ -13154,10 +13276,10 @@
       '<input type="text" id="weekly-extra" maxlength="300" value="' + escapeHtml(d.extra) + '" placeholder="' + (d.leave ? 'e.g. Invoices sent before I left' : 'e.g. AI course booked for Thursday') + '" class="w-full max-w-md text-sm rounded-lg border border-dashed border-zinc-300 dark:border-zinc-600 px-3 py-2 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand-500/40">' +
     '</div>';
     document.getElementById('weekly-modal-body').innerHTML = body;
-    var answered = d.rows.filter(function (r) { return r.status; }).length;
+    var answered = d.rows.filter(function (r) { return r.status || weeklyRowFollowsOwner(r); }).length;
     var open = d.rows.length - answered;
     document.getElementById('weekly-modal-foot').innerHTML =
-      '<button type="button" data-weekly-leave class="text-[13px] font-semibold px-3 py-1.5 rounded-full border ' + (d.leave ? 'bg-amber-100 border-amber-300 text-amber-800 dark:bg-amber-500/15 dark:border-amber-500/30 dark:text-amber-300' : 'border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:border-zinc-400') + '">' + (d.leave ? 'On leave this week' : 'I\'m on leave this week') + '</button>' +
+      '<button type="button" data-weekly-leave class="text-[13px] font-semibold px-3 py-1.5 rounded-full border ' + (d.leave ? 'bg-amber-100 border-amber-300 text-amber-800 dark:bg-amber-500/15 dark:border-amber-500/30 dark:text-amber-300' : 'border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:border-zinc-400') + '">' + (d.leave ? 'On leave this week' : mine ? 'I\'m on leave this week' : first + ' is on leave this week') + '</button>' +
       (!d.leave && d.rows.length ? '<span class="text-sm text-zinc-500 dark:text-zinc-400"><b class="text-zinc-800 dark:text-zinc-100">' + answered + ' of ' + d.rows.length + '</b> answered</span>' : '') +
       (!d.leave && open > 0 && answered > 0 ? '<button type="button" data-weekly-rest class="text-[13px] font-bold text-brand-600 dark:text-brand-400 hover:underline">Mark the rest On track</button>' : '') +
       '<span class="flex-1"></span>' +
@@ -13165,6 +13287,9 @@
       '<button type="button" data-weekly-cancel class="text-sm text-zinc-500 hover:text-zinc-800 dark:hover:text-zinc-200 px-2 py-2">Later</button>' +
       '<button type="button" data-weekly-send class="text-sm font-bold px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white">' + (d.existing ? 'Save changes' : 'Send update') + '</button>';
   }
+
+  // An editor row answered by the project's owner (you're only attached, and haven't answered it).
+  function weeklyRowFollowsOwner(r) { return !!(r && r.cover && !r.mine); }
 
   function weeklyKeepNotes() {
     // Notes and the extra line are read from the DOM before any re-render throws them away.
@@ -13180,9 +13305,14 @@
   // Removes your update for the week being edited (asked for: a way to take one back), plus the
   // leave it booked, if any. Undo on the toast instead of a confirm: the confirm modal sits under
   // this editor, and the app uses Undo for anything reversible.
+  // The live roster doc for the update being edited (yours, or someone else's for an admin).
+  function weeklyDraftDoc(d) {
+    return d ? teamPeople.find(function (p) { return p.id === d.personId; }) || null : null;
+  }
+
   function deleteWeeklyUpdate() {
     var d = weeklyDraft;
-    var me = myPersonDoc();
+    var me = weeklyDraftDoc(d);
     if (!d || !d.existing || !me) return;
     var before = { weekly: weeklyListOf(me).slice(), leave: Array.isArray(me.leave) ? me.leave.slice() : [] };
     var weekEndKey = toDateInputValue(addDays(parseDate(d.week), 4));
@@ -13202,16 +13332,23 @@
   function saveWeeklyUpdate() {
     weeklyKeepNotes();
     var d = weeklyDraft;
-    var me = myPersonDoc();
+    var me = weeklyDraftDoc(d);
     if (!d || !me) return;
     var rows = d.leave ? [] : d.rows.filter(function (r) { return r.status; }).map(function (r) {
       return { project: r.project, status: r.status, note: String(r.note || '').trim().slice(0, 200) };
     });
+    // Projects you're only attached to and didn't answer yourself follow their owner's update,
+    // including one the owner hasn't written yet: it shows up on your card once they do.
+    var follows = d.leave ? [] : d.rows.filter(function (r) { return r.attached && !r.status; }).map(function (r) { return r.project; });
     var extra = String(d.extra || '').trim().slice(0, 300);
-    if (!d.leave && !rows.length && !extra) { showToast('Tap a status on at least one project first', 'info'); return; }
+    var anyCovered = !d.leave && d.rows.some(weeklyRowFollowsOwner);
+    if (!d.leave && !rows.length && !extra && !anyCovered) { showToast('Tap a status on at least one project first', 'info'); return; }
     var now = new Date().toISOString();
-    var entry = { week: d.week, rows: rows, extra: extra, leave: d.leave, at: d.existing ? (d.existing.at || now) : now };
+    var entry = { week: d.week, rows: rows, follows: follows, extra: extra, leave: d.leave, at: d.existing ? (d.existing.at || now) : now };
     if (d.existing) entry.editedAt = now;
+    // An admin editing someone else's update is named on their card ("Edited Tue 11:00 by Deane").
+    var editor = weeklyMe();
+    if (editor && editor !== d.person) entry.editedBy = editor;
     var list = weeklyListOf(me).filter(function (e) { return e && e.week !== d.week; }).concat([entry]);
     list.sort(function (a, b) { return a.week < b.week ? 1 : -1; });
     list = list.slice(0, WEEKLY_KEEP);
@@ -13221,15 +13358,16 @@
     var weekEndKey = toDateInputValue(addDays(parseDate(d.week), 4));
     var periods = Array.isArray(me.leave) ? me.leave.slice() : [];
     var ours = function (l) { return l && l.note === WEEKLY_LEAVE_NOTE && l.start === d.week && l.end === weekEndKey; };
-    if (d.leave && !weeklyAwayDuring(weeklyMe(), d.week)) {
+    if (d.leave && !weeklyAwayDuring(d.person, d.week)) {
       patch.leave = periods.concat([{ id: uid(), start: d.week, end: weekEndKey, note: WEEKLY_LEAVE_NOTE }]);
     } else if (!d.leave && periods.some(ours)) {
       patch.leave = periods.filter(function (l) { return !ours(l); });
     }
     setDoc(doc(peopleCol, me.id), patch, { merge: true }).then(function () {
-      if (patch.leave) logActivity('leave_changed', (d.leave ? 'Booked leave ' : 'Removed leave ') + formatShortDate(d.week) + '–' + formatShortDate(weekEndKey) + ' (Monday update)');
+      var forWhom = d.person === weeklyMe() ? '' : ' for ' + d.person;
+      if (patch.leave) logActivity('leave_changed', (d.leave ? 'Booked leave ' : 'Removed leave ') + formatShortDate(d.week) + '–' + formatShortDate(weekEndKey) + forWhom + ' (Monday update)');
       closeWeeklyEditor();
-      showToast(d.existing ? 'Update saved' : 'Update sent. Thanks!', 'success');
+      showToast(d.existing ? 'Update saved' + forWhom : 'Update sent. Thanks!', 'success');
     }).catch(function (err) {
       if (btn) btn.disabled = false;
       showToast('Could not save your update: ' + err.message, 'error');
@@ -13248,6 +13386,7 @@
         var r = weeklyDraft.rows[+t.getAttribute('data-weekly-row')];
         var s = t.getAttribute('data-weekly-status');
         r.status = r.status === s ? null : s;
+        r.mine = true;
         renderWeeklyEditor();
         if (r.status === 'help') {
           var inp = document.querySelector('#weekly-modal-body [data-weekly-note="' + weeklyDraft.rows.indexOf(r) + '"]');
@@ -13256,7 +13395,14 @@
       } else if (t.hasAttribute('data-weekly-same')) {
         weeklyKeepNotes();
         var row = weeklyDraft.rows[+t.getAttribute('data-weekly-same')];
-        if (row && row.last) { row.status = row.last.status; row.note = row.last.note || ''; }
+        if (row && row.last) { row.status = row.last.status; row.note = row.last.note || ''; row.mine = true; }
+        renderWeeklyEditor();
+      } else if (t.hasAttribute('data-weekly-own') || t.hasAttribute('data-weekly-follow')) {
+        // Switch a project between the owner's answer and your own.
+        weeklyKeepNotes();
+        var own = t.hasAttribute('data-weekly-own');
+        var orow = weeklyDraft.rows[+t.getAttribute(own ? 'data-weekly-own' : 'data-weekly-follow')];
+        if (orow) { orow.mine = own; if (!own) { orow.status = null; orow.note = ''; } }
         renderWeeklyEditor();
       } else if (t.hasAttribute('data-weekly-use')) {
         weeklyKeepNotes();
@@ -13265,7 +13411,7 @@
         renderWeeklyEditor();
       } else if (t.hasAttribute('data-weekly-rest')) {
         weeklyKeepNotes();
-        weeklyDraft.rows.forEach(function (x) { if (!x.status) x.status = 'ontrack'; });
+        weeklyDraft.rows.forEach(function (x) { if (!x.status && !weeklyRowFollowsOwner(x)) { x.status = 'ontrack'; x.mine = true; } });
         renderWeeklyEditor();
       } else if (t.hasAttribute('data-weekly-leave')) {
         weeklyKeepNotes();
@@ -13292,11 +13438,11 @@
         var next = n === 0 ? null : weeklyShiftKey(weeklyShownKey(), n);
         weeklyViewKey = next === weeklyCurrentKey() ? null : next;
         renderWeeklyPage();
-      } else if (b.hasAttribute('data-weekly-write')) {
-        openWeeklyEditor();
       }
     });
     document.getElementById('weekly-view').addEventListener('click', function (e) {
+      var ed = e.target.closest('[data-weekly-edit]');
+      if (ed) { openWeeklyEditor(ed.getAttribute('data-weekly-edit'), weeklyShownKey()); return; }
       if (e.target.closest('[data-weekly-write]')) openWeeklyEditor();
     });
 
@@ -16211,6 +16357,11 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-12a', date: '2026-10-12', items: [
+      { type: 'improved', title: 'Edit your Monday update from your own card', text: "The Edit button now sits on your card in Monday Meeting, and it edits the week you're looking at, so last week's update can be fixed too. Admins get a small pencil on everyone's card." },
+      { type: 'new', title: "Project owners answer for everyone on the project", text: "If you're only involved in a project, or only on its steps, you're no longer asked about it in your Monday update. The owner's update shows on your card, and it changes when they change it. Tap \"Answer myself\" to give your own." },
+      { type: 'new', title: 'Upcoming leave on Monday Meeting', text: "Each person's card now shows their leave for the meeting week and the three weeks after." }
+    ] },
     { id: '2026-10-09a', date: '2026-10-09', items: [
       { type: 'improved', title: 'See who logged the hours on a project', text: 'On Projects, open a card\'s tasks to see the time each person logged, next to the project total. Hover the total, or any task\'s hours, for the same split.' }
     ] },
@@ -20053,7 +20204,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-09T07:48:24Z";
+  var CURRENT_BUILD_VERSION = "2026-10-12T02:05:59Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

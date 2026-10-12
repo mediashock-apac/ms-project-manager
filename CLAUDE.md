@@ -127,7 +127,7 @@ here (dependencies, Gantt grouping, the progress column) stay out even when a re
 
 ## Commands
 
-**Browser tests: `node tests/run.mjs`** (see `tests/README.md`). 19 suites, ~320 checks, each loading
+**Browser tests: `node tests/run.mjs`** (see `tests/README.md`). 21 suites, ~390 checks, each loading
 the real `index.html` in Chromium with Firebase replaced by `tests/fbstub.js`. They run on every push to
 `main` and every weekday at 7am Singapore (`.github/workflows/tests.yml`); a failure is a red X plus
 GitHub's email. Asked for directly: "Constantly run checks as I did today to make sure everything is
@@ -4078,6 +4078,40 @@ their week into a cell before the Monday meeting. Asked: "Is there a way to inte
   for that week and any leave it booked, with Undo on the toast (the confirm modal sits under this
   editor, and Undo is the app's pattern for reversible actions). Below `sm` the status
   label takes its own line so the text keeps the card's width.
+- **Edit lives on each person's card, not in the top bar** (2026-10-12, asked: "Make the button
+  within each person's line instead of one button on top"). The top bar's "Edit my update" always
+  opened THIS week's editor even while an older week was on screen, so a past update looked
+  editable and wasn't. Now `data-weekly-edit="<name>"` sits at the right of the card header and
+  opens `openWeeklyEditor(name, weeklyShownKey())`: the week on screen, past weeks included. Your
+  own card: a labelled "Edit" pill. Admins also get a quiet pencil on anyone else's card (rules
+  already let an admin write any `people` doc); the save stamps `editedBy`, and the card then reads
+  "Edited Tue 11:00 by Deane" whatever the time. Only cards with an update get the button; your
+  own empty card keeps its "Write my update" prompt (current week only). `openWeeklyEditor()` with
+  no arguments is still you + this week (reminder, phone). The phone layout keeps its own button
+  and draws no card buttons.
+- **The project's owner answers for people only attached to it** (2026-10-12, asked: "If the
+  project owner updates the project, it should reflect automatically onto the update of people
+  attached. Not needing to ask again"). Owners = everyone who owns a task in the project
+  (`weeklyProjectOwners`, active + loaded archived). For someone who owns nothing there (only
+  involved, or on its steps) the editor shows "Arvind's update: Waiting on client – note" with
+  "Answer myself" instead of the six buttons, and counts it as answered. It is **derived, never
+  copied**: their entry stores the project in `follows`, and the card reads the owner's current
+  row (`weeklyRowsWithFollowed`/`weeklyOwnerRow`, newest of several owners), marked "· from
+  Arvind", so the owner's later edits show everywhere. A followed project the owner hasn't
+  answered yet still goes in `follows` and appears once they do. Answering yourself puts the row in
+  `rows`, which always wins; "Use Arvind's update instead" goes back. Followed rows are not NEW and
+  are not counted again in Needs help or WIP's help line (those read `rows` only). **Decided
+  (option A):** someone attached to everything and owning nothing still opens the editor and
+  presses Send to count as "in", and still gets the reminders: one tap, and it's still where leave
+  and notes are given. Don't auto-count them as in.
+- **Upcoming leave is a row on each person's card** (2026-10-12, asked: "Monday meeting should also
+  include upcoming leaves", then "The leave should be under each person and not colated on the
+  top"; a collated "Away" box at the top shipped for one build). `weeklyPersonAwayHtml`: an amber
+  "Away" row, last on the card, one line per leave period from the meeting Monday through
+  `WEEKLY_AWAY_WEEKS` (4) weeks, "This week" on any overlapping the meeting week, unless the header
+  already says "Away this week". Same periods as WIP's Away card (`wipAwayRows`). No row when there
+  is no leave. Shows on cards with no update too, and on the phone (it reuses the cards).
+  `tests/monday-follow.test.js` covers both this and owner-following.
 - **Present mode was built and removed before shipping** ("Present mode is not necessary").
 - **Company-wide, ignores the teamspace switcher**, same reasoning as WIP: one shared meeting.
   Expected people = roster accounts seen in the last `WEEKLY_ACTIVE_DAYS` (45), or who already

@@ -161,7 +161,10 @@ async function skipTours(page) {
   // ---------- Fill in my update ----------
   await page.click('[data-view-btn="weekly"]');
   await page.waitForTimeout(300);
-  await page.click('#weekly-bar [data-weekly-write]');
+  check('no Write/Edit button in the top bar', !(await page.$('#weekly-bar [data-weekly-write]')) && !(await page.$('#weekly-bar [data-weekly-edit]')));
+  check("admin gets a pencil on someone else's card", !!(await page.$('[data-weekly-card="Arvind Kumaraguru"] [data-weekly-edit="Arvind Kumaraguru"]')));
+  check('no Edit on a card with no update', !(await page.$('[data-weekly-card="Zenon Kwok Ze Yong"] [data-weekly-edit]')));
+  await page.click('#weekly-view [data-weekly-write]');
   await page.waitForSelector('#weekly-modal:not(.hidden)');
   const rowsText = await page.textContent('#weekly-modal-body');
   check('editor lists my 3 projects', ['GWS recording', 'SMB webinars', 'Autodesk LEEP talk'].every(p => rowsText.includes(p)), rowsText.slice(0, 200));
@@ -195,7 +198,8 @@ async function skipTours(page) {
   const onlyPeopleWrites = (await page.evaluate(() => window.__fb.writes)).filter(w => w.col !== 'people' && w.col !== 'activity' && w.col !== 'notifications' && w.col !== 'notificationDedup');
   check('no writes outside people', onlyPeopleWrites.length === 0, JSON.stringify(onlyPeopleWrites).slice(0, 200));
   const bar2 = await page.textContent('#weekly-bar');
-  check('progress now 3 of 6 + Edit button', bar2.includes('3 of 6') && bar2.includes('Edit my update'), bar2);
+  check('progress now 3 of 6', bar2.includes('3 of 6'), bar2);
+  check('my card now has its own Edit button', !!(await page.$('[data-weekly-card="Deane Cheng"] [data-weekly-edit="Deane Cheng"]')));
   const view2 = await page.textContent('#weekly-view');
   check('needs help now 2', view2.includes('Needs help · 2') && view2.includes('Final speaker list by Wed'));
   const deaneCard = await page.$$eval('#weekly-view section', ss => { const c = ss.find(s => s.textContent.includes('Deane Cheng')); return c ? c.innerText : ''; });
@@ -204,7 +208,7 @@ async function skipTours(page) {
   { const el = await page.$$('#weekly-view section'); for (const s of el) { if ((await s.innerText()).includes('Deane Cheng')) { await s.screenshot({ path: path.join(OUT, 'wk-rows-context.png') }); break; } } }
 
   // Edit after the meeting started (Tue 11:00 > Mon 10:00)
-  await page.click('#weekly-bar [data-weekly-write]');
+  await page.click('[data-weekly-edit="Deane Cheng"]');
   await page.waitForSelector('#weekly-modal:not(.hidden)');
   check('editor reloads saved answers', await page.$eval('#weekly-modal [data-weekly-row="0"][data-weekly-status="help"]', e => e.getAttribute('aria-pressed') === 'true'));
   check('save label is Save changes', (await page.textContent('#weekly-modal-foot')).includes('Save changes'));
@@ -213,12 +217,12 @@ async function skipTours(page) {
   await page.waitForTimeout(600);
   const view3 = await page.textContent('#weekly-view');
   check('edited mark shows', /Edited Tue/.test(view3));
-  check('Escape closes editor', await (async () => { await page.click('#weekly-bar [data-weekly-write]'); await page.keyboard.press('Escape'); await page.waitForTimeout(100); return page.$eval('#weekly-modal', e => e.classList.contains('hidden')); })());
+  check('Escape closes editor', await (async () => { await page.click('[data-weekly-edit="Deane Cheng"]'); await page.keyboard.press('Escape'); await page.waitForTimeout(100); return page.$eval('#weekly-modal', e => e.classList.contains('hidden')); })());
 
   // Delete my update, then Undo
   const myWeeks = () => page.evaluate(() => (window.__fb.data.people.u1.weekly || []).map(w => w.week));
   const weeksBefore = await myWeeks();
-  await page.click('#weekly-bar [data-weekly-write]'); await page.waitForSelector('#weekly-modal:not(.hidden)');
+  await page.click('[data-weekly-edit="Deane Cheng"]'); await page.waitForSelector('#weekly-modal:not(.hidden)');
   check('editor offers Delete update when one exists', !!(await page.$('#weekly-modal [data-weekly-delete]')));
   await page.click('#weekly-modal [data-weekly-delete]'); await page.waitForTimeout(500);
   const weeksAfter = await myWeeks();
@@ -231,7 +235,19 @@ async function skipTours(page) {
   await page.waitForTimeout(200);
   const prevBar = await page.textContent('#weekly-bar');
   check('previous week nav', prevBar.includes('Week of Sep 28') && prevBar.includes('This week'), prevBar);
-  check('previous week has no write button for past', true);
+  await page.click('[data-weekly-edit="Deane Cheng"]'); await page.waitForSelector('#weekly-modal:not(.hidden)');
+  check('Edit on a past week opens that week', (await page.textContent('#weekly-modal-title')).includes('week of Sep 28'), await page.textContent('#weekly-modal-title'));
+  await page.click('#weekly-modal [data-weekly-send]'); await page.waitForTimeout(600);
+  const sep = await page.evaluate(() => window.__fb.data.people.u1.weekly.filter(e => e.week === '2026-09-28'));
+  check('past-week save edits that week only', sep.length === 1 && !!sep[0].editedAt && sep[0].rows[0].note === 'pending assets from post', JSON.stringify(sep));
+  // Admin edits someone else's update
+  await page.click('[data-weekly-edit="Arvind Kumaraguru"]'); await page.waitForSelector('#weekly-modal:not(.hidden)');
+  check('admin editor names the person', (await page.textContent('#weekly-modal-title')).startsWith("Arvind's update"));
+  await page.fill('#weekly-extra', 'Added by admin');
+  await page.click('#weekly-modal [data-weekly-send]'); await page.waitForTimeout(600);
+  const arv = await page.evaluate(() => window.__fb.data.people.u2.weekly.find(e => e.week === '2026-09-28'));
+  check('admin edit saved to their doc, marked editedBy', arv && arv.extra === 'Added by admin' && arv.editedBy === 'Deane Cheng' && arv.rows.length === 1, JSON.stringify(arv));
+  check('their card says who edited it', /Edited Tue[^\n]* by Deane/.test(await page.textContent('[data-weekly-card="Arvind Kumaraguru"]')));
   await page.click('#weekly-bar [data-weekly-nav="0"]');
   await page.waitForTimeout(200);
   check('back to this week', (await page.textContent('#weekly-bar')).includes('Week of Oct 5'));
@@ -249,7 +265,7 @@ async function skipTours(page) {
     await page.locator('#weekly-view section', { hasText: who }).locator('div').first().screenshot({ path: path.join(OUT, f + '.png') });
   }
   await page.evaluate(() => document.documentElement.classList.add('dark'));
-  await page.click('#weekly-bar [data-weekly-write]');
+  await page.click('[data-weekly-edit="Deane Cheng"]');
   await page.waitForTimeout(300);
   await page.screenshot({ path: path.join(OUT, 'wk-6-editor-dark.png') });
   check('no page errors (Tue run)', errors.length === 0, errors.slice(0, 3).join(' | '));
