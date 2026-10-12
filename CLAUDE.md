@@ -391,10 +391,24 @@ sidebar so users will know whenever new updates are in."
   priorities on it, so the usual "these hues mean priority" concern doesn't apply here.
 - The seed entries (29 Sep – 5 Oct 2026) were written from that period's commits.
 
-The deployed page polls `version.txt` every 60s and, once it changes, shows a "new version is ready" banner (`#update-banner`: brand orange with a "Refresh now" button, slides up then pulses a soft glow -- the old dark-grey "An update was made, please refresh." bar matched dark-mode cards and was reported as easy to miss) (it no longer reloads by itself; the banner waits until the person stops editing) --- formerly auto-reloaded clients when it changed — but
-`reloadIfPendingAndSafe()` will never reload out from under a user with a modal open, so a stale
-tab can sit on `pendingBuildVersion` for a while. (That modal guard is also the only reason the
-drift loop above is survivable rather than a hard lock-out: anyone mid-edit keeps their draft.)
+**Getting onto a new version (2026-10-12): no popup any more.** Asked: "Because New Updates happen so
+often, it is intrusive to have that Please refresh popup all the time. Can it be prompted within [New
+updates] itself?" The page polls `version.txt` every 60s; once it differs (`pendingBuildVersion`),
+`reloadIfPendingAndSafe()` (every 5s, and when the tab is hidden):
+- **Reloads quietly when nobody is looking**: the tab is in the background, or no input for
+  `UPDATE_IDLE_MS` (5 min); never with a window open or focus in a text field (`isUserEditing`).
+  Unsent comments/chat are kept as drafts anyway. It comes back on the same page
+  (`flowboard_reload_return` in sessionStorage, read in `init()`).
+- **Otherwise a quiet cue on the New Updates row** (`renderUpdateReadyCue`, `.update-ready`): the label
+  reads "New version · refresh" with a refresh icon; clicking it reloads straight into New Updates.
+  The old copy can't show what changed (the CHANGELOG ships with the new code), only that something did.
+- **The banner (`#update-banner`) is only a safety net**: shown once if a copy is still old after
+  `UPDATE_NAG_MS` (8h of use). An old copy left open writes its older idea of the data (an old Monday
+  editor would drop `resolved`/`follows`), which is why it isn't simply left to the person.
+- **Loop guard**: a tab that already reloaded for a version never reloads for it again
+  (`flowboard_reloaded_for` in sessionStorage), so a stamp drift (see above) can't become a silent
+  reload every minute; the cue stays instead.
+- Releases are batched (one or two a day) so this comes up less. Tested in `tests/live-update.test.js`.
 
 ## Architecture
 

@@ -551,6 +551,7 @@
       &[data-ic="moreHorizontal"] > :nth-child(3) { animation-delay: .14s; }
       /* Repeat cycles half way; refresh goes all the way round; the compass needle swings and settles. */
       &[data-ic="repeat"] > * { animation: ic-half-turn .6s ease-in-out; }
+      &[data-ic="refresh"] > * { animation: ic-half-turn .6s ease-in-out; }
       &[data-ic="refresh"] > * { animation: ic-spin .7s ease-in-out; }
       &[data-ic="compass"] > polygon { animation: ic-spin .8s cubic-bezier(.34,1.3,.64,1); }
       /* Theme: the sun's rays turn and it glows; the moon rocks. */
@@ -6337,6 +6338,7 @@
     checkTickDouble: '<path d="M18 6 7 17l-5-5"></path><path d="m22 10-7.5 7.5L13 16"></path>',
     chevronDown: '<polyline points="6 9 12 15 18 9"></polyline>',
     moreHorizontal: '<circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle>',
+    refresh: '<path d="M21 12a9 9 0 0 1-15.4 6.4L3 16"></path><path d="M3 21v-5h5"></path><path d="M3 12a9 9 0 0 1 15.4-6.4L21 8"></path><path d="M21 3v5h-5"></path>',
     repeat: '<path d="m17 2 4 4-4 4"></path><path d="M3 11v-1a4 4 0 0 1 4-4h14"></path><path d="m7 22-4-4 4-4"></path><path d="M21 13v1a4 4 0 0 1-4 4H3"></path>',
     // Team icons (teamspace tiles and department chips). ts-clap / ts-tick are animated on switch.
     grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect>',
@@ -16676,6 +16678,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-12e', date: '2026-10-12', items: [
+      { type: 'improved', title: 'No more "please refresh" pop-up', text: "New versions now arrive quietly. The app refreshes itself while you're in another tab or away for a few minutes, and never while you're typing or have a window open. Otherwise New Updates in the sidebar reads \"New version · refresh\", so you can click it whenever suits you." }
+    ] },
     { id: '2026-10-12d', date: '2026-10-12', items: [
       { type: 'new', title: 'Choose the text size for meetings', text: "Monday Meeting and WIP Meeting have a small A A A A switch at the top right. Pick a bigger size for the meeting screen; it applies to both meetings and is remembered on that computer. Normal size stays the default." },
       { type: 'improved', title: 'Icons that move with meaning', text: "Point at any button's icon and it acts out what it does: the bin tips its lid, the bell rings, the pencil scribbles, arrows nudge the way they go. Icons that are just labels stay still." }
@@ -17094,6 +17099,7 @@
     badge.classList.toggle('hidden', count === 0);
     btn.classList.toggle('updates-unread', count > 0);
     btn.setAttribute('data-tooltip', count > 0 ? 'New Updates (' + count + ' new)' : 'New Updates');
+    if (pendingBuildVersion) renderUpdateReadyCue();   // a waiting new version keeps its own label and tooltip
   }
 
   document.getElementById('updates-list').addEventListener('click', function (e) {
@@ -20562,7 +20568,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-12T04:38:51Z";
+  var CURRENT_BUILD_VERSION = "2026-10-12T05:04:28Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
@@ -20578,18 +20584,77 @@
     return a.tagName === 'INPUT' && !/^(checkbox|radio|button|submit|range|color|file)$/.test(a.type);
   }
 
-  // Never reloads on its own any more: once a new version is out AND the person has stopped
-  // editing, a banner asks them to refresh. Requested directly -- a surprise reload could cost an
-  // unsent comment or half-typed message that the modal check alone didn't cover.
+  /* Getting onto a new version without a popup (asked: "Because New Updates happen so often, it is
+     intrusive to have that Please refresh popup all the time. Can it be prompted within [New
+     updates] itself?"). An old copy left open can't just be ignored: it writes its own older idea
+     of the data (an old Monday editor would drop "Resolved" and owner-follow links). So:
+     1. QUIETLY, when nobody is looking: the tab is in the background, or nothing has been touched
+        for UPDATE_IDLE_MS, and no window is open and nothing is being typed. Unsent comments and
+        chat messages are kept as drafts, and you come back on the same page (UPDATE_RETURN_KEY).
+     2. Otherwise a quiet cue on the New Updates row: "New version" with a refresh icon. Clicking it
+        reloads and opens New Updates, so you see what changed.
+     3. Only if a copy is still old after UPDATE_NAG_MS (about a working day) does the old banner
+        show, once, as a safety net.
+     A tab that already reloaded for this exact version never reloads for it again
+     (UPDATE_RELOADED_KEY): if CURRENT_BUILD_VERSION and version.txt ever disagree, a silent reload
+     would otherwise loop every minute. */
+  var UPDATE_IDLE_MS = 5 * 60 * 1000;
+  var UPDATE_NAG_MS = 8 * 60 * 60 * 1000;
+  var UPDATE_RETURN_KEY = 'flowboard_reload_return';
+  var UPDATE_RELOADED_KEY = 'flowboard_reloaded_for';
+  var pendingBuildSince = 0;
+  var lastUserInputAt = Date.now();
+  ['pointerdown', 'keydown', 'wheel', 'touchstart', 'mousemove'].forEach(function (ev) {
+    document.addEventListener(ev, function () { lastUserInputAt = Date.now(); }, { passive: true, capture: true });
+  });
+  function updateReloadedAlready() {
+    try { return sessionStorage.getItem(UPDATE_RELOADED_KEY) === pendingBuildVersion; } catch (e) { return false; }
+  }
+  function reloadToNewVersion(openView) {
+    try {
+      sessionStorage.setItem(UPDATE_RELOADED_KEY, pendingBuildVersion || '');
+      sessionStorage.setItem(UPDATE_RETURN_KEY, openView || currentView || 'board');
+    } catch (e) { /* ignore */ }
+    location.reload();
+  }
+  function renderUpdateReadyCue() {
+    var btn = document.getElementById('updates-nav-btn');
+    if (!btn) return;
+    var ready = !!pendingBuildVersion;
+    btn.classList.toggle('update-ready', ready);
+    var label = btn.querySelector('.sidebar-label');
+    if (label) label.textContent = ready ? 'New version · refresh' : 'New Updates';
+    var cue = document.getElementById('updates-ready-icon');
+    if (ready && !cue) {
+      btn.insertAdjacentHTML('beforeend', '<span id="updates-ready-icon" class="ml-auto shrink-0 sidebar-label" aria-hidden="true">' + svgIcon('refresh', 'w-3.5 h-3.5') + '</span>');
+    } else if (!ready && cue) cue.remove();
+    if (ready) btn.setAttribute('data-tooltip', 'A new version is ready. Click to refresh and see what changed');
+  }
   function reloadIfPendingAndSafe() {
-    if (!pendingBuildVersion || isUserEditing()) return;
-    var banner = document.getElementById('update-banner');
-    if (banner && banner.classList.contains('hidden')) {
-      banner.classList.remove('hidden');
-      banner.classList.add('flex');
+    if (!pendingBuildVersion) return;
+    renderUpdateReadyCue();
+    if (updateReloadedAlready()) return;
+    if (isUserEditing()) return;
+    var away = document.visibilityState === 'hidden';
+    var idle = Date.now() - lastUserInputAt >= UPDATE_IDLE_MS;
+    if (away || idle) { reloadToNewVersion(); return; }
+    if (pendingBuildSince && Date.now() - pendingBuildSince >= UPDATE_NAG_MS) {
+      var banner = document.getElementById('update-banner');
+      if (banner && banner.classList.contains('hidden') && !banner.getAttribute('data-shown')) {
+        banner.setAttribute('data-shown', '1');
+        banner.classList.remove('hidden');
+        banner.classList.add('flex');
+      }
     }
   }
-  document.getElementById('update-banner-btn').addEventListener('click', function () { location.reload(); });
+  document.getElementById('update-banner-btn').addEventListener('click', function () { reloadToNewVersion(); });
+  // The cue on New Updates: clicking the row while a new version is waiting reloads straight into
+  // New Updates. Capture phase, so the normal "open this view" click never runs on the old copy.
+  document.getElementById('updates-nav-btn').addEventListener('click', function (e) {
+    if (!pendingBuildVersion) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    reloadToNewVersion('updates');
+  }, true);
 
   function checkForNewVersion() {
     fetch('version.txt?_=' + Date.now(), { cache: 'no-store' })
@@ -20598,6 +20663,7 @@
         if (!text) return;
         var latest = text.trim();
         if (latest && latest !== CURRENT_BUILD_VERSION) {
+          if (pendingBuildVersion !== latest) pendingBuildSince = pendingBuildSince || Date.now();
           pendingBuildVersion = latest;
           reloadIfPendingAndSafe();
         }
@@ -20609,6 +20675,7 @@
   setInterval(reloadIfPendingAndSafe, 5000);
   document.addEventListener('visibilitychange', function () {
     if (document.visibilityState === 'visible') checkForNewVersion();
+    else reloadIfPendingAndSafe();   // switched away: the quiet moment to move to a new version
   });
 
   if ('serviceWorker' in navigator) {
@@ -20648,7 +20715,9 @@
     restoreFilterControls();
     syncThemeToggleIcon();
     syncDesktopNotifToggleIcon();
-    setView('board');
+    var returnTo = null;
+    try { returnTo = sessionStorage.getItem(UPDATE_RETURN_KEY); sessionStorage.removeItem(UPDATE_RETURN_KEY); } catch (e) { /* ignore */ }
+    setView(returnTo && document.querySelector('[data-view-btn="' + returnTo + '"]') ? returnTo : 'board');
     renderAll();
   }
 
