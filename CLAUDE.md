@@ -874,13 +874,21 @@ to bottom:
      than the today-line and day-grid content or bars paint over it (they're normal-flow siblings
      with no explicit z-index, so DOM order wins by default); the "scroll to keep today in view"
      math has to subtract the label column's width from the viewport before positioning, or it
-     lands the target under the sticky column on narrow cards. Only tasks with *both* a
-     `startDate` and a `deadline` can plot a bar; both are individually optional elsewhere (the
-     "TBD" deadline checkbox in the task modal), so a task can be otherwise fully filled-in and
-     still have nothing to draw. `#gantt-hidden-note` (updated at the top of `renderGantt`) says
-     how many filtered-in tasks are missing one or both dates, so they don't just silently vanish
-     from this view with no indication anything's hidden — same reasoning for the empty-state
-     message when *every* filtered task is missing a date. Bar/dot color comes from `pm`,
+     lands the target under the sticky column on narrow cards. **Every filtered task is drawn,
+     dates or not (2026-10-12)** (asked: "Why is LPP not showing on the timeline ... TBD how will
+     it show on timeline (It should not be hidden)"; option A of two). Tasks used to need *both*
+     a `startDate` and a `deadline`; the rest were left off with only an amber
+     `#gantt-hidden-note` count, so whole projects whose deadlines were TBD went missing. Now
+     `ganttDateKind(t)` sorts each task, on the Timeline AND the WIP timeline:
+     - **deadline TBD** (start, no deadline): a bar from the start that fades out
+       `GANTT_TBD_DAYS` (14) past today (or the start, if later), with "Deadline TBD" over the
+       faded tail (`GANTT_TBD_MASK`, `ganttTbdTagHtml`). The fade says "end unknown"; a solid bar
+       would read as a real end date. Not counted in deadline stacks or leave clashes (no date).
+     - **deadline, no start**: one day on the deadline, as the Calendar draws it.
+     - **no dates**: a row under a "No dates yet · N" heading at the bottom, no bar, an "Add
+       dates" link (sticky beside the Task column) that opens the task. The today line stops
+       above that heading. `#gantt-hidden-note` and WIP's "not shown" footnote are gone.
+     `tests/timeline-undated.test.js`. Bar/dot color comes from `pm`,
      chosen as `Done` → `DONE_META` (green) → else `isReadyForReview(t)` → `READY_FOR_REVIEW_META`
      (purple) → else `PRIORITY_META[t.priority]`. **Ready for review** means `status === 'Review'`
      *and* every checklist item is checked off (an empty checklist doesn't count — nothing to
@@ -3424,7 +3432,7 @@ client-side domain check in `isAllowedEmail` is UX only, not enforcement):
         assignee, not by interval overlap. Surfaced identically to how the first version was --
         an amber `!` badge on the bar's top-left corner (top-right is already the overdue dot;
         different corner and shape so the two warnings don't blur into each other), a
-        `#gantt-stack-note` count next to the existing `#gantt-hidden-note`, and the specific
+        `#gantt-stack-note` count in the legend, and the specific
         stacked task name(s) named in the bar's tooltip -- only the trigger condition changed.
       - TeamGantt's closest equivalent (a Workloads heat-map showing hours/day per person) lives
         in a separate report, not on the chart itself, and its own users have publicly asked for
@@ -4104,8 +4112,9 @@ routed through it**: that reads `applyFilters` (same stale-filter hazard as abov
 the full range with a frozen label column and sideways scroll. This one is a single percentage-width
 grid (`minmax(0,1fr)` columns) that fits the card at 7/14/28 days, so it never scrolls. It reuses
 the Gantt's bar colours, status-stage fill, overdue dot, `.gantt-leave` bands and `data-open-task`,
-so the two views cannot disagree about how a task looks. Open tasks with no start date or deadline
-are counted in a footnote rather than silently missing. The header carries a legend (same
+so the two views cannot disagree about how a task looks. Open tasks missing a date are drawn as on
+the Timeline tab (a fading "Deadline TBD" bar, or a "No dates yet" row; see `ganttDateKind`), no
+longer just counted in a footnote. The header carries a legend (same
 swatches as the Timeline tab) that lists **only what is drawn** — priorities present, Ready for
 review, Overdue dot, Away hatch — so a quiet week doesn't print keys for things that aren't there.
 A month row sits above the day numbers (one cell per month in the window, full name when it spans

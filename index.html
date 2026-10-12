@@ -1506,7 +1506,6 @@
             <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-emerald-400"></span>Done</span>
             <span class="flex items-center gap-1"><span class="w-0.5 h-3 bg-rose-500"></span>Today</span>
             <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-amber-500 flex items-center justify-center text-white text-[8px] font-black leading-none">!</span>Deadline stack</span>
-            <span id="gantt-hidden-note" class="hidden text-amber-700 dark:text-amber-400 font-semibold" title="These tasks have a status, priority, and everything else -- just no start date and/or deadline, so there's nothing to plot a bar between."></span>
             <span id="gantt-stack-note" class="hidden text-rose-600 dark:text-rose-400 font-semibold" title="These tasks share an owner and a deadline -- more than one thing is due from the same person on the same day."></span>
             <span id="gantt-leave-note" class="hidden text-amber-700 dark:text-amber-400 font-semibold" title="The deadline falls on a day the owner is away. The shaded stripes on a row are that person's leave -- set it in the People tab."></span>
           </div>
@@ -6111,6 +6110,33 @@
   var GANTT_ITEM_ROW_HEIGHT = 34;
   // Bar thickness on the Timeline AND the WIP timeline -- one constant so the two can't drift.
   var GANTT_BAR_HEIGHT = 20;
+
+  /* Tasks without both dates on the timelines (2026-10-12). Asked: "TBD how will it show on
+     timeline (It should not be hidden)" -- they used to be left off both timelines with only a
+     count saying so. Shared by renderGantt and wipTimelineHtml so the two draw them alike:
+     - 'tbd'  (start date, deadline TBD): a bar from the start that fades out GANTT_TBD_DAYS past
+       today (or the start, if later), tagged "Deadline TBD". The fade says "end unknown"; a solid
+       bar would read as a real end date.
+     - 'due'  (deadline, no start): one day on the deadline, as the Calendar draws it.
+     - 'none' (no dates): a row under "No dates yet" with an "Add dates" link, no bar. */
+  var GANTT_TBD_DAYS = 14;
+  function ganttDateKind(t) {
+    var s = !!(t.startDate && parseDate(t.startDate)), d = !!(t.deadline && parseDate(t.deadline));
+    return s && d ? 'dated' : (s ? 'tbd' : (d ? 'due' : 'none'));
+  }
+  // Bar start/end as YYYY-MM-DD for any kind but 'none'.
+  function ganttBarStart(t) { return ganttDateKind(t) === 'due' ? t.deadline : t.startDate; }
+  function ganttBarEnd(t) {
+    var kind = ganttDateKind(t);
+    if (kind !== 'tbd') return t.deadline;
+    var today = todayMidnight(), start = parseDate(t.startDate);
+    return toDateInputValue(addDays(start > today ? start : today, GANTT_TBD_DAYS));
+  }
+  // Fades the right ~45% of an open-ended bar to nothing.
+  var GANTT_TBD_MASK = '-webkit-mask-image:linear-gradient(to right,#000 55%,transparent);mask-image:linear-gradient(to right,#000 55%,transparent);';
+  function ganttTbdTagHtml(t, style) {
+    return '<span data-open-task="' + t.id + '" class="absolute cursor-pointer whitespace-nowrap text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 hover:text-brand-700 dark:hover:text-brand-300" style="' + style + '">Deadline TBD</span>';
+  }
 
   // Due-date order, undated last, original order as the tie-break -- the diamonds step down the
   // rows left to right, which is what makes them easy to follow.
@@ -12253,43 +12279,32 @@
   function renderGantt() {
     var wrap = document.getElementById('gantt-wrap');
     var filtered = applyFilters(activeTasks());
-    var list = filtered.filter(function (t) { return t.startDate && t.deadline; });
-
-    // A task with a status, priority, and everything else can still have no start date and/or
-    // deadline (both are optional -- see the "TBD" checkbox in the task modal), and there's
-    // nothing to plot a bar between for one that doesn't. Previously those tasks just vanished
-    // from this view with zero indication anything was hidden. missingDates only counts tasks
-    // that already passed the other filters, so it reads as "N more, once you give them dates"
-    // rather than double-counting anything the priority/project/assignee filters already hid.
-    var missingDates = filtered.length - list.length;
-    var hiddenNote = document.getElementById('gantt-hidden-note');
-    if (missingDates > 0) {
-      hiddenNote.textContent = missingDates + ' task' + (missingDates === 1 ? '' : 's') + ' hidden (no start date/deadline)';
-      hiddenNote.classList.remove('hidden');
-    } else {
-      hiddenNote.classList.add('hidden');
-    }
+    // Every filtered task is drawn: a deadline TBD gets a fading bar, a task with no dates at
+    // all a row under "No dates yet" (see ganttDateKind). They used to be left off with only an
+    // amber "N tasks hidden" note in the legend, which is how whole projects went missing
+    // ("Why is LPP not showing on the timeline").
+    var list = filtered.filter(function (t) { return ganttDateKind(t) !== 'none'; });
+    var noDates = filtered.filter(function (t) { return ganttDateKind(t) === 'none'; })
+      .sort(function (a, b) { return (a.project || '').localeCompare(b.project || '') || (a.name || '').localeCompare(b.name || ''); });
+    var withDeadline = list.filter(function (t) { return ganttDateKind(t) !== 'tbd'; });
 
     // Both the stacked-deadline and the leave note are computed below, AFTER the early return
     // just under here -- so without clearing them on this path, a filter change that empties the
     // chart leaves the previous render's counts sitting on screen, describing tasks that are no
-    // longer drawn. (The hidden-dates note above is already set on every path.) This was a live
-    // bug for the stack note before the leave note joined it.
+    // longer drawn. This was a live bug for the stack note before the leave note joined it.
     document.getElementById('gantt-stack-note').classList.add('hidden');
     document.getElementById('gantt-leave-note').classList.add('hidden');
 
-    if (list.length === 0) {
-      wrap.innerHTML = '<div class="text-sm text-zinc-400 dark:text-zinc-600 text-center py-16 border-2 border-dashed border-zinc-200 dark:border-zinc-700 rounded-xl">' +
-        (missingDates > 0
-          ? missingDates + ' task' + (missingDates === 1 ? '' : 's') + ' match the current filters, but none have both a start date and deadline yet -- add those in the task modal to see them here.'
-          : 'No tasks match the current filters yet.') +
-        '</div>';
+    if (filtered.length === 0) {
+      wrap.innerHTML = '<div class="text-sm text-zinc-400 dark:text-zinc-600 text-center py-16 border-2 border-dashed border-zinc-200 dark:border-zinc-700 rounded-xl">No tasks match the current filters yet.</div>';
       return;
     }
 
-    list = list.slice().sort(function (a, b) { return parseDate(a.startDate) - parseDate(b.startDate); });
+    list = list.slice().sort(function (a, b) { return parseDate(ganttBarStart(a)) - parseDate(ganttBarStart(b)); });
 
-    var deadlineStacks = computeGanttDeadlineStacks(list);
+    // Only tasks with a deadline: grouping by an absent deadline would call every TBD task one
+    // person holds a "stack".
+    var deadlineStacks = computeGanttDeadlineStacks(withDeadline);
     var stackCount = Object.keys(deadlineStacks).length;
     var stackNote = document.getElementById('gantt-stack-note');
     if (stackCount > 0) {
@@ -12303,7 +12318,7 @@
     // computeGanttDeadlineStacks learned the hard way: a task merely spanning someone's time off
     // is normal and needs no warning -- they work either side of it. A deadline landing while
     // they are away is the one that cannot resolve itself.
-    var leaveClashes = list.filter(function (t) { return isOnLeave(t.assignee, t.deadline); });
+    var leaveClashes = withDeadline.filter(function (t) { return isOnLeave(t.assignee, t.deadline); });
     var leaveNote = document.getElementById('gantt-leave-note');
     if (leaveClashes.length > 0) {
       leaveNote.textContent = leaveClashes.length + ' deadline' + (leaveClashes.length === 1 ? '' : 's') + ' land while the owner is away';
@@ -12315,8 +12330,8 @@
     var today = todayMidnight();
     var allDates = [today];
     list.forEach(function (t) {
-      allDates.push(parseDate(t.startDate));
-      allDates.push(parseDate(t.deadline));
+      allDates.push(parseDate(ganttBarStart(t)));
+      allDates.push(parseDate(ganttBarEnd(t)));
     });
     var rangeStart = addDays(new Date(Math.min.apply(null, allDates.map(function (d) { return d.getTime(); }))), -2);
     var rangeEnd = addDays(new Date(Math.max.apply(null, allDates.map(function (d) { return d.getTime(); }))), 4);
@@ -12337,10 +12352,15 @@
     var rowHeight = 52;
     // Row tracks: one per task, plus one per checklist item for each expanded task.
     var rowTracks = [];
-    list.forEach(function (t) {
+    var GANTT_GROUP_ROW_HEIGHT = 32;   // the "No dates yet" heading
+    var addTaskTracks = function (t) {
       rowTracks.push(rowHeight + 'px');
       if (ganttExpanded[t.id]) (t.checklist || []).forEach(function () { rowTracks.push(GANTT_ITEM_ROW_HEIGHT + 'px'); });
-    });
+    };
+    list.forEach(addTaskTracks);
+    // The today line stops above "No dates yet": those rows have no dates to sit against.
+    var datedRowsHeight = rowTracks.reduce(function (s, h) { return s + parseInt(h, 10); }, 0);
+    if (noDates.length) { rowTracks.push(GANTT_GROUP_ROW_HEIGHT + 'px'); noDates.forEach(addTaskTracks); }
     var totalGridHeight = headerRowsHeight + rowTracks.reduce(function (s, h) { return s + parseInt(h, 10); }, 0);
     var todayIndex = daysBetween(rangeStart, today);
 
@@ -12453,8 +12473,9 @@
 
     // task rows
     var rowCursor = 3;   // grid row of the next task; item rows advance it too
-    list.forEach(function (t, r) {
-      var pm = t.status === 'Done' ? DONE_META : (isReadyForReview(t) ? READY_FOR_REVIEW_META : (PRIORITY_META[t.priority] || PRIORITY_META.Medium));
+    var renderTaskRow = function (t, r) {
+      var kind = ganttDateKind(t);
+      var pm =t.status === 'Done' ? DONE_META : (isReadyForReview(t) ? READY_FOR_REVIEW_META : (PRIORITY_META[t.priority] || PRIORITY_META.Medium));
       var rowIdx = rowCursor++;
       var expanded = !!ganttExpanded[t.id];
       var overdue = dueUrgency(t).overdue;
@@ -12492,8 +12513,11 @@
         '</div>' +
       '</div>';
 
-      var barLeft = daysBetween(rangeStart, parseDate(t.startDate)) * dayWidth;
-      var barWidth = (daysBetween(parseDate(t.startDate), parseDate(t.deadline)) + 1) * dayWidth - 6;
+      var barLeft = kind === 'none' ? 0 : daysBetween(rangeStart, parseDate(ganttBarStart(t))) * dayWidth;
+      var barWidth = kind === 'none' ? 0 : (daysBetween(parseDate(ganttBarStart(t)), parseDate(ganttBarEnd(t))) + 1) * dayWidth - 6;
+      var datesText = kind === 'tbd' ? 'from ' + formatShortDate(t.startDate) + ' · deadline TBD'
+        : kind === 'due' ? 'no start date · due ' + formatShortDate(t.deadline)
+        : formatShortDate(t.startDate) + ' – ' + formatShortDate(t.deadline);
       // Checklist count for the bar's hover title -- the one place progress still shows on this
       // chart now the Progress column is gone (see the note where it used to render).
       var checklistTotal = (t.checklist || []).length;
@@ -12531,13 +12555,16 @@
       rowLeaveBands.forEach(function (seg) {
         html += '<div class="gantt-leave absolute inset-y-0" title="' + escapeHtml(seg.label) + '" style="left:' + Math.max(seg.left, 0) + 'px;width:' + seg.width + 'px;"></div>';
       });
-      html += '<button data-open-task="' + t.id + '" title="' + escapeHtml(t.name + ' · ' + t.assignee + ' · ' + t.priority + ' priority · ' + formatShortDate(t.startDate) + ' – ' + formatShortDate(t.deadline) + (checklistTotal ? ' · ' + checklistDoneCount + '/' + checklistTotal + ' checklist steps done' : '')) + escapeHtml(stackTitle) + escapeHtml(leaveTitle) + '" ' +
+      // No dates: no bar, just "Add dates", kept in view beside the frozen Task column (sticky
+      // against the pane's horizontal scroll) so it never sits off in some far-away month.
+      if (kind === 'none') html += '<div class="h-full flex items-center"><button type="button" data-open-task="' + t.id + '" class="sticky text-xs font-semibold text-zinc-500 dark:text-zinc-400 hover:text-brand-700 dark:hover:text-brand-300" style="left:' + (GANTT_LABEL_WIDTH + 12) + 'px;">Add dates</button></div>';
+      else html += '<button data-open-task="' + t.id + '" title="' + escapeHtml(t.name + ' · ' + t.assignee + ' · ' + t.priority + ' priority · ' + datesText + (checklistTotal ? ' · ' + checklistDoneCount + '/' + checklistTotal + ' checklist steps done' : '')) + escapeHtml(stackTitle) + escapeHtml(leaveTitle) + '" ' +
         // GANTT_BAR_HEIGHT (20px), centred in the 52px row -- not the old rowHeight - 12 (40px).
         // Once bars went solid, a near-row-height block of colour per task drowned the weekend/today
         // shading, leave stripes and diamonds, and left no gap to tell rows apart. The row stays 52px
         // for the two-line label; only the bar shrank. WIP uses the same height.
         'class="gantt-bar absolute rounded-md ' + pm.barLight + ' border border-black/5 dark:border-white/5 overflow-hidden text-left" ' +
-        'style="left:' + Math.max(barLeft, 0) + 'px;width:' + Math.max(barWidth, 18) + 'px;top:' + ((rowHeight - GANTT_BAR_HEIGHT) / 2) + 'px;height:' + GANTT_BAR_HEIGHT + 'px;">' +
+        'style="left:' + Math.max(barLeft, 0) + 'px;width:' + Math.max(barWidth, 18) + 'px;top:' + ((rowHeight - GANTT_BAR_HEIGHT) / 2) + 'px;height:' + GANTT_BAR_HEIGHT + 'px;' + (kind === 'tbd' ? GANTT_TBD_MASK : '') + '">' +
           // NO task name inside the bar. It duplicated the name already rendered in the label
           // column on this same row -- and that column is `sticky left-0`, so it stays on screen
           // no matter how far the chart is scrolled sideways: the in-bar copy was never the only
@@ -12560,11 +12587,14 @@
           // together instead of reading as two distinct facts.
           (rowStacked.length ? '<span class="absolute -top-1 -left-1 w-3.5 h-3.5 rounded-full bg-amber-500 ring-2 ring-white dark:ring-zinc-800 flex items-center justify-center text-white text-[9px] font-black leading-none pointer-events-none" aria-hidden="true">!</span>' : '') +
       '</button>';
+      // Over the faded tail, right-aligned to where the bar ends, so it says why the bar has no
+      // end and never runs off the chart's right edge.
+      if (kind === 'tbd') html += ganttTbdTagHtml(t, 'right:' + (totalDays * dayWidth - Math.max(barLeft, 0) - Math.max(barWidth, 18) + 6) + 'px;top:' + (rowHeight / 2 - 8) + 'px;line-height:16px;');
       // Dated checklist items as small diamonds on the bar (emitted after the bar so they paint
       // over it). Green = done, rose = overdue and still open, grey = upcoming. Skipped when the
       // date falls outside the visible range. A Done task never shows overdue items.
       // Skipped while the task is expanded -- its item rows below carry these same diamonds.
-      (expanded ? [] : (t.checklist || [])).forEach(function (item) {
+      (expanded || kind === 'none' ? [] : (t.checklist || [])).forEach(function (item) {
         if (!item.due || !parseDate(item.due)) return;
         var dueDate = parseDate(item.due);
         if (dueDate < rangeStart || dueDate > rangeEnd) return;
@@ -12592,10 +12622,19 @@
         }
         html += '</div>';
       });
-    });
+    };
+    list.forEach(renderTaskRow);
+    // Tasks with no dates at all, last, under one heading -- listed rather than hidden, so a
+    // project whose tasks are all undated still shows up here.
+    if (noDates.length) {
+      var groupRow = rowCursor++;
+      html += '<div class="sticky left-0 z-20 bg-zinc-50 dark:bg-zinc-700 border-b border-r border-zinc-200 dark:border-zinc-600 flex items-center gap-2 px-3 text-xs font-semibold text-zinc-600 dark:text-zinc-300" style="grid-column:1;grid-row:' + groupRow + ';">No dates yet <span class="px-1.5 rounded-full bg-white dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400 font-semibold">' + noDates.length + '</span></div>';
+      html += '<div class="bg-zinc-50 dark:bg-zinc-700/40 border-b border-zinc-200 dark:border-zinc-600" style="grid-column:2 / -1;grid-row:' + groupRow + ';"></div>';
+      noDates.forEach(function (t, i) { renderTaskRow(t, list.length + i); });
+    }
 
     // today vertical line
-    html += '<div class="absolute bg-rose-400/70 pointer-events-none" id="gantt-today-line" data-today-index="' + todayIndex + '" style="left:' + (GANTT_LABEL_WIDTH + todayIndex * dayWidth) + 'px;top:' + headerRowsHeight + 'px;width:2px;height:' + (totalGridHeight - headerRowsHeight) + 'px;z-index:15;"></div>';
+    html += '<div class="absolute bg-rose-400/70 pointer-events-none" id="gantt-today-line" data-today-index="' + todayIndex + '" style="left:' + (GANTT_LABEL_WIDTH + todayIndex * dayWidth) + 'px;top:' + headerRowsHeight + 'px;width:2px;height:' + (noDates.length ? datedRowsHeight : totalGridHeight - headerRowsHeight) + 'px;z-index:15;"></div>';
 
     html += '</div>';
 
@@ -16139,18 +16178,21 @@
   }
 
   function wipTimelineHtml(scoped, open, today, horizon) {
-    var withDates = open.filter(function (t) { return t.startDate && t.deadline; });
-    var undated = open.length - withDates.length;
+    // Same treatment as the Timeline tab (see ganttDateKind): a deadline TBD gets a fading bar,
+    // a task with no dates a row under "No dates yet". They used to be a footnote count only.
     // Overlap, not containment: a task that started last week and runs past the window belongs.
-    var list = withDates.filter(function (t) { return t.startDate <= horizon && t.deadline >= today; })
-      .sort(function (a, b) { return a.startDate < b.startDate ? -1 : a.startDate > b.startDate ? 1 : (a.deadline < b.deadline ? -1 : 1); });
+    var list = open.filter(function (t) {
+      if (ganttDateKind(t) === 'none') return false;
+      return ganttBarStart(t) <= horizon && ganttBarEnd(t) >= today;
+    }).sort(function (a, b) {
+      var as = ganttBarStart(a), bs = ganttBarStart(b), ae = ganttBarEnd(a), be = ganttBarEnd(b);
+      return as < bs ? -1 : as > bs ? 1 : (ae < be ? -1 : ae > be ? 1 : 0);
+    });
+    var noDates = open.filter(function (t) { return ganttDateKind(t) === 'none'; })
+      .sort(function (a, b) { return (a.project || '').localeCompare(b.project || '') || (a.name || '').localeCompare(b.name || ''); });
 
-    var note = undated > 0
-      ? '<p class="px-4 py-2 text-xs text-zinc-400 dark:text-zinc-500 border-t border-zinc-100 dark:border-zinc-700">' +
-          undated + ' open task' + (undated === 1 ? '' : 's') + ' not shown (no start date/deadline)</p>'
-      : '';
-    if (!list.length) {
-      return wipSectionHtml('Timeline', 0, wipEmptyHtml('No dated tasks fall inside this window.') + note);
+    if (!list.length && !noDates.length) {
+      return wipSectionHtml('Timeline', 0, wipEmptyHtml('No tasks fall inside this window.'));
     }
 
     var n = wipRangeDays;
@@ -16198,12 +16240,20 @@
     }
     head += '</div></div>';
 
-    var rows = list.map(function (t, wr) {
+    var taskRowHtml = function (t, wr) {
+      var kind = ganttDateKind(t);
       var pm = isReadyForReview(t) ? READY_FOR_REVIEW_META : (PRIORITY_META[t.priority] || PRIORITY_META.Medium);
-      var from = t.startDate < today ? 0 : daysBetween(rangeStart, parseDate(t.startDate));
-      var to = t.deadline > horizon ? n - 1 : daysBetween(rangeStart, parseDate(t.deadline));
+      var barStart = kind === 'none' ? today : ganttBarStart(t), barEnd = kind === 'none' ? today : ganttBarEnd(t);
+      var from = barStart < today ? 0 : daysBetween(rangeStart, parseDate(barStart));
+      var to = barEnd > horizon ? n - 1 : daysBetween(rangeStart, parseDate(barEnd));
       var left = from / n * 100;
       var width = (to - from + 1) / n * 100;
+      var datesText = kind === 'tbd' ? 'from ' + formatShortDate(t.startDate) + ' · deadline TBD'
+        : kind === 'due' ? 'no start date · due ' + formatShortDate(t.deadline)
+        : formatShortDate(t.startDate) + ' – ' + formatShortDate(t.deadline);
+      // Over the faded tail, right-aligned to where the bar ends (as on the Timeline tab).
+      var tbdTag = kind !== 'tbd' ? ''
+        : ganttTbdTagHtml(t, 'right:calc(' + ((n - 1 - to) / n * 100) + '% + 8px);top:calc(50% - 8px);line-height:16px;');
       // Solid bar, no progress fill -- same reason as renderGantt: a fill edge on a date axis
       // reads as a date and contradicted the checklist diamonds. Here it was worse, since the bar
       // is clamped to the window, so the fill was a percentage of the visible slice only.
@@ -16229,13 +16279,15 @@
           '</div>' +
         '</div>' +
         '<div class="relative flex-1 min-w-0" style="min-height:40px;">' + bands +
-          '<button type="button" data-open-task="' + t.id + '" title="' + escapeHtml(t.name + ' · ' + t.assignee + ' · ' + t.priority + ' priority · ' + formatShortDate(t.startDate) + ' – ' + formatShortDate(t.deadline)) + '" ' +
-            'class="gantt-bar absolute rounded-md ' + pm.barLight + ' border border-black/5 dark:border-white/5 overflow-hidden text-left" ' +
-            'style="left:' + left + '%;width:calc(' + width + '% - 3px);min-width:14px;top:calc(50% - ' + (GANTT_BAR_HEIGHT / 2) + 'px);height:' + GANTT_BAR_HEIGHT + 'px;">' +
-            '<div class="' + pm.bar + ' h-full w-full"></div>' +
-            (overdue ? '<span class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-zinc-800"></span>' : '') +
-          '</button>' +
-          (ganttExpanded[t.id] ? '' : wipChecklistMarkers(t, today, horizon, rangeStart, n)) +
+          (kind === 'none'
+            ? '<div class="absolute inset-0 flex items-center px-3"><button type="button" data-open-task="' + t.id + '" class="text-xs font-semibold text-zinc-500 dark:text-zinc-400 hover:text-brand-700 dark:hover:text-brand-300">Add dates</button></div>'
+            : '<button type="button" data-open-task="' + t.id + '" title="' + escapeHtml(t.name + ' · ' + t.assignee + ' · ' + t.priority + ' priority · ' + datesText) + '" ' +
+              'class="gantt-bar absolute rounded-md ' + pm.barLight + ' border border-black/5 dark:border-white/5 overflow-hidden text-left" ' +
+              'style="left:' + left + '%;width:calc(' + width + '% - 3px);min-width:14px;top:calc(50% - ' + (GANTT_BAR_HEIGHT / 2) + 'px);height:' + GANTT_BAR_HEIGHT + 'px;' + (kind === 'tbd' ? GANTT_TBD_MASK : '') + '">' +
+              '<div class="' + pm.bar + ' h-full w-full"></div>' +
+              (overdue ? '<span class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-zinc-800"></span>' : '') +
+            '</button>' + tbdTag +
+            (ganttExpanded[t.id] ? '' : wipChecklistMarkers(t, today, horizon, rangeStart, n))) +
         '</div>' +
       '</div>' +
       // Expanded: one row per checklist item, same as the Timeline tab. A single flex row spans
@@ -16251,7 +16303,12 @@
           '<div class="relative flex-1 min-w-0">' + diamond + '</div>' +
         '</div>';
       }).join('') : '');
-    }).join('');
+    };
+    var rows = list.map(taskRowHtml).join('');
+    if (noDates.length) {
+      rows += '<div class="flex items-center gap-2 px-3 py-1.5 border-y border-zinc-200 dark:border-zinc-600 bg-zinc-50 dark:bg-zinc-700/40 text-xs font-semibold text-zinc-600 dark:text-zinc-300">No dates yet <span class="px-1.5 rounded-full bg-white dark:bg-zinc-800 text-zinc-500 dark:text-zinc-400">' + noDates.length + '</span></div>' +
+        noDates.map(function (t, i) { return taskRowHtml(t, list.length + i); }).join('');
+    }
 
     // Legend lists only what is actually drawn -- same swatches as the Timeline tab's, minus the
     // ones this view cannot show (Done, today line, deadline stack).
@@ -16278,7 +16335,7 @@
 
     var handle = '<div class="absolute top-0 bottom-0 group cursor-col-resize" id="wip-resize-handle" title="Drag to resize the Task column" style="left:calc(var(--wip-label-w) - 3px);width:6px;z-index:5;">' +
       '<div class="w-px h-full mx-auto bg-transparent group-hover:bg-brand-400 dark:group-hover:bg-brand-500"></div></div>';
-    return wipSectionHtml('Timeline', list.length, '<div class="overflow-x-auto"><div id="wip-timeline-grid" class="relative" style="--wip-label-w:' + wipLabelWidthCss(wipLabelWidth()) + ';">' + head + rows + handle + '</div></div>' + note, aside);
+    return wipSectionHtml('Timeline', list.length + noDates.length, '<div class="overflow-x-auto"><div id="wip-timeline-grid" class="relative" style="--wip-label-w:' + wipLabelWidthCss(wipLabelWidth()) + ';">' + head + rows + handle + '</div></div>', aside);
   }
 
   /* ---------------------------------------------------------
@@ -17020,6 +17077,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-12j', date: '2026-10-12', items: [
+      { type: 'fixed', title: 'Tasks without dates are back on the Timeline', text: "A task with its deadline set to TBD used to be left off the Timeline, so whole projects could go missing. It now shows as a bar that fades out, marked \"Deadline TBD\". Tasks with no dates at all are listed at the bottom under \"No dates yet\", with an \"Add dates\" link. Same on the WIP Meeting timeline." }
+    ] },
     { id: '2026-10-12i', date: '2026-10-12', items: [
       { type: 'improved', title: 'Done steps take less room', text: "In a task's checklist, each done step is now one line: its name, a small link icon and who did it, with the date on the right. Done steps from the same day sit under one heading, with the person named once." }
     ] },
@@ -20940,7 +21000,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-12T09:11:40Z";
+  var CURRENT_BUILD_VERSION = "2026-10-12T09:44:34Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
