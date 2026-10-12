@@ -1039,6 +1039,13 @@ to bottom:
        the current open of the modal stays in place, struck through (`checklistShownDone`), so a
        row never vanishes under the cursor and can be unticked; it folds away next time. Both
        reset in `openTaskModal`. Rows keep their real array index, so drag-reorder is unchanged.
+     - **Superseded (2026-10-12): done steps are always shown and never struck through** (asked: "Do
+       not strikethrough when checked. Also do not hide. Bring the due date up to same line where the
+       edit button is"). They sit below the open ones under a plain "Done · N" label (no fold, no
+       `checklistDoneOpen`), in `zinc-500` text with the ticked box saying they're done. The due date
+       is a short "Due Oct 9" (rose "· late" when overdue, amber when after the task deadline, the
+       reason in the tooltip) at the right of the row, beside the time and pencil, not a line under
+       the text. Rows in a dated group still leave the date to the group heading.
      - **The checklist has no inner scroll box any more** (it was `max-h-40` inside a modal that
        already scrolls: two scrollbars, rows cut off mid-item).
      - **Checklist links are a chip naming the site** (`linkChipLabel`/`linkChipHtml`: Google
@@ -1519,7 +1526,10 @@ to bottom:
        emerald = Done) or on the project badge above it (the orange/teal/indigo/fuchsia/cyan/
        lime/pink/violet hash palette) — reusing any of those here would have read as a second,
        false signal riding along with the real one.
-     - **The badge sits last in the meta row with `ml-auto`, not right after Priority.** First
+     - **The badge sits last in the meta row with `ml-auto`, not right after Priority.**
+       **It has a small down arrow, a hover state and a tooltip** ("Change between client and
+       internal review"): asked "Can Internal review be changed to client review?" when clicking it
+       already did that, so the cue was missing. First
        shipped next to Priority; reported directly that this crowded the row's left side while
        the rest of it (past the date/time icons) sat empty. Moving it to the end and giving it
        `ml-auto` pushes just that one badge to the row's right edge without disturbing the
@@ -3775,6 +3785,10 @@ decides what to move.
   own clicks), the phone layout (its boxes sit outside the redrawn parts), people pickers, Ctrl K.
   All covered by `tests/live-forms.test.js`. **Any new typing box inside something that redraws
   on live data must call `holdIfTyping` and be added to that test** (also in `/design-check`).
+- **Leave that ended more than 30 days ago is no longer listed on the People card**
+  (`LEAVE_LIST_DAYS`, 2026-10-12, asked: "Leaves that have past 30 days should automatically be
+  removed"). Hidden, not deleted: the Timeline, Calendar and past Monday weeks still read it,
+  which is why ended leave was kept (greyed, "Ended") in the first place.
 - `logActivity` fires **inside `saveLeave`'s success path**, not at the call site, so a rules
   denial or dropped connection can't log something that never happened. Its own
   `leave_changed` activity type, amber, matching the Away chip and the Gantt note — one colour
@@ -4112,6 +4126,47 @@ their week into a cell before the Monday meeting. Asked: "Is there a way to inte
   already says "Away this week". Same periods as WIP's Away card (`wipAwayRows`). No row when there
   is no leave. Shows on cards with no update too, and on the phone (it reuses the cards).
   `tests/monday-follow.test.js` covers both this and owner-following.
+- **Second Monday pass (2026-10-12), all asked for directly while the meeting was being run:**
+  - **Week bar:** the current week reads "This week" (date on hover) and has no forward arrow
+    ("It should say 'This week' to avoid confusion", "should not have an arrow on the right");
+    older weeks keep their date, a "This week" link and the arrow. Once nobody is waiting it reads a
+    green **"All in!"** with a full green bar instead of "10 of 10 in". Same on the phone.
+  - **Bigger for the meeting screen:** `#weekly-bar, #weekly-view { zoom: 1.2 }` from 768px ("Can
+    all the text and everything be larger"). One scale, so text, icons, avatars and the status
+    column stay in proportion; the page keeps its 64rem cap (`max-w-5xl`). Not the editor, not the
+    phone.
+  - **Editor: a dropdown per project, not six pills** ("It adds to visual clutter ... make this
+    interface visually simpler"). Each of your projects is one line: name, "Coming up", and a
+    `<select data-weekly-select>` (the app's own list on desktop via `openSelectMenu`). "Same as
+    last week (Waiting on client)" is an option in it, not a line of its own. The note box and the
+    board's "Latest on the board ... Use this" appear only once a status is picked. Projects their
+    owner answered are listed last under "Answered by their owners · N", one compact line each
+    ("Arvind: Waiting on client – note", "Answer myself"). "Anything not on the board?" is its own
+    tinted band (`bg-zinc-50`) so it can't blend with the last project ("should not blend with
+    entered entries"). Rows carry `data-weekly-project-row="<i>"`.
+  - **Needs help box** rebuilt like the person cards (reported: "contrast is not great ... looks
+    unfinished"): white/zinc-800 card, brand header band with a count pill, one row per request
+    (avatar + first name | project in full, client tag coloured, wraps | the note).
+  - **Resolving help** ("If the items here in Monday Meeting are resolved, reflect it everywhere
+    else. There should be an option to resolve this by the owner"): a "Resolve" button on each
+    Needs help item for whoever asked, and admins (`weeklyCanResolve`), not on the phone. It sets
+    `resolved: true` (+ `resolvedAt`, `resolvedBy`) on that row in their own roster doc
+    (`setWeeklyHelpResolved`, Undo on the toast). Every reader goes through `weeklyHelpOpen(r)`:
+    the Needs help box and WIP's help line drop it, their card shows "Resolved" in emerald (sorted
+    with On track), and people following that project see the same. Re-saving the update keeps the
+    mark; picking a status again in the editor clears it (a new Needs help starts unresolved).
+  - **Project names are links** ("Can clicking on the project go to the project card? Can't find
+    the attached project"): on a card row and in Needs help they open the project's card on
+    Projects (`cmdkOpenProject`, the Ctrl K jump, now matching names by `projectKey`). If the
+    teamspace or a leftover search hides that card, it switches to all teams, clears the search and
+    says so in a toast. On the phone the same names open the phone's project page.
+  - **Reminder duplicates fixed** (reported: "Why does this notification keep popping up", two
+    "Your Monday update is due"). The "already sent?" check read this window's copy of your roster
+    row, which can be stale (laptop waking, phone tab resuming, two windows). Now it re-reads the
+    row from the server (`getDoc`) before sending, and the notification has a fixed id
+    `weekly-<uid>-<week>-<slot>`, so racing windows write one doc. Sending your update marks any
+    unread reminder read. (Reading a missing notification doc is denied by the rules, so the server
+    check is on the roster row, not the notification.)
 - **Present mode was built and removed before shipping** ("Present mode is not necessary").
 - **Company-wide, ignores the teamspace switcher**, same reasoning as WIP: one shared meeting.
   Expected people = roster accounts seen in the last `WEEKLY_ACTIVE_DAYS` (45), or who already

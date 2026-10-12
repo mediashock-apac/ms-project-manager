@@ -93,6 +93,11 @@
      it will land (a shadow, since the card clips anything positioned outside it). */
   .weekly-dragging { opacity: 0.45; }
   .weekly-drop-before { box-shadow: 0 -9px 0 -6px #ff4e20 !important; }
+  /* Monday Meeting is read together on one screen (asked: "Can all the text and everything be larger
+     so that it is viewable when we are having the meeting?"). One scale for the whole page, so text,
+     icons, avatars and the status column all grow together and keep their proportions. Desktop only:
+     the phone has its own layout. */
+  @media (min-width: 768px) { #weekly-bar, #weekly-view { zoom: 1.2; } }
   .weekly-drop-after { box-shadow: 0 9px 0 -6px #ff4e20 !important; }
   /* [data-column] (the column wrapper) has no Tailwind `transition` class of its own, unlike
      .task-card, so the drop-target highlight needs an explicit one to fade in/out instead of
@@ -7355,7 +7360,6 @@
     // so the "Working on" select in Time Tracking always has something stable to link against
     // (self-heals into Firestore next time this task is saved -- see upsertUserDirectory in
     // the sibling Content Hub app for the same "fix it forward on load" pattern).
-    checklistDoneOpen = false;
     checklistShownDone = {};
     // A copy of each item, not the item itself. Editing used to change the live task's own items,
     // so by Save the "before" list already matched the edit and notifyChecklistChanges compared a
@@ -7522,10 +7526,9 @@
 
   // Which item's inline editor (text, link, due date / TBD) is open, or null.
   var checklistEditIndex = null;
-  // Completed items collapse under a "N done" line so the open ones are what you see.
-  // checklistShownDone: items ticked during THIS open of the modal stay in place (struck
-  // through) until it's reopened, so ticking doesn't make a row vanish under the cursor.
-  var checklistDoneOpen = false;
+  // Completed items are listed after the open ones, under "Done · N" (always shown).
+  // checklistShownDone: items ticked during THIS open of the modal stay in place until it's
+  // reopened, so ticking doesn't make a row jump away from under the cursor.
   var checklistShownDone = {};
 
   // A checklist link shows as a short chip naming the site ("Google Slides", "Frame.io"),
@@ -7580,16 +7583,19 @@
     return match ? match.id : null;
   }
 
-  // Small "Due 8 Oct" line under an item's text. Rose when it is overdue and still open, amber
-  // when it falls after the task's own deadline (the Timeline would otherwise draw the marker
-  // beyond the bar and contradict it).
+  // "Due 8 Oct" at the right of the item's row, on the same line as its pencil (asked: "Bring the
+  // due date up to same line where the edit button is"; it was a line of its own under the text).
+  // Rose when it is overdue and still open, amber when it falls after the task's own deadline (the
+  // Timeline would otherwise draw the marker beyond the bar and contradict it); the tooltip says why.
   function checklistDueLabelHtml(item, i) {
-    if (!item.due) return item.dueTbd ? '<span class="block text-[11px] text-zinc-400 dark:text-zinc-500">Due TBD</span>' : '';
+    var base = 'shrink-0 whitespace-nowrap text-[11px] ';
+    if (!item.due) return item.dueTbd ? '<span class="' + base + 'text-zinc-500 dark:text-zinc-400">Due TBD</span>' : '';
     var taskDeadline = document.getElementById('task-deadline').value;
     var overdue = stepIsLate({ status: document.getElementById('task-status').value }, item);
     var after = taskDeadline && item.due > taskDeadline;
-    var cls = overdue ? 'text-rose-600 dark:text-rose-400' : (after ? 'text-amber-700 dark:text-amber-400' : 'text-zinc-400 dark:text-zinc-500');
-    return '<span class="block text-[11px] ' + cls + '">Due ' + formatShortDate(item.due) + (overdue ? ' · overdue' : '') + (after ? ' · after the task deadline' : '');
+    var cls = overdue ? 'font-semibold text-rose-600 dark:text-rose-400' : (after ? 'font-semibold text-amber-700 dark:text-amber-400' : 'text-zinc-500 dark:text-zinc-400');
+    var why = overdue ? 'Overdue' : after ? 'Due after the task deadline' : '';
+    return '<span class="' + base + cls + '"' + (why ? ' title="' + why + '"' : '') + '>Due ' + formatShortDate(item.due) + (overdue ? ' · late' : '') + '</span>';
   }
 
   /* Checklist items can be handed to a person -- asked for directly: "checklist to be able to
@@ -7689,11 +7695,11 @@
                     checklistPeopleEditorHtml(stepPeople(item)) +
                   '</div>'
                 : '<div class="flex-1 min-w-0">' +
-                  '<span class="checklist-name block w-fit max-w-full cursor-text text-sm ' + (item.done ? 'line-through text-zinc-400 dark:text-zinc-500' : 'text-zinc-700 dark:text-zinc-200 hover:text-zinc-900 dark:hover:text-white') + '" data-checklist-i="' + i + '" title="Click to edit">' + escapeHtml(item.text) + '</span>' +
+                  '<span class="checklist-name block w-fit max-w-full cursor-text text-sm ' + (item.done ? 'text-zinc-500 dark:text-zinc-400' : 'text-zinc-700 dark:text-zinc-200 hover:text-zinc-900 dark:hover:text-white') + '" data-checklist-i="' + i + '" title="Click to edit">' + escapeHtml(item.text) + '</span>' +
                   (item.link && !linkOnHead ? '<div>' + linkChipHtml(item.link) + '</div>' : '') +
                   (stepPeople(item).length && !peopleOnHead ? '<span class="flex items-center gap-1 text-[11px] text-zinc-500 dark:text-zinc-400">' + stepPeople(item).map(function (n) { return avatarHtml(n, 'w-3.5 h-3.5 shrink-0', 'text-[8px]'); }).join('') + escapeHtml(stepPeopleLabel(item)) + '</span>' : '') +
-                  (inGroup ? '' : checklistDueLabelHtml(item, i)) +
                 '</div>') +
+              (inGroup || editing ? '' : checklistDueLabelHtml(item, i)) +
               (itemMinutes ? '<span class="shrink-0 text-[10px] font-semibold text-zinc-400 dark:text-zinc-500" title="Time logged against this item">' + formatDuration(itemMinutes) + '</span>' : '') +
               '<button type="button" class="checklist-edit-toggle shrink-0 p-1 text-zinc-300 dark:text-zinc-600 hover:text-zinc-500 dark:hover:text-zinc-400" data-checklist-i="' + i + '" title="Edit item" aria-label="Edit item">' + svgIcon('pencil', 'w-3.5 h-3.5') + '</button>' +
               '<button type="button" class="checklist-remove p-1 text-zinc-300 dark:text-zinc-600 hover:text-rose-500 dark:hover:text-rose-400 shrink-0" data-checklist-i="' + i + '" aria-label="Remove item">' + svgIcon('x', 'w-3 h-3') + '</button>' +
@@ -7730,15 +7736,14 @@
         groups[k].forEach(function (x) { var notEditing = checklistEditIndex !== x.i; openRows.push(rowHtml(x.item, x.i, true, shared && notEditing, sharedLink && notEditing)); });
       });
     }
-    var doneToggle = doneRows.length
-      ? '<button type="button" class="checklist-done-toggle self-start flex items-center gap-1.5 px-2 py-1 rounded-md text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-brand-600 dark:hover:text-brand-400">' +
-          svgIcon('chevronDown', 'w-3.5 h-3.5 transition-transform' + (checklistDoneOpen ? '' : ' -rotate-90')) +
-          (checklistDoneOpen ? 'Hide ' + doneRows.length + ' done' : (openRows.length ? '' : 'All ') + doneRows.length + ' done') +
-        '</button>'
+    // Done steps are always shown, below the open ones so the to-do stays on top (asked: "Do not
+    // strikethrough when checked. Also do not hide"; they used to fold under "N done").
+    var doneHead = doneRows.length
+      ? '<p class="checklist-done-head px-2 pt-2 text-[11px] font-bold text-zinc-500 dark:text-zinc-400">' + (openRows.length ? 'Done' : 'All done') + ' · ' + doneRows.length + '</p>'
       : '';
     var stepsBefore = flipCapture(el, '[data-flip]', 'data-flip');
     el.innerHTML = currentChecklist.length
-      ? openRows.join('') + doneToggle + (checklistDoneOpen ? doneRows.join('') : '')
+      ? openRows.join('') + doneHead + doneRows.join('')
       : '<p class="text-xs text-zinc-500 dark:text-zinc-400">No steps yet. Add them below, or <button type="button" id="checklist-copy-btn" aria-haspopup="dialog" class="font-semibold text-brand-800 dark:text-brand-300 hover:underline focus:outline-none focus:underline">copy steps from a similar task</button>.</p>';
     flipPlay(el, '[data-flip]', 'data-flip', stepsBefore);
     if (checklistEditIndex !== null) {
@@ -7832,7 +7837,6 @@
       redrawChecklistPeople(pBox, checklistPeopleInBox(pBox).filter(function (n) { return n !== gone; }));
       return;
     }
-    if (e.target.closest('.checklist-done-toggle')) { checklistDoneOpen = !checklistDoneOpen; renderChecklistEditor(); return; }
     var checkbox = e.target.closest('.checklist-toggle');
     if (checkbox) {
       var item = currentChecklist[parseInt(checkbox.dataset.checklistI, 10)];
@@ -11551,7 +11555,9 @@
     // so clicking it re-prompts instead of opening the task modal underneath it.
     // ml-auto pushes this (and, since it's last, only this) to the row's right edge -- everything
     // before it keeps its normal left-packed order and spacing.
-    return '<button type="button" data-set-review-audience="' + t.id + '" title="Click to change" class="ml-auto shrink-0 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + cls + '">' + label + '</button>';
+    // A small down arrow, a hover state and a real tooltip say it can be changed: asked "Can Internal
+    // review be changed to client review?" when it already could, so the cue was missing.
+    return '<button type="button" data-set-review-audience="' + t.id + '" data-tooltip="Change between client and internal review" class="tooltip-top ml-auto shrink-0 inline-flex items-center gap-0.5 text-[10px] font-bold uppercase tracking-wide pl-1.5 pr-1 py-0.5 rounded hover:brightness-95 dark:hover:brightness-125 ' + cls + '">' + label + svgIcon('chevronDown', 'w-2.5 h-2.5 shrink-0 opacity-70') + '</button>';
   }
 
   // One compact row per task, meant to live inside projectGroupCardHtml's wrapper below -- not
@@ -12868,9 +12874,37 @@
   }
 
   function weeklyRowsSorted(rows) {
+    var rank = function (r) { return WEEKLY_READ_ORDER.indexOf(weeklyHelpOpen(r) || r.status !== 'help' ? r.status : 'ontrack'); };
     return (rows || []).filter(function (r) { return r && WEEKLY_STATUS[r.status]; }).slice().sort(function (a, b) {
-      return WEEKLY_READ_ORDER.indexOf(a.status) - WEEKLY_READ_ORDER.indexOf(b.status);
+      return rank(a) - rank(b);
     });
+  }
+
+  /* Resolving a "Needs help" row (asked: "If the items here in Monday Meeting are resolved, reflect
+     it everywhere else. There should be an option to resolve this by the owner."). The person who
+     asked (or an admin) presses Resolve on the Needs help box; the row keeps its note and gains
+     `resolved: true` (+ resolvedAt/resolvedBy) on their own roster doc. One fact, one place: every
+     reader asks weeklyHelpOpen, so the Needs help box, the "Resolved" label on their card, WIP's
+     help line, the phone and the people following that project's update all change together. */
+  function weeklyHelpOpen(r) { return !!(r && r.status === 'help' && !r.resolved); }
+  var WEEKLY_RESOLVED_META = { label: 'Resolved', text: 'text-emerald-700 dark:text-emerald-400', row: '' };
+  function weeklyCanResolve(name) { return name === weeklyMe() || isAdminUser(); }
+  function setWeeklyHelpResolved(name, key, project, resolved) {
+    var target = weeklyTargetDoc(name);
+    if (!target) { showToast('Only ' + String(name).split(' ')[0] + ' or an admin can resolve this.', 'info'); return; }
+    var list = weeklyListOf(target).map(function (e) {
+      if (!e || e.week !== key) return e;
+      return Object.assign({}, e, { rows: (e.rows || []).map(function (r) {
+        if (!r || r.project !== project || r.status !== 'help') return r;
+        var nr = Object.assign({}, r);
+        if (resolved) { nr.resolved = true; nr.resolvedAt = new Date().toISOString(); nr.resolvedBy = weeklyMe(); }
+        else { delete nr.resolved; delete nr.resolvedAt; delete nr.resolvedBy; }
+        return nr;
+      }) });
+    });
+    setDoc(doc(peopleCol, target.id), { weekly: list }, { merge: true }).then(function () {
+      if (resolved) showToast('Marked resolved', 'success', { action: { label: 'Undo', onClick: function () { setWeeklyHelpResolved(name, key, project, false); } } });
+    }).catch(function (err) { showToast('Could not save: ' + err.message, 'error'); });
   }
 
   // A row is NEW when last week's update said something different about that project. Nothing
@@ -12906,7 +12940,7 @@
       if (!e || e.leave) return;
       var r = (e.rows || []).find(function (x) { return x && projectKey(x.project) === k && WEEKLY_STATUS[x.status]; });
       var at = e.editedAt || e.at || '';
-      if (r && (!best || at > bestAt)) { best = { project: r.project, status: r.status, note: r.note || '', from: owner }; bestAt = at; }
+      if (r && (!best || at > bestAt)) { best = { project: r.project, status: r.status, note: r.note || '', resolved: !!r.resolved, from: owner }; bestAt = at; }
     });
     return best;
   }
@@ -12932,17 +12966,26 @@
     var inCount = people.filter(function (n) { return !!weeklyEntryFor(n, key); }).length;
     var waiting = people.filter(function (n) { return !weeklyEntryFor(n, key); });
     var pct = people.length ? Math.round(inCount / people.length * 100) : 0;
+    var allIn = people.length > 0 && !waiting.length;
     html +=
       '<div class="flex items-center gap-0.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 p-0.5">' +
         '<button type="button" data-weekly-nav="-1" aria-label="Previous week" class="w-8 h-8 flex items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700">' + '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg>' + '</button>' +
-        '<span class="text-sm font-bold text-zinc-900 dark:text-white px-1.5 whitespace-nowrap">' + escapeHtml(weeklyLabel(key)) + '</span>' +
-        (isCurrent ? '' : '<button type="button" data-weekly-nav="0" class="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline px-1.5">This week</button>') +
-        '<button type="button" data-weekly-nav="1" aria-label="Next week" class="w-8 h-8 flex items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700">' + '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg>' + '</button>' +
+        // The current week reads "This week" (asked: "It should say 'This week' to avoid confusion",
+        // the date is on hover), and has no forward arrow: nothing is written ahead of time (asked:
+        // "should not have an arrow on the right"). Older weeks keep the date and a way back.
+        (isCurrent
+          ? '<span class="text-sm font-bold text-zinc-900 dark:text-white px-1.5 pr-3 whitespace-nowrap" data-tooltip="' + escapeHtml(weeklyLabel(key)) + '">This week</span>'
+          : '<span class="text-sm font-bold text-zinc-900 dark:text-white px-1.5 whitespace-nowrap">' + escapeHtml(weeklyLabel(key)) + '</span>' +
+            '<button type="button" data-weekly-nav="0" class="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline px-1.5">This week</button>' +
+            '<button type="button" data-weekly-nav="1" aria-label="Next week" class="w-8 h-8 flex items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700">' + '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg>' + '</button>') +
       '</div>' +
       '<div class="flex items-center gap-2.5 min-w-0">' +
-        '<div class="w-28 h-2 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden shrink-0"><div class="h-full bg-zinc-800 dark:bg-zinc-200" style="width:' + pct + '%"></div></div>' +
-        '<span class="text-sm text-zinc-600 dark:text-zinc-300 truncate"><b class="text-zinc-900 dark:text-white">' + inCount + ' of ' + people.length + '</b> in' +
-          (waiting.length && waiting.length <= 4 ? ' · waiting on ' + escapeHtml(waiting.map(function (n) { return n.split(' ')[0]; }).join(', ')) : waiting.length ? ' · ' + waiting.length + ' to go' : '') + '</span>' +
+        '<div class="w-28 h-2 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden shrink-0"><div class="h-full ' + (allIn ? 'bg-emerald-500' : 'bg-zinc-800 dark:bg-zinc-200') + '" style="width:' + pct + '%"></div></div>' +
+        // Everyone in: a green "All in!" instead of "10 of 10 in" (asked for directly).
+        (allIn
+          ? '<span class="text-sm font-bold text-emerald-700 dark:text-emerald-400">All in!</span>'
+          : '<span class="text-sm text-zinc-600 dark:text-zinc-300 truncate"><b class="text-zinc-900 dark:text-white">' + inCount + ' of ' + people.length + '</b> in' +
+            (waiting.length && waiting.length <= 4 ? ' · waiting on ' + escapeHtml(waiting.map(function (n) { return n.split(' ')[0]; }).join(', ')) : waiting.length ? ' · ' + waiting.length + ' to go' : '') + '</span>') +
       '</div>';
     // No Write/Edit button here any more: it sits on each person's card (asked: "Make the button
     // within each person's line instead of one button on top"). The top one always opened THIS
@@ -12988,14 +13031,20 @@
     return out;
   }
   function weeklyRowHtml(name, key, row, g) {
-    var meta = WEEKLY_STATUS[row.status];
+    var resolved = row.status === 'help' && row.resolved;
+    var meta = resolved ? WEEKLY_RESOLVED_META : WEEKLY_STATUS[row.status];
     // A followed row is the owner's: it's marked NEW on the owner's own card, not repeated here.
     var isNew = !row.from && weeklyRowIsNew(name, key, row);
     // Below sm the status label takes its own line, so the project text keeps the card's width.
     // The old right-hand date column is gone: the Next line carries the dates now.
     return '<div class="grid grid-cols-1 sm:grid-cols-[8.5rem_minmax(0,1fr)] gap-x-3 gap-y-0.5 items-baseline px-4 py-2.5 ' + (meta.row || '') + '">' +
-      '<span class="flex items-center gap-1.5 text-xs font-bold ' + meta.text + '">' + weeklyIcon(row.status) + meta.label + '</span>' +
-      '<span class="text-sm leading-snug min-w-0 break-words"><span class="font-semibold text-zinc-900 dark:text-white">' + projectNameHtml(row.project) + '</span>' +
+      '<span class="flex items-center gap-1.5 text-xs font-bold ' + meta.text + '">' + weeklyIcon(resolved ? 'done' : row.status) + meta.label + '</span>' +
+      // The project name opens its card on Projects (asked: "Can clicking on the project go to the
+      // project card?"); on the phone layout, the phone's project page.
+      '<span class="text-sm leading-snug min-w-0 break-words">' +
+        (row.project && row.project !== 'No project'
+          ? '<button type="button" ' + ((typeof mActive === 'function' && mActive()) ? 'data-m-project' : 'data-weekly-project') + '="' + escapeHtml(row.project) + '" data-tooltip="Open the project" class="tooltip-top inline text-left font-semibold text-zinc-900 dark:text-white hover:underline decoration-zinc-400 underline-offset-2">' + projectNameHtml(row.project) + '</button>'
+          : '<span class="font-semibold text-zinc-900 dark:text-white">' + projectNameHtml(row.project) + '</span>') +
         (row.note ? ' <span class="text-zinc-600 dark:text-zinc-300">– ' + escapeHtml(row.note) + '</span>' : '') +
         (row.from ? ' <span class="text-xs text-zinc-500 dark:text-zinc-400 whitespace-nowrap" data-tooltip="' + escapeHtml(row.from) + ' owns this project; their update shows here">· from ' + escapeHtml(String(row.from).split(' ')[0]) + '</span>' : '') +
         (isNew ? ' <span class="align-middle text-[10px] font-bold px-1.5 py-px rounded-full bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300">NEW</span>' : '') +
@@ -13081,7 +13130,7 @@
     people.forEach(function (n) {
       var e = weeklyEntryFor(n, key);
       if (!e || e.leave) return;
-      (e.rows || []).forEach(function (r) { if (r && r.status === 'help') out.push({ name: n, project: r.project, note: r.note }); });
+      (e.rows || []).forEach(function (r) { if (weeklyHelpOpen(r)) out.push({ name: n, project: r.project, note: r.note }); });
     });
     return out;
   }
@@ -13124,12 +13173,29 @@
       return;
     }
     var help = weeklyHelpItems(key, people);
+    // Built like the person cards below (asked: "The contrast here is not great ... looks unfinished
+    // and unpolished"): a white/zinc-800 card with a brand header band, so the text sits on the same
+    // surface as everywhere else on the page instead of a dark card on a dim brand tint. One row per
+    // request: who (avatar + name), then the project in full (client tag coloured, wraps instead of
+    // being cut off, opens the project) and what they need.
     var helpHtml = help.length
-      ? '<section class="mb-5 rounded-xl border border-brand-200 dark:border-brand-500/30 bg-brand-50 dark:bg-brand-500/10 px-4 py-3.5">' +
-          '<h2 class="flex items-center gap-2 text-base font-bold text-brand-800 dark:text-brand-200 mb-2.5">' + weeklyIcon('help', 'w-4 h-4') + 'Needs help · ' + help.length + '</h2>' +
-          '<div class="grid gap-2.5 sm:grid-cols-2 xl:grid-cols-3">' + help.map(function (h) {
-            return '<div class="rounded-lg bg-white dark:bg-zinc-800 px-3.5 py-2.5 min-w-0"><p class="text-xs font-semibold text-zinc-500 dark:text-zinc-400 truncate">' + escapeHtml(h.name.split(' ')[0]) + ' · ' + escapeHtml(h.project) + '</p>' +
-              '<p class="text-sm text-zinc-900 dark:text-zinc-100 break-words">' + (h.note ? escapeHtml(h.note) : 'Needs help') + '</p></div>';
+      ? '<section class="mb-5 rounded-xl border border-brand-300 dark:border-brand-500/40 bg-white dark:bg-zinc-800 shadow-card overflow-hidden">' +
+          '<div class="flex items-center gap-2 px-4 py-2.5 bg-brand-50 dark:bg-brand-500/15 border-b border-brand-200 dark:border-brand-500/30">' +
+            '<span class="text-brand-700 dark:text-brand-300">' + weeklyIcon('help', 'w-4 h-4') + '</span>' +
+            '<h2 class="text-base font-bold text-brand-800 dark:text-brand-200">Needs help</h2>' +
+            '<span class="text-xs font-bold px-2 py-0.5 rounded-full bg-brand-600 text-white">' + help.length + '</span>' +
+          '</div>' +
+          '<div class="divide-y divide-zinc-100 dark:divide-zinc-700/60">' + help.map(function (h) {
+            return '<div class="grid grid-cols-1 sm:grid-cols-[8.5rem_minmax(0,1fr)] gap-x-3 gap-y-1 items-baseline px-4 py-3">' +
+              '<span class="flex items-center gap-2 min-w-0 text-sm font-semibold text-zinc-800 dark:text-zinc-100">' + avatarHtml(h.name, 'w-6 h-6 shrink-0 self-center', 'text-[10px]') + '<span class="truncate">' + escapeHtml(h.name.split(' ')[0]) + '</span></span>' +
+              '<span class="min-w-0 text-sm leading-snug">' +
+                '<button type="button" data-weekly-project="' + escapeHtml(h.project) + '" class="inline text-left font-semibold text-zinc-900 dark:text-white break-words hover:underline decoration-zinc-400 underline-offset-2">' + projectNameHtml(h.project) + '</button>' +
+                '<span class="block mt-0.5 text-zinc-700 dark:text-zinc-200 break-words">' + (h.note ? escapeHtml(h.note) : 'Needs help') + '</span>' +
+                (weeklyCanResolve(h.name) && !(typeof mActive === 'function' && mActive())
+                  ? '<button type="button" data-weekly-resolve="' + escapeHtml(h.project) + '" data-weekly-resolve-who="' + escapeHtml(h.name) + '" class="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg border border-emerald-300 dark:border-emerald-500/40 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-500/10">' + weeklyIcon('done', 'w-3 h-3') + 'Resolve</button>'
+                  : '') +
+              '</span>' +
+            '</div>';
           }).join('') + '</div></section>'
       : '';
     // One heading per department, like the sheet's blocks.
@@ -13183,7 +13249,7 @@
     if (existing && !existing.leave) (existing.rows || []).forEach(function (r) {
       if (!r) return;
       var row = add(r.project, null);
-      row.status = r.status; row.note = r.note || '';
+      row.status = r.status; row.note = r.note || ''; row.resolved = r.resolved ? { at: r.resolvedAt, by: r.resolvedBy } : null;
     });
     // Projects you're only attached to: while an owner's update covers one, it's answered for you
     // (see weeklyOwnerRow). `mine` = you answered it yourself, which wins over the owner's.
@@ -13215,65 +13281,65 @@
     document.getElementById('weekly-modal-sub').textContent = d.leave
       ? 'Marked as on leave. Add a note if anyone needs to know something.'
       : d.rows.length
-        ? d.rows.length + (d.rows.length === 1 ? ' project' : ' projects') + ' from the board' +
-          (covered ? ', ' + covered + ' already answered by ' + (covered === 1 ? 'its owner' : 'their owners') : '') +
-          '. One tap each; add a note only if it helps.'
+        ? 'Pick a status for each project. A note is optional.'
         : 'Nothing open on the board for ' + (mine ? 'you' : first) + '. Add anything worth saying below.';
+    /* Simpler editor (asked: "Can statuses be a dropdown instead of pills? It adds to visual clutter.
+       Can we also see how we can make this interface visually simpler and easier?"):
+       - one dropdown per project instead of six pills, on the project's own line;
+       - "Same as last week" is an option in that dropdown, not a line of its own;
+       - the note box and the board's latest status line appear only once a status is picked;
+       - projects their owner already answered sit together at the end, one compact line each;
+       - "Anything not on the board" is its own tinted band, so it can't blend with the projects. */
     var body = '';
     if (!d.leave) {
-      body += d.rows.map(function (r, i) {
+      var ownHtml = '', coveredHtml = '';
+      d.rows.forEach(function (r, i) {
         var sub = r.late ? 'Late since ' + formatShortDate(r.late) : '';
-        var upcomingHtml = r.upcoming && r.upcoming.length
-          ? '<p class="min-w-0 break-words"><span class="font-semibold text-zinc-600 dark:text-zinc-300">Coming up:</span> ' +
-            r.upcoming.map(function (x) { return escapeHtml(x.text) + ' <span class="text-zinc-400 dark:text-zinc-500">' + escapeHtml(formatShortDate(x.date)) + '</span>'; }).join('<span class="text-zinc-300 dark:text-zinc-600"> · </span>') + '</p>'
-          : '';
         var ownerFirst = r.cover ? String(r.cover.from).split(' ')[0] : '';
-        var head = '<div class="flex items-baseline gap-2.5 flex-wrap"><span class="text-[15px] font-bold text-zinc-900 dark:text-white break-words min-w-0">' + projectNameHtml(r.project) + '</span>' +
-          (sub ? '<span class="text-xs font-semibold text-rose-600 dark:text-rose-400">' + escapeHtml(sub) + '</span>' : '') + '</div>';
-        // Covered by the owner: nothing to ask, just what they said and a way to say your own.
+        var late = sub ? ' <span class="text-xs font-semibold text-rose-600 dark:text-rose-400 whitespace-nowrap">' + escapeHtml(sub) + '</span>' : '';
         if (weeklyRowFollowsOwner(r)) {
           var cm = WEEKLY_STATUS[r.cover.status];
-          return '<div class="px-5 py-3.5 border-b border-zinc-100 dark:border-zinc-700/60 flex flex-col gap-2">' + head +
-            '<div class="flex flex-wrap items-baseline gap-x-2 gap-y-1 rounded-lg bg-zinc-50 dark:bg-zinc-700/40 px-3 py-2 text-sm">' +
-              '<span class="text-zinc-500 dark:text-zinc-400">' + escapeHtml(ownerFirst) + '\'s update:</span>' +
-              '<span class="inline-flex items-center gap-1 text-xs font-bold ' + cm.text + '">' + weeklyIcon(r.cover.status) + cm.label + '</span>' +
-              (r.cover.note ? '<span class="min-w-0 break-words text-zinc-700 dark:text-zinc-200">– ' + escapeHtml(r.cover.note) + '</span>' : '') +
-              '<span class="flex-1"></span><button type="button" data-weekly-own="' + i + '" class="text-xs font-bold text-brand-600 dark:text-brand-400 hover:underline">Answer myself</button>' +
-            '</div>' +
-            (upcomingHtml ? '<div class="flex flex-col gap-0.5 text-xs text-zinc-500 dark:text-zinc-400">' + upcomingHtml + '</div>' : '') +
+          coveredHtml += '<div data-weekly-project-row="' + i + '" class="px-5 py-2.5 flex items-start gap-3 border-b border-zinc-100 dark:border-zinc-700/60">' +
+            '<div class="min-w-0 flex-1"><p class="text-sm font-semibold text-zinc-900 dark:text-white break-words">' + projectNameHtml(r.project) + late + '</p>' +
+              '<p class="text-xs text-zinc-500 dark:text-zinc-400 break-words mt-0.5">' + escapeHtml(ownerFirst) + ': <b class="' + cm.text + '">' + cm.label + '</b>' +
+                (r.cover.note ? ' – ' + escapeHtml(r.cover.note) : '') + '</p></div>' +
+            '<button type="button" data-weekly-own="' + i + '" class="shrink-0 text-xs font-bold text-brand-600 dark:text-brand-400 hover:underline mt-0.5">Answer myself</button>' +
           '</div>';
+          return;
         }
-        // Reference lines, muted, only when there is something to show: the newest status line on
-        // the project (with "Use this" to copy it into the note) and what's coming up for you there.
-        var refs = '';
-        if (r.latest) refs += '<p class="min-w-0 break-words"><span class="font-semibold text-zinc-600 dark:text-zinc-300">Latest:</span> ' + escapeHtml(r.latest.text) +
-          ' <span class="text-zinc-400 dark:text-zinc-500">· ' + escapeHtml(formatShortDate(r.latest.date)) + (r.latest.author ? ' · ' + escapeHtml(String(r.latest.author).split(' ')[0]) : '') + '</span>' +
-          (r.note === r.latest.text ? '' : ' <button type="button" data-weekly-use="' + i + '" class="font-bold text-brand-600 dark:text-brand-400 hover:underline">Use this</button>') + '</p>';
-        refs += upcomingHtml;
-        return '<div class="px-5 py-3.5 border-b border-zinc-100 dark:border-zinc-700/60 flex flex-col gap-2.5">' + head +
-          (refs ? '<div class="flex flex-col gap-0.5 text-xs text-zinc-500 dark:text-zinc-400">' + refs + '</div>' : '') +
+        var upcoming = r.upcoming && r.upcoming.length
+          ? '<p class="text-xs text-zinc-500 dark:text-zinc-400 break-words mt-0.5">Coming up: ' +
+            r.upcoming.map(function (x) { return escapeHtml(x.text) + ' <span class="text-zinc-400 dark:text-zinc-500">' + escapeHtml(formatShortDate(x.date)) + '</span>'; }).join('<span class="text-zinc-300 dark:text-zinc-600"> · </span>') + '</p>'
+          : '';
+        var meta = r.status ? WEEKLY_STATUS[r.status] : null;
+        var opts = '<option value="">Pick a status</option>' +
+          (r.last && !r.status && WEEKLY_STATUS[r.last.status] ? '<option value="same">Same as last week (' + escapeHtml(WEEKLY_STATUS[r.last.status].label) + ')</option>' : '') +
+          WEEKLY_PICK_ORDER.map(function (st) { return '<option value="' + st + '"' + (r.status === st ? ' selected' : '') + '>' + WEEKLY_STATUS[st].label + '</option>'; }).join('');
+        var select = '<select data-weekly-select="' + i + '" aria-label="Status for ' + escapeHtml(r.project) + '" class="shrink-0 w-44 text-sm rounded-lg border px-2.5 py-1.5 bg-white dark:bg-zinc-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 ' +
+          (meta ? 'font-semibold ' + (r.status === 'help' ? 'border-brand-300 dark:border-brand-500/50 ' : 'border-zinc-300 dark:border-zinc-600 ') + meta.text : 'border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400') + '">' + opts + '</select>';
+        var latest = r.status && r.latest && r.note !== r.latest.text
+          ? '<p class="text-xs text-zinc-500 dark:text-zinc-400 break-words">Latest on the board: ' + escapeHtml(r.latest.text) +
+            ' <span class="text-zinc-400 dark:text-zinc-500">· ' + escapeHtml(formatShortDate(r.latest.date)) + (r.latest.author ? ' · ' + escapeHtml(String(r.latest.author).split(' ')[0]) : '') + '</span>' +
+            ' <button type="button" data-weekly-use="' + i + '" class="font-bold text-brand-600 dark:text-brand-400 hover:underline">Use this</button></p>'
+          : '';
+        ownHtml += '<div data-weekly-project-row="' + i + '" class="px-5 py-3 border-b border-zinc-100 dark:border-zinc-700/60 flex flex-col gap-2">' +
+          '<div class="flex items-start gap-3"><div class="min-w-0 flex-1"><p class="text-[15px] font-bold text-zinc-900 dark:text-white break-words">' + projectNameHtml(r.project) + late + '</p>' + upcoming + '</div>' + select + '</div>' +
           (r.cover ? '<p class="text-xs text-zinc-500 dark:text-zinc-400">Answering yourself. <button type="button" data-weekly-follow="' + i + '" class="font-bold text-brand-600 dark:text-brand-400 hover:underline">Use ' + escapeHtml(ownerFirst) + '\'s update instead</button></p>' : '') +
-          (r.last && !r.status
-            ? '<div class="flex flex-wrap items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400"><span class="min-w-0 break-words">Last week: <b class="text-zinc-700 dark:text-zinc-200">' + escapeHtml(WEEKLY_STATUS[r.last.status] ? WEEKLY_STATUS[r.last.status].label : '') + '</b>' + (r.last.note ? ' – ' + escapeHtml(r.last.note) : '') + '</span>' +
-              '<button type="button" data-weekly-same="' + i + '" class="font-bold text-brand-600 dark:text-brand-400 hover:underline">Same as last week</button></div>'
-            : '') +
-          '<div class="flex flex-wrap gap-1.5">' + WEEKLY_PICK_ORDER.map(function (s) {
-            var on = r.status === s;
-            return '<button type="button" data-weekly-status="' + s + '" data-weekly-row="' + i + '" aria-pressed="' + on + '" class="text-[13px] font-semibold px-3 py-1.5 rounded-full border ' +
-              (on ? WEEKLY_STATUS[s].on : 'border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:border-zinc-400 dark:hover:border-zinc-500') + '">' + WEEKLY_STATUS[s].label + '</button>';
-          }).join('') + '</div>' +
           (r.status === 'done' && weeklyOpenTaskCount(r.project)
             ? '<p class="text-xs font-semibold text-amber-700 dark:text-amber-400">' + weeklyOpenTaskCount(r.project) + (weeklyOpenTaskCount(r.project) === 1 ? ' task here is' : ' tasks here are') + ' still open on the board.</p>'
             : '') +
+          latest +
           (r.status || r.note
-            ? '<input type="text" data-weekly-note="' + i + '" maxlength="200" value="' + escapeHtml(r.note || '') + '" placeholder="' + (r.status === 'help' ? 'What do you need, and from whom?' : 'Add a note (optional)') + '" aria-label="Note for ' + escapeHtml(r.project) + '" class="w-full max-w-md text-sm rounded-lg border px-3 py-2 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand-500/40 ' + (r.status === 'help' ? 'border-brand-300 dark:border-brand-500/50' : 'border-zinc-300 dark:border-zinc-600') + '">'
+            ? '<input type="text" data-weekly-note="' + i + '" maxlength="200" value="' + escapeHtml(r.note || '') + '" placeholder="' + (r.status === 'help' ? 'What do you need, and from whom?' : 'Add a note (optional)') + '" aria-label="Note for ' + escapeHtml(r.project) + '" class="w-full text-sm rounded-lg border px-3 py-2 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand-500/40 ' + (r.status === 'help' ? 'border-brand-300 dark:border-brand-500/50' : 'border-zinc-300 dark:border-zinc-600') + '">'
             : '') +
         '</div>';
-      }).join('');
+      });
+      body += ownHtml;
+      if (coveredHtml) body += '<p class="px-5 pt-4 pb-1.5 text-xs font-bold text-zinc-500 dark:text-zinc-400">Answered by their owners · ' + covered + '</p>' + coveredHtml;
     }
-    body += '<div class="px-5 py-4 flex flex-col gap-2">' +
+    body += '<div class="px-5 py-4 flex flex-col gap-2 bg-zinc-50 dark:bg-zinc-900/40 border-t border-zinc-200 dark:border-zinc-700">' +
       '<label for="weekly-extra" class="text-sm font-semibold text-zinc-700 dark:text-zinc-200">' + (d.leave ? 'Note (optional)' : 'Anything not on the board? <span class="font-normal text-zinc-500 dark:text-zinc-400">Admin, new biz, training</span>') + '</label>' +
-      '<input type="text" id="weekly-extra" maxlength="300" value="' + escapeHtml(d.extra) + '" placeholder="' + (d.leave ? 'e.g. Invoices sent before I left' : 'e.g. AI course booked for Thursday') + '" class="w-full max-w-md text-sm rounded-lg border border-dashed border-zinc-300 dark:border-zinc-600 px-3 py-2 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand-500/40">' +
+      '<input type="text" id="weekly-extra" maxlength="300" value="' + escapeHtml(d.extra) + '" placeholder="' + (d.leave ? 'e.g. Invoices sent before I left' : 'e.g. AI course booked for Thursday') + '" class="w-full text-sm rounded-lg border border-zinc-300 dark:border-zinc-600 px-3 py-2 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand-500/40">' +
     '</div>';
     document.getElementById('weekly-modal-body').innerHTML = body;
     var answered = d.rows.filter(function (r) { return r.status || weeklyRowFollowsOwner(r); }).length;
@@ -13335,7 +13401,9 @@
     var me = weeklyDraftDoc(d);
     if (!d || !me) return;
     var rows = d.leave ? [] : d.rows.filter(function (r) { return r.status; }).map(function (r) {
-      return { project: r.project, status: r.status, note: String(r.note || '').trim().slice(0, 200) };
+      var out = { project: r.project, status: r.status, note: String(r.note || '').trim().slice(0, 200) };
+      if (r.status === 'help' && r.resolved) { out.resolved = true; out.resolvedAt = r.resolved.at || null; out.resolvedBy = r.resolved.by || null; }
+      return out;
     });
     // Projects you're only attached to and didn't answer yourself follow their owner's update,
     // including one the owner hasn't written yet: it shows up on your card once they do.
@@ -13365,6 +13433,10 @@
     }
     setDoc(doc(peopleCol, me.id), patch, { merge: true }).then(function () {
       var forWhom = d.person === weeklyMe() ? '' : ' for ' + d.person;
+      // Your update is in, so any "Your Monday update is due" still unread has done its job.
+      if (!forWhom) myNotifications.filter(function (n) { return n.type === 'weekly_reminder' && !n.read; }).forEach(function (n) {
+        updateDoc(doc(notificationsCol, n.id), { read: true }).catch(function () {});
+      });
       if (patch.leave) logActivity('leave_changed', (d.leave ? 'Booked leave ' : 'Removed leave ') + formatShortDate(d.week) + '–' + formatShortDate(weekEndKey) + forWhom + ' (Monday update)');
       closeWeeklyEditor();
       showToast(d.existing ? 'Update saved' + forWhom : 'Update sent. Thanks!', 'success');
@@ -13381,29 +13453,15 @@
       if (!weeklyDraft) return;
       var t = e.target.closest('button');
       if (!t) return;
-      if (t.hasAttribute('data-weekly-status')) {
-        weeklyKeepNotes();
-        var r = weeklyDraft.rows[+t.getAttribute('data-weekly-row')];
-        var s = t.getAttribute('data-weekly-status');
-        r.status = r.status === s ? null : s;
-        r.mine = true;
-        renderWeeklyEditor();
-        if (r.status === 'help') {
-          var inp = document.querySelector('#weekly-modal-body [data-weekly-note="' + weeklyDraft.rows.indexOf(r) + '"]');
-          if (inp) inp.focus();
-        }
-      } else if (t.hasAttribute('data-weekly-same')) {
-        weeklyKeepNotes();
-        var row = weeklyDraft.rows[+t.getAttribute('data-weekly-same')];
-        if (row && row.last) { row.status = row.last.status; row.note = row.last.note || ''; row.mine = true; }
-        renderWeeklyEditor();
-      } else if (t.hasAttribute('data-weekly-own') || t.hasAttribute('data-weekly-follow')) {
+      if (t.hasAttribute('data-weekly-own') || t.hasAttribute('data-weekly-follow')) {
         // Switch a project between the owner's answer and your own.
         weeklyKeepNotes();
         var own = t.hasAttribute('data-weekly-own');
         var orow = weeklyDraft.rows[+t.getAttribute(own ? 'data-weekly-own' : 'data-weekly-follow')];
         if (orow) { orow.mine = own; if (!own) { orow.status = null; orow.note = ''; } }
         renderWeeklyEditor();
+        var sel = own && document.querySelector('#weekly-modal-body [data-weekly-select="' + weeklyDraft.rows.indexOf(orow) + '"]');
+        if (sel) sel.focus();
       } else if (t.hasAttribute('data-weekly-use')) {
         weeklyKeepNotes();
         var ur = weeklyDraft.rows[+t.getAttribute('data-weekly-use')];
@@ -13425,6 +13483,24 @@
         deleteWeeklyUpdate();
       }
     });
+    // A project's status dropdown ("Same as last week" also brings last week's note).
+    weeklyModal.addEventListener('change', function (e) {
+      var sel = e.target.closest && e.target.closest('[data-weekly-select]');
+      if (!sel || !weeklyDraft) return;
+      weeklyKeepNotes();
+      var r = weeklyDraft.rows[+sel.getAttribute('data-weekly-select')];
+      if (!r) return;
+      var v = sel.value;
+      if (v === 'same' && r.last) { r.status = r.last.status; r.note = r.last.note || ''; }
+      else r.status = v || null;
+      r.resolved = null;   // a status picked again is a new answer: a new Needs help starts unresolved
+      r.mine = true;
+      renderWeeklyEditor();
+      if (r.status === 'help') {
+        var inp = document.querySelector('#weekly-modal-body [data-weekly-note="' + weeklyDraft.rows.indexOf(r) + '"]');
+        if (inp) inp.focus();
+      }
+    });
     weeklyModal.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeWeeklyEditor(); }
       else if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); saveWeeklyUpdate(); }
@@ -13441,6 +13517,10 @@
       }
     });
     document.getElementById('weekly-view').addEventListener('click', function (e) {
+      var res = e.target.closest('[data-weekly-resolve]');
+      if (res) { setWeeklyHelpResolved(res.getAttribute('data-weekly-resolve-who'), weeklyShownKey(), res.getAttribute('data-weekly-resolve'), true); return; }
+      var proj = e.target.closest('[data-weekly-project]');
+      if (proj) { cmdkOpenProject(proj.getAttribute('data-weekly-project')); return; }
       var ed = e.target.closest('[data-weekly-edit]');
       if (ed) { openWeeklyEditor(ed.getAttribute('data-weekly-edit'), weeklyShownKey()); return; }
       if (e.target.closest('[data-weekly-write]')) openWeeklyEditor();
@@ -13541,8 +13621,20 @@
     var sent = Array.isArray(me.weeklyReminded) ? me.weeklyReminded : [];
     if (sent.indexOf(tag) !== -1 || weeklyReminderSession[tag]) return;
     weeklyReminderSession[tag] = true;
-    setDoc(doc(peopleCol, me.id), { weeklyReminded: sent.concat([tag]).slice(-8) }, { merge: true }).then(function () {
-      return setDoc(doc(notificationsCol), {
+    // Two guards against the duplicates reported ("Why does this notification keep popping up",
+    // two "Your Monday update is due" in the bell). This window's copy of your roster row can be
+    // stale (a laptop waking, a phone tab resuming, a second window), so (1) re-read it from the
+    // server before deciding, and (2) give the notification a fixed id per person/week/slot, so two
+    // windows that still race write ONE notification instead of two.
+    getDoc(doc(peopleCol, me.id)).then(function (snap) {
+      var fresh = snap.exists() ? snap.data() : {};
+      var freshSent = Array.isArray(fresh.weeklyReminded) ? fresh.weeklyReminded : [];
+      if (freshSent.indexOf(tag) !== -1) return null;
+      if ((Array.isArray(fresh.weekly) ? fresh.weekly : []).some(function (e) { return e && e.week === key; })) return null;
+      return setDoc(doc(peopleCol, me.id), { weeklyReminded: freshSent.concat([tag]).slice(-8) }, { merge: true }).then(function () { return true; });
+    }).then(function (go) {
+      if (!go) return;
+      return setDoc(doc(notificationsCol, 'weekly-' + me.id + '-' + key + '-' + slot), {
         recipient: name,
         type: 'weekly_reminder',
         taskId: null,
@@ -13621,8 +13713,13 @@
   // Rendered above the Time off section on a People card. Self-or-admin, exactly like leave --
   // it writes to the same people/{uid} doc, which firestore.rules already scopes that way, so
   // this needed no rules change of its own.
+  // Leave that ended more than this many days ago drops off the People card (asked: "Leaves that
+  // have past 30 days should automatically be removed"). Hidden, not deleted: the Timeline,
+  // Calendar and past Monday weeks still read it, which is why ended leave was kept to begin with.
+  var LEAVE_LIST_DAYS = 30;
   function personLeaveSectionHtml(name) {
-    var periods = leaveFor(name).slice().sort(function (a, b) { return a.start < b.start ? -1 : 1; });
+    var cutoff = toDateInputValue(addDays(todayMidnight(), -LEAVE_LIST_DAYS));
+    var periods = leaveFor(name).filter(function (l) { return l.end >= cutoff; }).sort(function (a, b) { return a.start < b.start ? -1 : 1; });
     var editable = canEditLeaveFor(name);
     var hasRosterDoc = !!teamPeople.find(function (p) { return p.name === name; });
     // Nothing to show and nothing this person can do here -- render no section at all rather
@@ -15931,7 +16028,7 @@
       var e = list.find(function (x) { return x && x.week === key; }) || list.find(function (x) { return x && x.week === prevKey; });
       if (!e || e.leave) return;
       (e.rows || []).forEach(function (r) {
-        if (r && r.status === 'help' && r.project) (out[projectKey(r.project)] = out[projectKey(r.project)] || []).push({ who: person.name, note: r.note || '' });
+        if (weeklyHelpOpen(r) && r.project) (out[projectKey(r.project)] = out[projectKey(r.project)] || []).push({ who: person.name, note: r.note || '' });
       });
     });
     return out;
@@ -16357,6 +16454,16 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-12c', date: '2026-10-12', items: [
+      { type: 'improved', title: 'Monday Meeting is easier to read together', text: "Everything on the page is bigger for the meeting screen. The week reads \"This week\", and once everyone has updated it says \"All in!\" in green." },
+      { type: 'improved', title: 'A simpler Monday update', text: "Each project now has one status dropdown instead of a row of buttons, with \"Same as last week\" as one of the choices. The note box appears once you pick a status, and projects their owner already answered are listed together at the end." },
+      { type: 'new', title: 'Resolve a Needs help item', text: "Whoever asked for help can press Resolve once it's sorted. It leaves the Needs help box and WIP Meeting, and their card shows Resolved." },
+      { type: 'improved', title: 'Project names open the project', text: "On Monday Meeting, click a project's name to jump to its card on Projects." },
+      { type: 'improved', title: 'Checklist steps stay in view', text: "Ticked steps are no longer crossed out or folded away. They sit under \"Done\" below the open ones, and each step's due date now sits on the same line as its edit pencil." },
+      { type: 'improved', title: 'Change the review type from its label', text: "The Client review / Internal review label on a Board card now shows a small arrow. Click it to switch." },
+      { type: 'improved', title: 'Old leave tidied away', text: "Leave that ended more than 30 days ago no longer shows on People cards." },
+      { type: 'fixed', title: 'One Monday reminder, not several', text: "\"Your Monday update is due\" could arrive more than once. Now it's sent once, and it marks itself read when you send your update." }
+    ] },
     { id: '2026-10-12b', date: '2026-10-12', items: [
       { type: 'improved', title: 'Every next step on Monday Meeting', text: "The Next list under each project now shows every step in full, instead of the first three and \"+1 more\"." }
     ] },
@@ -17480,17 +17587,33 @@
     }
     return out;
   }
-  function cmdkOpenProject(name) {
-    projectExpanded[name] = true;
-    if (isProjectFullyArchived(name)) projectsCompletedOpen = true;
-    setView('projects');
+  // Opens a project's card on Projects, expanded and flashed (Ctrl K, and a project name on Monday
+  // Meeting). If the card isn't on screen because the teamspace or the search box narrows Projects
+  // (reported from Monday: "Can't find the attached project"), it widens to all teams with no
+  // search and says so, rather than landing on a page without it.
+  function cmdkOpenProject(name, retried) {
+    var key = projectKey(name);
+    var real = allProjectNames().find(function (n) { return projectKey(n) === key; }) || name;
+    projectExpanded[real] = true;
+    if (isProjectFullyArchived(real)) projectsCompletedOpen = true;
+    if (!retried) setView('projects');
     setTimeout(function () {
-      var btn = Array.prototype.find.call(document.querySelectorAll('#projects-grid .project-expand-toggle'), function (b) { return b.getAttribute('data-project') === name; });
+      var btn = Array.prototype.find.call(document.querySelectorAll('#projects-grid .project-expand-toggle'), function (b) { return projectKey(b.getAttribute('data-project')) === key; });
       var card = btn && (btn.closest('.rounded-xl') || btn.parentNode);
       if (card) {
         card.scrollIntoView({ block: 'center', behavior: 'smooth' });
         card.classList.add('chat-message-jump-flash');
         setTimeout(function () { card.classList.remove('chat-message-jump-flash'); }, 1600);
+      } else if (!retried && (currentTeamspace !== 'all' || filters.search)) {
+        if (filters.search) {
+          filters.search = '';
+          var box = document.getElementById('filter-search');
+          if (box) box.value = '';
+          persistFilters();
+        }
+        setTeamspace('all');
+        showToast('Showing all teams so you can see ' + real, 'info');
+        cmdkOpenProject(real, true);
       }
     }, 60);
   }
@@ -18150,6 +18273,9 @@
     clearTimeout(tooltipShowTimer);
     tooltipTarget = target;
     tooltipShowTimer = setTimeout(function () {
+      // A live redraw can replace the hovered element during the delay; a detached element has an
+      // all-zero rect, which pinned its tooltip to the top-left corner of the screen.
+      if (!target.isConnected) { tooltipTarget = null; return; }
       tooltipEl.textContent = target.getAttribute('data-tooltip');
       positionTooltip(target);
       tooltipEl.style.opacity = '1';
@@ -19220,13 +19346,16 @@
     var pct = people.length ? Math.round(inCount / people.length * 100) : 0;
     var html = '<div style="display:grid;grid-template-columns:44px 1fr 44px;align-items:center;margin:10px 8px 0">' +
       '<button type="button" class="m-icon-btn" data-m-act="week-shift" data-n="-1" aria-label="Previous week">' + mIcon('back') + '</button>' +
-      '<div style="text-align:center"><div style="font-weight:700;font-size:17px">' + escapeHtml(weeklyLabel(key)) + '</div>' +
+      '<div style="text-align:center"><div style="font-weight:700;font-size:17px">' + escapeHtml(isCurrent ? 'This week' : weeklyLabel(key)) + '</div>' +
         (isCurrent ? '' : '<button type="button" data-m-act="week-shift" data-n="0" style="color:var(--m-brand);font-weight:600;font-size:13px">Back to this week</button>') + '</div>' +
-      '<button type="button" class="m-icon-btn" data-m-act="week-shift" data-n="1" aria-label="Next week">' + mIcon('chev') + '</button></div>';
+      // Same as desktop: "This week", and no forward arrow on it.
+      (isCurrent ? '<span></span>' : '<button type="button" class="m-icon-btn" data-m-act="week-shift" data-n="1" aria-label="Next week">' + mIcon('chev') + '</button>') + '</div>';
     html += '<div class="m-section" style="margin-top:12px">' + mGroup('<div style="padding:14px">' +
-      '<div style="display:flex;justify-content:space-between;gap:10px;font-size:14px;margin-bottom:8px"><b>' + inCount + ' of ' + people.length + ' in</b>' +
-        '<span style="color:var(--m-sub);text-align:right">' + (waiting.length ? (waiting.length <= 3 ? 'Waiting on ' + escapeHtml(waiting.map(mFirst).join(', ')) : waiting.length + ' to go') : 'Everyone is in') + '</span></div>' +
-      '<div class="m-progress"><i style="width:' + pct + '%"></i></div>' +
+      '<div style="display:flex;justify-content:space-between;gap:10px;font-size:14px;margin-bottom:8px">' +
+        (waiting.length
+          ? '<b>' + inCount + ' of ' + people.length + ' in</b><span style="color:var(--m-sub);text-align:right">' + (waiting.length <= 3 ? 'Waiting on ' + escapeHtml(waiting.map(mFirst).join(', ')) : waiting.length + ' to go') + '</span>'
+          : '<b style="color:#059669">All in!</b>') + '</div>' +
+      '<div class="m-progress"><i style="width:' + (waiting.length ? pct : 100) + '%' + (waiting.length ? '' : ';background:#10b981') + '"></i></div>' +
       (isCurrent && me ? '<div style="height:12px"></div><button type="button" class="m-btn' + (mine ? ' m-btn-plain' : '') + '" data-weekly-write>' + (mine ? 'Edit my update' : 'Write my update') + '</button>' : '') +
     '</div>') + '</div>';
     var help = weeklyHelpItems(key, people);
@@ -20207,7 +20336,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-12T02:22:47Z";
+  var CURRENT_BUILD_VERSION = "2026-10-12T03:48:46Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

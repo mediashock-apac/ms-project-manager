@@ -29,7 +29,8 @@ function seed(tours) {
         u3: P({ name: 'Chloe Hu', email: 'chloe@mediashock.com.sg', departments: ['admin'], leave: [
           { id: 'l1', start: '2026-10-07', end: '2026-10-09', note: 'Hospital' },
           { id: 'l2', start: '2026-10-26', end: '2026-10-30', note: '' },
-          { id: 'l3', start: '2026-12-01', end: '2026-12-05', note: 'Far off' }] })
+          { id: 'l3', start: '2026-12-01', end: '2026-12-05', note: 'Far off' },
+          { id: 'l4', start: '2026-09-21', end: '2026-09-22', note: 'Recent trip' }, { id: 'l5', start: '2026-08-03', end: '2026-08-04', note: 'Old trip' }] })
       },
       tasks: {
         // Deane is only involved in Lark AI, only on a step in GWS recording, and owns My own thing.
@@ -84,7 +85,7 @@ async function skipTours(page) {
 // The editor row index whose project block contains `project`, for a button matching `sel`.
 function rowOf(page, sel, attr, project) {
   return page.evaluate(([sel, attr, project]) => {
-    const b = [...document.querySelectorAll('#weekly-modal-body ' + sel)].find(x => x.closest('.flex-col').textContent.includes(project));
+    const b = [...document.querySelectorAll('#weekly-modal-body ' + sel)].find(x => x.closest('[data-weekly-project-row]').textContent.includes(project));
     return b ? b.getAttribute(attr) : null;
   }, [sel, attr, project]);
 }
@@ -106,18 +107,18 @@ function rowOf(page, sel, attr, project) {
   // ---------- Editor: owner-covered project isn't asked ----------
   await page.click('#weekly-view [data-weekly-write]'); await page.waitForSelector('#weekly-modal:not(.hidden)');
   const body = await page.textContent('#weekly-modal-body');
-  check("covered project shows the owner's answer", /Lark AI[\s\S]*Arvind's update:\s*Waiting on client[\s\S]*Client to approve the script/.test(body), body.slice(0, 300));
+  check("covered project shows the owner's answer", /Lark AI[\s\S]*Arvind: Waiting on client[\s\S]*Client to approve the script/.test(body), body.slice(0, 300));
   const own = await rowOf(page, '[data-weekly-own]', 'data-weekly-own', 'Lark AI');
-  check('covered project has no status buttons', own !== null && !(await page.$('#weekly-modal-body [data-weekly-row="' + own + '"]')));
-  check('subtitle says it is already answered', /1 already answered by its owner/.test(await page.textContent('#weekly-modal-sub')));
+  check('covered project has no status buttons', own !== null && !(await page.$('#weekly-modal-body [data-weekly-select="' + own + '"]')));
+  check('owner-answered projects grouped at the end', /Answered by their owners · 1[\s\S]*Lark AI/.test(await page.textContent('#weekly-modal-body')));
   await page.screenshot({ path: path.join(OUT, 'wk-follow-editor.png') });
   await page.evaluate(() => document.documentElement.classList.add('dark'));
   await page.waitForTimeout(150);
   await page.screenshot({ path: path.join(OUT, 'wk-follow-editor-dark.png') });
   await page.evaluate(() => document.documentElement.classList.remove('dark'));
   check('counted as answered', /1 of 3/.test(await page.textContent('#weekly-modal-foot')), await page.textContent('#weekly-modal-foot'));
-  const mineIdx = await rowOf(page, '[data-weekly-status="ontrack"]', 'data-weekly-row', 'My own thing');
-  await page.click('#weekly-modal-body [data-weekly-status="ontrack"][data-weekly-row="' + mineIdx + '"]');
+  const mineIdx = await rowOf(page, '[data-weekly-select]', 'data-weekly-select', 'My own thing');
+  await page.selectOption('#weekly-modal-body [data-weekly-select="' + mineIdx + '"]', 'ontrack');
   await page.click('#weekly-modal [data-weekly-send]'); await page.waitForTimeout(600);
   const mine = await page.evaluate(() => window.__fb.data.people.u1.weekly.find(e => e.week === '2026-10-05'));
   check('saved: my own row only, attached projects followed', mine && mine.rows.length === 1 && mine.rows[0].project === 'My own thing' && JSON.stringify(mine.follows.slice().sort()) === JSON.stringify(['GWS recording', 'Lark AI']), JSON.stringify(mine));
@@ -129,32 +130,56 @@ function rowOf(page, sel, attr, project) {
 
   // ---------- The owner updates: my card follows without me ----------
   await page.click('[data-weekly-edit="Arvind Kumaraguru"]'); await page.waitForSelector('#weekly-modal:not(.hidden)');
-  const ai = await rowOf(page, '[data-weekly-status="ontrack"]', 'data-weekly-row', 'Lark AI');
-  await page.click('#weekly-modal-body [data-weekly-status="ontrack"][data-weekly-row="' + ai + '"]');
-  const gi = await rowOf(page, '[data-weekly-status="us"]', 'data-weekly-row', 'GWS recording');
-  await page.click('#weekly-modal-body [data-weekly-status="us"][data-weekly-row="' + gi + '"]');
+  const ai = await rowOf(page, '[data-weekly-select]', 'data-weekly-select', 'Lark AI');
+  await page.selectOption('#weekly-modal-body [data-weekly-select="' + ai + '"]', 'ontrack');
+  const gi = await rowOf(page, '[data-weekly-select]', 'data-weekly-select', 'GWS recording');
+  await page.selectOption('#weekly-modal-body [data-weekly-select="' + gi + '"]', 'us');
   await page.click('#weekly-modal [data-weekly-send]'); await page.waitForTimeout(600);
   check("owner's change shows on my card", /On track[\s\S]*Lark AI[\s\S]*from Arvind/.test(await card()) && !/Waiting on client/.test(await card()), (await card()).slice(0, 300));
   check("owner's later answer for a followed project appears too", /Waiting on us[\s\S]*GWS recording[\s\S]*from Arvind/.test(await card()));
-  check('Needs help is not duplicated by following', !/Needs help ·/.test(await page.textContent('#weekly-view')));
+  check('Needs help is not duplicated by following', !/Needs help\s*\d/.test(await page.textContent('#weekly-view')));
+
+  // ---------- Everyone in: a green "All in!" ----------
+  check('not all in yet', /2 of 3/.test(await page.textContent('#weekly-bar')) && !/All in!/.test(await page.textContent('#weekly-bar')));
+  await page.evaluate(() => window.__fb.remote(function (d) { d.people.u3.weekly = [{ week: '2026-10-05', rows: [], extra: 'Filing', leave: false, at: '2026-10-06T02:00:00Z' }]; }));
+  await page.waitForTimeout(400);
+  const allIn = await page.textContent('#weekly-bar');
+  check('All in! once everyone has updated', /All in!/.test(allIn) && !/3 of 3/.test(allIn), allIn);
+  check('All in! is green', await page.$eval('#weekly-bar', b => [...b.querySelectorAll('span')].some(x => x.textContent === 'All in!' && /emerald/.test(x.className))));
 
   // ---------- Answering yourself wins ----------
   await page.click('[data-weekly-edit="Deane Cheng"]'); await page.waitForSelector('#weekly-modal:not(.hidden)');
   const oi = await rowOf(page, '[data-weekly-own]', 'data-weekly-own', 'Lark AI');
   await page.click('#weekly-modal-body [data-weekly-own="' + oi + '"]');
-  check('Answer myself shows the buttons and a way back', !!(await page.$('#weekly-modal-body [data-weekly-row="' + oi + '"][data-weekly-status="done"]')) && !!(await page.$('#weekly-modal-body [data-weekly-follow="' + oi + '"]')));
-  await page.click('#weekly-modal-body [data-weekly-row="' + oi + '"][data-weekly-status="done"]');
+  check('Answer myself shows the buttons and a way back', !!(await page.$('#weekly-modal-body [data-weekly-select="' + oi + '"]')) && !!(await page.$('#weekly-modal-body [data-weekly-follow="' + oi + '"]')));
+  await page.selectOption('#weekly-modal-body [data-weekly-select="' + oi + '"]', 'done');
   await page.click('#weekly-modal [data-weekly-send]'); await page.waitForTimeout(600);
   const mine2 = await page.evaluate(() => window.__fb.data.people.u1.weekly.find(e => e.week === '2026-10-05'));
   check('my own answer saved and no longer followed', mine2.rows.some(r => r.project === 'Lark AI' && r.status === 'done') && mine2.follows.indexOf('Lark AI') === -1, JSON.stringify(mine2));
   check("card shows my answer, not the owner's", /Done[\s\S]*Lark AI/.test(await card()) && !/Lark AI[^\n]*from Arvind/.test(await card()), (await card()).slice(0, 300));
 
   await page.screenshot({ path: path.join(OUT, 'wk-follow.png'), fullPage: true });
+
+  // ---------- Clicking a project opens its card, even if a leftover search would hide it ----------
+  await page.click('[data-view-btn="board"]'); await page.waitForTimeout(1300); await skipTours(page);
+  await page.fill('#filter-search', 'nothing matches this'); await page.waitForTimeout(300);
+  await page.click('[data-view-btn="weekly"]'); await page.waitForTimeout(1300); await skipTours(page);
+  await page.click('[data-weekly-card="Arvind Kumaraguru"] [data-weekly-project="Lark AI"]'); await page.waitForTimeout(1300); await skipTours(page);
+  check('project name opens Projects', (await page.textContent('#current-view-title')).trim() === 'Projects');
+  check('its card is on screen (search cleared to find it)', await page.evaluate(() => [...document.querySelectorAll('#projects-grid .project-expand-toggle')].some(b => b.getAttribute('data-project') === 'Lark AI')) && (await page.inputValue('#filter-search')) === '');
+  await page.click('[data-view-btn="weekly"]'); await page.waitForTimeout(1300); await skipTours(page);
   await page.locator('[data-weekly-card="Chloe Hu"]').screenshot({ path: path.join(OUT, 'wk-away-card.png') });
   await page.evaluate(() => document.documentElement.classList.add('dark'));
   await page.waitForTimeout(200);
   await page.screenshot({ path: path.join(OUT, 'wk-follow-dark.png'), fullPage: true });
   check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
+
+  // ---------- People card: leave that ended over 30 days ago is no longer listed ----------
+  await page.click('[data-view-btn="people"]'); await page.waitForTimeout(1300); await skipTours(page);
+  const peopleText = await page.textContent('#people-grid');
+  check('leave ended within 30 days still listed', /Recent trip/.test(peopleText), peopleText.slice(0, 200));
+  check('leave ended over 30 days ago is not listed', !/Old trip/.test(peopleText));
+  check('...but it is kept, not deleted', await page.evaluate(() => window.__fb.data.people.u3.leave.some(l => l.id === 'l5')));
 
   // ---------- Phone layout (390px): the same cards, owner rows and leave ----------
   const m = await newPage(browser, '2026-10-06T11:00:00', { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });

@@ -106,13 +106,13 @@ function extra() {
   // 2. Monday editor hint
   await page.click('[data-view-btn="weekly"]'); await page.waitForTimeout(500); await skipTours(page);
   await page.click('[data-weekly-write]'); await page.waitForTimeout(300);
-  const rowIdx = await page.evaluate(() => { var rows = [...document.querySelectorAll('#weekly-modal-body [data-weekly-status="done"]')]; var b = rows.find(x => /GWS recording/.test(x.closest('.flex-col').textContent)); return b ? b.getAttribute('data-weekly-row') : null; });
-  await page.click('#weekly-modal-body [data-weekly-status="done"][data-weekly-row="' + rowIdx + '"]'); await page.waitForTimeout(200);
-  const hint = await page.evaluate((i) => document.querySelector('#weekly-modal-body [data-weekly-status="done"][data-weekly-row="' + i + '"]').closest('.flex-col').textContent, rowIdx);
+  const rowIdx = await page.evaluate(() => { var r = [...document.querySelectorAll('#weekly-modal-body [data-weekly-project-row]')].find(x => /GWS recording/.test(x.textContent)); return r ? r.getAttribute('data-weekly-project-row') : null; });
+  await page.selectOption('#weekly-modal-body [data-weekly-select="' + rowIdx + '"]', 'done'); await page.waitForTimeout(200);
+  const hint = await page.textContent('#weekly-modal-body [data-weekly-project-row="' + rowIdx + '"]');
   check('Done on a project with open tasks shows the hint', /still open on the board/.test(hint), hint.slice(-90));
-  const rb = await page.evaluate((i) => { var r = document.querySelector('#weekly-modal-body [data-weekly-status="done"][data-weekly-row="' + i + '"]').closest('.flex-col').getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; }, rowIdx);
+  const rb = await page.evaluate((i) => { var r = document.querySelector('#weekly-modal-body [data-weekly-project-row="' + i + '"]').getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; }, rowIdx);
   await page.screenshot({ path: 'mob2/weekly-done-hint' + (dark ? '-dark' : '') + '.png', clip: rb });
-  await page.click('#weekly-modal-body [data-weekly-status="ontrack"][data-weekly-row="' + rowIdx + '"]'); await page.waitForTimeout(200);
+  await page.selectOption('#weekly-modal-body [data-weekly-select="' + rowIdx + '"]', 'ontrack'); await page.waitForTimeout(200);
   check('hint goes away for another status', !/still open on the board/.test(await page.textContent('#weekly-modal-body')));
   await page.keyboard.press('Escape'); await page.waitForTimeout(200);
   await page.evaluate(() => { var c = document.getElementById('weekly-modal-close'); if (c && !document.getElementById('weekly-modal').classList.contains('hidden')) c.click(); });

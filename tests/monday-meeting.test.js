@@ -102,12 +102,13 @@ async function skipTours(page) {
   check('header title', (await page.textContent('#current-view-title')) === 'Monday Meeting');
   check('toolbar hidden', await page.$eval('#toolbar-row', e => e.classList.contains('hidden')));
   const bar = await page.textContent('#weekly-bar');
-  check('week label', bar.includes('Week of Oct 5'), bar.slice(0, 80));
+  check('current week reads This week', bar.includes('This week') && !bar.includes('Week of Oct 5'), bar.slice(0, 80));
+  check('no forward arrow on the current week', !(await page.$('#weekly-bar [data-weekly-nav="1"]')));
   check('progress 2 of 6 (leaver excluded)', bar.includes('2 of 6'), bar);
   check('waiting names exclude away Chloe', /waiting on Deane, Nora, Zenon|waiting on Nora, Deane, Zenon|waiting on Deane, Zenon, Nora/.test(bar), bar);
   check('no Present button', !(await page.$('[data-weekly-present]')));
   const view = await page.textContent('#weekly-view');
-  check('needs help box', view.includes('Needs help · 1') && view.includes('Need B-roll footage by Thursday'));
+  check('needs help box', /Needs help\s*1(?!\d)/.test(view) && view.includes('Need B-roll footage by Thursday'));
   check('department headings', view.includes('Suits') && view.includes('Creative/Post') && view.includes('Copy/Production') && view.includes('Admin'));
   check('Arvind rows read help first', view.indexOf('Need B-roll') < view.indexOf('Dry run today'));
   check('NEW mark on changed row only', (await page.$$eval('#weekly-view section', ss => { var a = ss.find(s => s.textContent.includes('Arvind Kumaraguru')); return a ? (a.textContent.match(/NEW/g) || []).length : -1; })) === 2);
@@ -169,17 +170,22 @@ async function skipTours(page) {
   const rowsText = await page.textContent('#weekly-modal-body');
   check('editor lists my 3 projects', ['GWS recording', 'SMB webinars', 'Autodesk LEEP talk'].every(p => rowsText.includes(p)), rowsText.slice(0, 200));
   check('editor shows Coming up', rowsText.includes('Coming up: Speaker list Oct 8') && rowsText.includes('Rough cut Oct 12'), rowsText.slice(0, 300));
-  check('editor shows Latest status with who', rowsText.includes('Latest: Waiting on speaker list from client · Oct 5 · Mychelle'));
-  check('same as last week offered for SMB', rowsText.includes('Same as last week'));
-  check('six statuses, On hold before Needs help', JSON.stringify(await page.$$eval('#weekly-modal [data-weekly-row="0"]', bs => bs.map(b => b.textContent))) === JSON.stringify(['On track','Waiting on client','Waiting on us','On hold','Needs help','Done']));
+  check('statuses are a dropdown, not pills', !(await page.$('#weekly-modal [data-weekly-status]')) && !!(await page.$('#weekly-modal [data-weekly-select="0"]')));
+  check('same as last week is a dropdown option for SMB', !!(await page.$('#weekly-modal option[value="same"]')) && !(await page.$('#weekly-modal [data-weekly-same]')));
+  check('six statuses, On hold before Needs help', JSON.stringify(await page.$$eval('#weekly-modal [data-weekly-select="0"] option', os => os.filter(o => o.value && o.value !== 'same').map(o => o.textContent))) === JSON.stringify(['On track','Waiting on client','Waiting on us','On hold','Needs help','Done']));
+  check('no note box until a status is picked', !(await page.$('#weekly-modal [data-weekly-note="0"]')));
+  check('Anything not on the board is its own band', await page.$eval('#weekly-extra', e => /bg-zinc-50/.test(e.parentElement.className)));
   check('sidebar: Monday Meeting above WIP', await page.evaluate(() => { var b = [...document.querySelectorAll('[data-view-btn]')].map(x => x.getAttribute('data-view-btn')); return b.indexOf('weekly') === b.indexOf('wip') - 1; }));
   await page.waitForTimeout(500); await page.screenshot({ path: path.join(OUT, 'wk-2-editor-empty.png'), clip: { x: 380, y: 150, width: 680, height: 700 } });
+  await page.selectOption('#weekly-modal [data-weekly-select="0"]', 'ontrack');
+  check('editor shows Latest status with who', (await page.textContent('#weekly-modal-body')).includes('Latest on the board: Waiting on speaker list from client · Oct 5 · Mychelle'));
   await page.click('#weekly-modal [data-weekly-use="0"]');
   check('Use this copies latest into the note', await page.$eval('#weekly-modal [data-weekly-note="0"]', e => e.value === 'Waiting on speaker list from client'));
   check('Use this disappears once used', !(await page.$('#weekly-modal [data-weekly-use="0"]')));
   await page.fill('#weekly-modal [data-weekly-note="0"]', '');
-  await page.click('#weekly-modal [data-weekly-same]');
-  await page.click('#weekly-modal [data-weekly-row="0"][data-weekly-status="help"]');
+  const sameIdx = await page.$eval('#weekly-modal option[value="same"]', o => o.closest('select').getAttribute('data-weekly-select'));
+  await page.selectOption('#weekly-modal [data-weekly-select="' + sameIdx + '"]', 'same');
+  await page.selectOption('#weekly-modal [data-weekly-select="0"]', 'help');
   check('help focuses the note', await page.evaluate(() => document.activeElement && document.activeElement.getAttribute('data-weekly-note') === '0'));
   await page.keyboard.type('Final speaker list by Wed');
   await page.click('#weekly-modal [data-weekly-rest]');
@@ -201,7 +207,7 @@ async function skipTours(page) {
   check('progress now 3 of 6', bar2.includes('3 of 6'), bar2);
   check('my card now has its own Edit button', !!(await page.$('[data-weekly-card="Deane Cheng"] [data-weekly-edit="Deane Cheng"]')));
   const view2 = await page.textContent('#weekly-view');
-  check('needs help now 2', view2.includes('Needs help · 2') && view2.includes('Final speaker list by Wed'));
+  check('needs help now 2', /Needs help\s*2(?!\d)/.test(view2) && view2.includes('Final speaker list by Wed'));
   const deaneCard = await page.$$eval('#weekly-view section', ss => { const c = ss.find(s => s.textContent.includes('Deane Cheng')); return c ? c.innerText : ''; });
   check('rows show next steps from the board, one per line', /Next\n[\s\S]*Oct 8\s+Speaker list\n[\s\S]*Oct 12\s+Rough cut/.test(deaneCard) && /Oct 20\s+Post assets/.test(deaneCard), deaneCard);
   check('a row with no note shows something more than the project name', /SMB webinars[\s\S]*Next/.test(deaneCard));
@@ -210,9 +216,9 @@ async function skipTours(page) {
   // Edit after the meeting started (Tue 11:00 > Mon 10:00)
   await page.click('[data-weekly-edit="Deane Cheng"]');
   await page.waitForSelector('#weekly-modal:not(.hidden)');
-  check('editor reloads saved answers', await page.$eval('#weekly-modal [data-weekly-row="0"][data-weekly-status="help"]', e => e.getAttribute('aria-pressed') === 'true'));
+  check('editor reloads saved answers', await page.$eval('#weekly-modal [data-weekly-select="0"]', e => e.value === 'help'));
   check('save label is Save changes', (await page.textContent('#weekly-modal-foot')).includes('Save changes'));
-  await page.click('#weekly-modal [data-weekly-row="0"][data-weekly-status="ontrack"]');
+  await page.selectOption('#weekly-modal [data-weekly-select="0"]', 'ontrack');
   await page.click('#weekly-modal [data-weekly-send]');
   await page.waitForTimeout(600);
   const view3 = await page.textContent('#weekly-view');
@@ -235,6 +241,7 @@ async function skipTours(page) {
   await page.waitForTimeout(200);
   const prevBar = await page.textContent('#weekly-bar');
   check('previous week nav', prevBar.includes('Week of Sep 28') && prevBar.includes('This week'), prevBar);
+  check('a past week has a forward arrow', !!(await page.$('#weekly-bar [data-weekly-nav="1"]')));
   await page.click('[data-weekly-edit="Deane Cheng"]'); await page.waitForSelector('#weekly-modal:not(.hidden)');
   check('Edit on a past week opens that week', (await page.textContent('#weekly-modal-title')).includes('week of Sep 28'), await page.textContent('#weekly-modal-title'));
   await page.click('#weekly-modal [data-weekly-send]'); await page.waitForTimeout(600);
@@ -250,7 +257,17 @@ async function skipTours(page) {
   check('their card says who edited it', /Edited Tue[^\n]* by Deane/.test(await page.textContent('[data-weekly-card="Arvind Kumaraguru"]')));
   await page.click('#weekly-bar [data-weekly-nav="0"]');
   await page.waitForTimeout(200);
-  check('back to this week', (await page.textContent('#weekly-bar')).includes('Week of Oct 5'));
+  check('back to this week', (await page.textContent('#weekly-bar')).includes('This week') && !(await page.$('#weekly-bar [data-weekly-nav="1"]')));
+
+  // Resolving a Needs help item (an admin may; so may whoever asked)
+  check('Needs help item has a Resolve button', !!(await page.$('[data-weekly-resolve="SMB webinars"][data-weekly-resolve-who="Arvind Kumaraguru"]')));
+  await page.click('[data-weekly-resolve="SMB webinars"][data-weekly-resolve-who="Arvind Kumaraguru"]'); await page.waitForTimeout(500);
+  const arvRow = await page.evaluate(() => window.__fb.data.people.u2.weekly.find(e => e.week === '2026-10-05').rows.find(r => r.project === 'SMB webinars'));
+  check('resolve is saved on their own row', arvRow && arvRow.status === 'help' && arvRow.resolved === true && arvRow.resolvedBy === 'Deane Cheng', JSON.stringify(arvRow));
+  check('resolved item leaves the Needs help box', !/Needs help\s*\d/.test(await page.textContent('#weekly-view')));
+  check('their card says Resolved, note kept', /Resolved\s*SMB webinars – Need B-roll footage by Thursday/.test(await page.innerText('[data-weekly-card="Arvind Kumaraguru"]')), await page.innerText('[data-weekly-card="Arvind Kumaraguru"]'));
+  await page.click('#toast-container button:has-text("Undo")'); await page.waitForTimeout(500);
+  check('Undo puts it back in Needs help', /Needs help\s*1(?!\d)/.test(await page.textContent('#weekly-view')));
 
   await page.screenshot({ path: path.join(OUT, 'wk-4-after.png'), fullPage: true });
   await page.evaluate(() => document.documentElement.classList.add('dark'));
@@ -309,6 +326,16 @@ async function skipTours(page) {
   await mo.page.waitForTimeout(800);
   const remM = (await mo.page.evaluate(() => Object.values(window.__fb.data.notifications))).filter(n => n.type === 'weekly_reminder');
   check('Monday reminder when missing', remM.length === 1 && /today/.test(remM[0].snippet), JSON.stringify(remM.map(r => r.snippet)));
+  const remIds = await mo.page.evaluate(() => Object.keys(window.__fb.data.notifications).filter(k => window.__fb.data.notifications[k].type === 'weekly_reminder'));
+  check('reminder has one fixed id per person/week/slot (a second window overwrites, never duplicates)', JSON.stringify(remIds) === JSON.stringify(['weekly-u1-2026-10-12-mon']), JSON.stringify(remIds));
+  // Sending the update clears the reminder (first close the "project due today" pop-up Monday brings)
+  for (let i = 0; i < 3; i++) { if (await mo.page.isVisible('#confirm-modal')) { await mo.page.click('#confirm-cancel-btn'); await mo.page.waitForTimeout(300); } }
+  await mo.page.click('[data-view-btn="weekly"]'); await mo.page.waitForTimeout(1300); await skipTours(mo.page);
+  await mo.page.click('#weekly-view [data-weekly-write]'); await mo.page.waitForSelector('#weekly-modal:not(.hidden)');
+  await mo.page.click('#weekly-modal [data-weekly-rest]').catch(() => {});
+  await mo.page.selectOption('#weekly-modal [data-weekly-select="0"]', 'ontrack');
+  await mo.page.click('#weekly-modal [data-weekly-send]'); await mo.page.waitForTimeout(600);
+  check('sending your update marks the reminder read', await mo.page.evaluate(() => window.__fb.data.notifications['weekly-u1-2026-10-12-mon'].read === true));
 
   await browser.close();
   console.log(results.join('\n'));

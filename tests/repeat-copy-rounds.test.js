@@ -99,6 +99,12 @@ async function newPage(browser, when) {
   check('Board marks a repeating task with the loop icon', !!(await page.$('[data-task-id="r1"] [aria-label="Repeats every month"]')));
   await openTask('r1');
   check('task window shows the repeat', (await page.inputValue('#task-repeat')) === 'monthly');
+  // Checklist: done steps always shown, never struck through; due date on the pencil's line
+  const doneRow = await page.evaluate(() => { var cb = document.querySelector('#task-checklist-editor .checklist-toggle[data-checklist-i="0"]'); if (!cb) return null; var row = cb.closest('.checklist-item-row'), name = row.querySelector('.checklist-name'); return { checked: cb.checked, struck: getComputedStyle(name).textDecorationLine, sameLine: !!cb.parentElement.querySelector(':scope > span.whitespace-nowrap') && /Due Oct 28/.test(cb.parentElement.textContent) }; });
+  check('a done step is shown, not folded away', !!doneRow && doneRow.checked && /Done · 1/.test(await page.textContent('#task-checklist-editor')) && !(await page.$('#task-checklist-editor .checklist-done-toggle')), JSON.stringify(doneRow));
+  check('a done step is not struck through', !!doneRow && doneRow.struck === 'none', JSON.stringify(doneRow));
+  check("a step's due date sits on the pencil's line", !!doneRow && doneRow.sameLine, JSON.stringify(doneRow));
+  await page.locator('#task-checklist-editor').screenshot({ path: 'checklist-rows.png' });
   await page.screenshot({ path: 'mob2/repeat-window.png', clip: { x: 200, y: 0, width: 1040, height: 520 } });
   // Every dropdown uses the app's list, not the browser's
   await page.click('#task-repeat'); await page.waitForTimeout(200);
