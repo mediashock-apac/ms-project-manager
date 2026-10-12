@@ -105,6 +105,13 @@ async function newPage(browser, when) {
   check('a done step is not struck through', !!doneRow && doneRow.struck === 'none', JSON.stringify(doneRow));
   check("a step's due date sits on the pencil's line", !!doneRow && doneRow.sameLine, JSON.stringify(doneRow));
   await page.locator('#task-checklist-editor').screenshot({ path: 'checklist-rows.png' });
+  // One owner per task: changing the owner of a task with steps suggests a step instead, with a way back
+  check('no owner hint at rest', !(await page.isVisible('#task-owner-hint')));
+  await page.selectOption('#task-assignee', 'Zenon Kwok Ze Yong'); await page.waitForTimeout(150);
+  const ownerHint = await page.isVisible('#task-owner-hint') ? await page.textContent('#task-owner-hint') : '';
+  check('changing the owner suggests adding them to a step instead', /To hand over, add Zenon to a step instead/.test(ownerHint) && /Keep Deane as owner/.test(ownerHint), ownerHint);
+  await page.click('#task-owner-keep'); await page.waitForTimeout(150);
+  check('"Keep Deane as owner" puts it back and the hint goes', (await page.inputValue('#task-assignee')) === 'Deane Cheng' && !(await page.isVisible('#task-owner-hint')) && !/Deane Cheng/.test(await page.textContent('#task-involved-chips')));
   await page.screenshot({ path: 'mob2/repeat-window.png', clip: { x: 200, y: 0, width: 1040, height: 520 } });
   // Every dropdown uses the app's list, not the browser's
   await page.click('#task-repeat'); await page.waitForTimeout(200);

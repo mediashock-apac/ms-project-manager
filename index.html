@@ -390,7 +390,9 @@
   /* Team tiles (teamspaceTileHtml): each department's colour plus its own icon. Still at rest; a
      one-off animation when you switch (.ts-anim on #teamspace-tile-wrap) and a small nudge on hover
      in the menu. Motion only on change, never looping: the switcher is on screen all day. */
-  .ts-tile svg { transition: transform .2s ease; }
+  /* overflow: visible -- an SVG crops to its own box by default, so the clapper's top arm swinging
+     up (ts-clap) was cut off mid-snap (reported: "The copy/production icon animation clips"). */
+  .ts-tile svg { transition: transform .2s ease; overflow: visible; }
   /* The switcher button while ONE team is chosen (asked: "a pattern ... it's so bland"): a soft wash
      in the team colour, a fine dot texture fading in from the left, and the team's icon large and
      faint behind the right edge. --ts-c is the team colour (set in renderTeamspaceSwitcher). Static:
@@ -1995,6 +1997,9 @@
                the same field. -->
           <input id="task-assignee-other" type="text" maxlength="60" placeholder="Type their name exactly as it appears in Google…" class="hidden w-full mt-1.5 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
           <p class="field-error text-xs text-rose-500 dark:text-rose-400 mt-1 hidden"></p>
+          <!-- One owner per task; hand-overs are steps (see "Standing rule: one owner per task").
+               Shown only when the owner of a task that has steps is changed. -->
+          <p id="task-owner-hint" class="hidden mt-1.5 text-xs text-zinc-600 dark:text-zinc-300"></p>
           <!-- "Also involved": people who work on this task but are not accountable for it. The
                assignee stays the single owner (workload, deadline alerts and leave checks all key
                off it); these people just get comment notifications and show as small avatars on
@@ -7626,6 +7631,7 @@
     currentDependsOn = task && task.dependsOn ? task.dependsOn.slice() : [];
     currentInvolved = task && Array.isArray(task.involved) ? task.involved.slice() : [];
     involvedOriginalPeople = task && task.assignee ? [task.assignee].concat(currentInvolved) : [];
+    document.getElementById('task-owner-hint').classList.add('hidden');
     involvedPanelOpen = false;
     renderInvolved();
     involvedPrevAssignee = currentAssigneeValue();
@@ -9551,10 +9557,34 @@
     renderInvolved();
   });
 
+  /* One owner per task (asked: "the owner assigned is assigned from person to person. Is that
+     confusing?", then chose: keep one owner, hand over with steps). Changing the owner of a saved
+     task that has steps shows one quiet line saying how to hand over instead, with a one-click way
+     back. Nothing is blocked: a real change of owner still saves. */
+  function syncOwnerHint() {
+    var hint = document.getElementById('task-owner-hint');
+    var saved = editingTaskId ? (involvedOriginalPeople[0] || '') : '';
+    var now = currentAssigneeValue();
+    var show = !!saved && !!now && now !== saved && currentChecklist.length > 0;
+    hint.classList.toggle('hidden', !show);
+    hint.innerHTML = show
+      ? 'To hand over, add ' + escapeHtml(String(now).split(' ')[0]) + ' to a step instead. The owner is the one person who answers for the task. ' +
+        '<button type="button" id="task-owner-keep" class="font-bold text-brand-700 dark:text-brand-300 hover:underline">Keep ' + escapeHtml(String(saved).split(' ')[0]) + ' as owner</button>'
+      : '';
+  }
+  document.getElementById('task-owner-hint').addEventListener('click', function (e) {
+    if (!e.target.closest('#task-owner-keep')) return;
+    var sel = document.getElementById('task-assignee');
+    sel.value = involvedOriginalPeople[0] || '';
+    sel.dispatchEvent(new Event('change', { bubbles: true }));
+    taskAssigneePill.rebuild();
+  });
+
   document.getElementById('task-assignee').addEventListener('change', function () {
     syncAssigneeOther();
     swapOwnerIntoInvolved();
     renderInvolved();
+    syncOwnerHint();
     if (document.getElementById('task-assignee').value === ASSIGNEE_OTHER) {
       document.getElementById('task-assignee-other').focus();
     }
@@ -16879,6 +16909,10 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-12g', date: '2026-10-12', items: [
+      { type: 'improved', title: 'One owner per task', text: "A task's Owner is the one person who answers for it, start to finish. To hand work over, add the next person to a checklist step: they get \"You're up\" when the step before is ticked. If you change the Owner on a task with steps, a short tip shows how, with a one-click way to keep the old owner." },
+      { type: 'fixed', title: 'Copy/Production icon no longer cut off', text: "The clapperboard's snap is no longer clipped when you point at it." }
+    ] },
     { id: '2026-10-12f', date: '2026-10-12', items: [
       { type: 'new', title: "See who's away when picking an owner", text: "In a task's Owner list, anyone with time off during the task's dates shows an amber \"Away\" tag with the dates, so you can see it before handing work over. The phone's New task form shows it too." },
       { type: 'new', title: 'Steps can move with the deadline', text: "Change a task's deadline and you'll be offered to move its open, dated steps by the same number of days. Nothing moves unless you click Move steps, and there's an Undo." },
@@ -20787,7 +20821,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-12T07:11:33Z";
+  var CURRENT_BUILD_VERSION = "2026-10-12T08:20:31Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

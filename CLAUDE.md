@@ -116,6 +116,24 @@ syncronisingly and not in separately"*, then *"make this a rule"*. For every cha
   the project doc follows a renamed project).
 - Before building, list what else reads or writes the same data and wire it in the same change.
 
+## Standing rule: one owner per task; hand-overs are steps
+
+Asked (2026-10-12): "when moving from pipeline to in progress to review and completed, the owner
+assigned is assigned from person to person. Is that confusing?", then chose to keep one owner, and
+"Make this a rule".
+
+- **The Owner (`assignee`) is the one person who answers for the task, from start to finish.** It is
+  not "whoever is working on it now". Workload, Focus, deadline/review/leave alerts and Monday
+  Meeting's "owners answer for the project" all key off it, so passing it along moves all of that
+  from person to person mid-task.
+- **Hand-overs between people or teams are checklist steps with people** (Brief: Kan, Edit: Aqila,
+  Client review: Kan). Ticking a step tells the next step's people "You're up"; "Copy steps from a
+  similar task" saves typing the stages.
+- **In the app:** changing the owner of a saved task that has steps shows one quiet line under
+  Owner, "To hand over, add <name> to a step instead...", with "Keep <old owner> as owner"
+  (`syncOwnerHint`, `#task-owner-hint`). Nothing is blocked: a real change of owner still saves.
+- Don't build features that pass the owner along automatically on a status change.
+
 ## Standing rule: meeting text size
 
 Asked for Monday Meeting ("Can all the text and everything be larger so that it is viewable when we

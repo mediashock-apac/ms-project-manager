@@ -105,6 +105,15 @@ async function skipTours(page) {
       const hoverAnim = async (key, sel) => { await page.hover('#teamspace-menu [data-teamspace="' + key + '"]'); await page.waitForTimeout(60); return page.$eval('#teamspace-menu [data-teamspace="' + key + '"] ' + sel, e => getComputedStyle(e).animationName); };
       const hov = { suits: await hoverAnim('suits', '.ts-tile svg'), production: await hoverAnim('production', '.ts-tile svg'), copy: await hoverAnim('copy', '.ts-clap'), admin: await hoverAnim('admin', '.ts-tick') };
       check('hover: briefcase hops, palette wobbles, clapper snaps, clipboard ticks', hov.suits === 'ts-hop' && hov.production === 'ts-wobble' && hov.copy === 'ts-clap' && hov.admin === 'ts-tick', JSON.stringify(hov));
+      // The clapper arm swings outside the icon's box; it must not be cropped (reported: "clips").
+      check('team icons are not cropped mid-motion', await page.$$eval('#teamspace-menu .ts-tile svg', s => s.every(x => getComputedStyle(x).overflow === 'visible')));
+      await page.mouse.move(5, 5); await page.waitForTimeout(100);
+      await page.evaluate(() => { document.querySelector('#teamspace-menu [data-teamspace="copy"] .ts-tile').style.zoom = 4; });
+      // Freeze the snap at its widest (35% of .65s) to look at it.
+      await page.evaluate(() => { document.querySelector('#teamspace-menu [data-teamspace="copy"] .ts-clap').style.animation = 'ts-clap .65s linear -0.23s paused'; });
+      await page.waitForTimeout(100);
+      { const t = await page.$('#teamspace-menu [data-teamspace="copy"] .ts-tile'); const b = await t.boundingBox(); await page.screenshot({ path: path.join(OUT, 'team-copy-midsnap.png'), clip: { x: b.x - 20, y: b.y - 40, width: b.width + 40, height: b.height + 60 } }); }
+      await page.evaluate(() => { document.querySelector('#teamspace-menu [data-teamspace="copy"] .ts-tile').style.zoom = ''; document.querySelector('#teamspace-menu [data-teamspace="copy"] .ts-clap').style.animation = ''; });
     } else {
       await page.click('#teamspace-trigger'); await page.waitForTimeout(200);
     }
