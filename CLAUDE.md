@@ -2620,6 +2620,30 @@ to bottom:
        checklist rows on both timelines. Time-boxed (400ms) rather than consumed, so whichever
        render actually paints the section gets the class. Closing stays instant, same open-only
        rule as the modals.
+   - **Icon hover motion (2026-10-12)** (ICON HOVER MOTION in the style block). Asked: "All icons
+     should animate when hover ... The animation should relate to what the icon is and not a
+     generic animation movement." Every clickable icon acts out its meaning once on hover or
+     keyboard focus: the bin tips its lid, the pencil scribbles while its line draws, the bell
+     swings with its clapper, clock hands go round, ticks draw on, chevrons and arrows nudge the way
+     they point, the Timeline bars grow, the megaphone shouts. It replaced the older sidebar-only
+     set (`nav-pop`/`nav-wiggle`...), where four items shared one wiggle.
+     - **Found by `data-ic`.** `svgIcon()` adds it (team icons excluded, they have their own
+       switch animation); inline `<svg>`s carry it by hand; the chat mute toggle sets it when its
+       icon swaps. **A new icon needs a `data-ic` and a rule that says what it is**, or
+       `tests/icon-motion.test.js` fails (it hovers every clickable icon on every page).
+     - **The parts move, never the `<svg>` itself**, with CSS `translate`/`rotate`/`scale` on the
+       children (`transform-box: view-box`, origins in 24-unit icon coordinates). Many svgs carry
+       their own transform (`rotate-180` chevrons, the flipped collapse arrows, the search icon's
+       `-translate-y-1/2`, the unread megaphone's ring); moving the parts doesn't fight it, and they
+       move in the icon's own frame, so a turned chevron still nudges the way it points.
+     - **Only clickable icons** (the svg's parent is a button, link, `role="button"`, summary or
+       label, or a field wrapper holding the input/select, for carets and the search magnifier).
+       **Label icons stay still** (the deadline calendar on a Board row, page titles, status
+       marks): hover motion says "clickable". Asked as option A/B and the owner chose still.
+     - **The Google "G" on sign-in is left alone**: Google's brand rules forbid rotating or
+       animating their logo.
+     - Once per hover, under 0.8s, never loops; off under reduced motion; no effect on the phone
+       layout. The rule is also in the shared `/design-check` checklist.
 8. **Live listeners** — `startListeners`/`stopListeners` wire up four `onSnapshot` subscriptions
    (`tasks`, `activity`, a per-user `notifications` query, and `suggestions`), gated by
    `onAuthStateChanged`.
