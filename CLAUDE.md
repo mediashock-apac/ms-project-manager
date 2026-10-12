@@ -3880,6 +3880,17 @@ decides what to move.
   own clicks), the phone layout (its boxes sit outside the redrawn parts), people pickers, Ctrl K.
   All covered by `tests/live-forms.test.js`. **Any new typing box inside something that redraws
   on live data must call `holdIfTyping` and be added to that test** (also in `/design-check`).
+- **Repeating leave** (2026-10-12, asked: "Can there be options to include regular days off or
+  repeated days so no need to fill in like this?", from a card with six separate single Mondays).
+  The add form has "Repeats": Doesn't repeat / Every week / Every 2 weeks, and an optional "until"
+  that appears only once a repeat is picked (blank = keeps repeating). Stored ONCE on the leave
+  entry as `repeat` + `until`, with start/end as the first occurrence (must be shorter than the gap).
+  **`leaveFor(name)` returns the worked-out days** (up to `LEAVE_REPEAT_YEARS` ahead with no end,
+  cached per roster snapshot), so the Timeline, Calendar, WIP, Monday, the owner picker and the
+  leave-clash alerts need no change. **`leaveRulesFor(name)` is the stored list**: use it to add,
+  remove or list entries. Lists show a repeat as one line via `leaveRepeatLabel` ("Every Mon until
+  Nov 30"): the People chip, WIP's Away card and Monday's Away row ("· next Oct 12"), the phone,
+  the Calendar note. Removing the chip removes the whole repeat. `tests/leave-repeat.test.js`.
 - **Leave that ended more than 30 days ago is no longer listed on the People card**
   (`LEAVE_LIST_DAYS`, 2026-10-12, asked: "Leaves that have past 30 days should automatically be
   removed"). Hidden, not deleted: the Timeline, Calendar and past Monday weeks still read it,

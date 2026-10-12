@@ -7133,9 +7133,51 @@
      capacity view, not the bars. So this is a visibility signal too -- it shades the days and
      names the clash, and a human still decides what to move.
   --------------------------------------------------------- */
-  function leaveFor(name) {
+  /* Repeating leave (asked: "Can there be options to include regular days off or repeated days so
+     no need to fill in like this?", from a card with six separate single Mondays). A stored entry
+     may carry `repeat: 'weekly' | 'fortnightly'` and an optional `until` (YYYY-MM-DD); its
+     start/end are the first occurrence. It's stored ONCE and worked out into real days here, so
+     every reader (Timeline bands, Calendar, WIP, Monday, the owner picker, leave-clash alerts) sees
+     the actual days without knowing about repeats. Lists that show leave as entries (the People
+     card, WIP/Monday "Away", the phone) show a repeat as one line ("Every Mon") via
+     leaveRulesFor / leaveRepeatLabel. */
+  var LEAVE_REPEAT_DAYS = { weekly: 7, fortnightly: 14 };
+  var LEAVE_REPEAT_YEARS = 2;   // with no end date, worked out this far ahead
+  function leaveRulesFor(name) {
     var person = teamPeople.find(function (p) { return p.name === name; });
     return ((person && person.leave) || []).filter(function (l) { return l && l.start && l.end; });
+  }
+  function leaveOccurrences(l) {
+    var step = LEAVE_REPEAT_DAYS[l.repeat];
+    if (!step) return [l];
+    var len = daysBetween(parseDate(l.start), parseDate(l.end));
+    var last = l.until || toDateInputValue(addDays(parseDate(l.start), LEAVE_REPEAT_YEARS * 365));
+    var out = [];
+    for (var d = parseDate(l.start), n = 0; n < 200; n++, d = addDays(d, step)) {
+      var st = toDateInputValue(d);
+      if (st > last) break;
+      out.push({ id: l.id + '@' + st, ruleId: l.id, start: st, end: toDateInputValue(addDays(d, len)), note: l.note || '', repeat: l.repeat, until: l.until || '' });
+    }
+    return out;
+  }
+  // Every actual period of leave, repeats worked out. Cached per roster snapshot: this is called
+  // for every row of every timeline and calendar day.
+  var leaveCache = { people: null, map: {} };
+  function leaveFor(name) {
+    if (leaveCache.people !== teamPeople) leaveCache = { people: teamPeople, map: {} };
+    if (!leaveCache.map[name]) {
+      var all = [];
+      leaveRulesFor(name).forEach(function (l) { all = all.concat(leaveOccurrences(l)); });
+      leaveCache.map[name] = all;
+    }
+    return leaveCache.map[name];
+  }
+  // "Every Mon", "Every 2 weeks, Mon–Tue", plus "until 30 Nov" when it ends.
+  function leaveRepeatLabel(l) {
+    if (!LEAVE_REPEAT_DAYS[l.repeat]) return '';
+    var day = function (s) { return parseDate(s).toLocaleDateString('en-US', { weekday: 'short' }); };
+    var days = l.start === l.end ? day(l.start) : day(l.start) + '–' + day(l.end);
+    return (l.repeat === 'fortnightly' ? 'Every 2 weeks, ' : 'Every ') + days + (l.until ? ' until ' + formatShortDate(l.until) : '');
   }
 
   // Plain string comparison, no Date parsing and no timezone helper: both ends are stored as the
@@ -12876,7 +12918,7 @@
       var ds = toDateInputValue(d);
       people.forEach(function (p) {
         var lp = leavePeriodOn(p.name, ds);
-        if (lp) push(ds, { kind: 'away', title: p.name + ' away', who: p.name, note: formatShortDate(lp.start) + ' to ' + formatShortDate(lp.end) + (lp.note ? ' · ' + lp.note : '') });
+        if (lp) push(ds, { kind: 'away', title: p.name + ' away', who: p.name, note: (lp.ruleId ? leaveRepeatLabel(lp) : formatShortDate(lp.start) + ' to ' + formatShortDate(lp.end)) + (lp.note ? ' · ' + lp.note : '') });
       });
     }
     Object.keys(out).forEach(function (k) {
@@ -13606,6 +13648,9 @@
       '<span class="flex flex-col gap-0.5 text-sm text-zinc-700 dark:text-zinc-200 min-w-0">' + rows.map(function (r) {
         var span = daysBetween(parseDate(r.start), parseDate(r.end)) + 1;
         var thisWeek = tagThisWeek && r.start <= weekEnd && r.end >= key;
+        if (r.repeatLabel) return '<span class="break-words">' + escapeHtml(r.repeatLabel) +
+          ' <span class="text-zinc-500 dark:text-zinc-400">' + (r.start >= toDateInputValue(todayMidnight()) ? '· next ' + escapeHtml(formatShortDate(r.start)) : '') + (r.note ? ' · ' + escapeHtml(r.note) : '') + '</span>' +
+          (thisWeek ? ' <span class="align-middle text-[10px] font-bold px-1.5 py-px rounded-full bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/30">This week</span>' : '') + '</span>';
         return '<span class="break-words">' + escapeHtml(formatShortDate(r.start) + (r.end !== r.start ? ' – ' + formatShortDate(r.end) : '')) +
           ' <span class="text-zinc-500 dark:text-zinc-400">· ' + span + ' day' + (span === 1 ? '' : 's') + (r.note ? ' · ' + escapeHtml(r.note) : '') + '</span>' +
           (thisWeek ? ' <span class="align-middle text-[10px] font-bold px-1.5 py-px rounded-full bg-amber-100 text-amber-800 border border-amber-300 dark:bg-amber-500/15 dark:text-amber-300 dark:border-amber-500/30">This week</span>' : '') + '</span>';
@@ -14163,6 +14208,7 @@
   // alone wouldn't save it), caught up on leaving it, and the values survive any render that does
   // run.
   var leaveDraft = {};
+  var leaveRepeatRedraw = false;   // picking a Repeats option redraws the form on purpose (to show "until")
   var peopleRenderPending = false;
 
   // Rendered above the Time off section on a People card. Self-or-admin, exactly like leave --
@@ -14174,7 +14220,9 @@
   var LEAVE_LIST_DAYS = 30;
   function personLeaveSectionHtml(name) {
     var cutoff = toDateInputValue(addDays(todayMidnight(), -LEAVE_LIST_DAYS));
-    var periods = leaveFor(name).filter(function (l) { return l.end >= cutoff; }).sort(function (a, b) { return a.start < b.start ? -1 : 1; });
+    // Entries as stored (a repeat is one chip); a repeat counts as ended once its last day is past.
+    var lastDay = function (l) { return LEAVE_REPEAT_DAYS[l.repeat] ? (l.until || '9999-12-31') : l.end; };
+    var periods = leaveRulesFor(name).filter(function (l) { return lastDay(l) >= cutoff; }).sort(function (a, b) { return a.start < b.start ? -1 : 1; });
     var editable = canEditLeaveFor(name);
     var hasRosterDoc = !!teamPeople.find(function (p) { return p.name === name; });
     // Nothing to show and nothing this person can do here -- render no section at all rather
@@ -14190,12 +14238,15 @@
     // history isn't lost the moment it ends).
     var todayStr = toDateInputValue(todayMidnight());
     var rows = periods.map(function (l) {
-      var ended = l.end < todayStr;
+      var ended = lastDay(l) < todayStr;
+      var repeatLabel = leaveRepeatLabel(l);
       var pillClass = ended
         ? 'bg-zinc-100 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400'
         : 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300';
       return '<span class="inline-flex items-center gap-1 text-xs font-semibold px-1.5 py-0.5 rounded ' + pillClass + '">' +
-        escapeHtml(formatShortDate(l.start) + ' – ' + formatShortDate(l.end)) +
+        (repeatLabel
+          ? svgIcon('repeat', 'w-3 h-3 shrink-0') + escapeHtml(repeatLabel) + '<span class="font-normal opacity-80">from ' + escapeHtml(formatShortDate(l.start)) + '</span>'
+          : escapeHtml(l.start === l.end ? formatShortDate(l.start) : formatShortDate(l.start) + ' – ' + formatShortDate(l.end))) +
         (ended ? '<span class="font-normal opacity-80">Ended</span>' : '') +
         (l.note ? '<span class="font-normal opacity-80">' + escapeHtml(l.note) + '</span>' : '') +
         (editable ? '<button type="button" class="leave-remove opacity-70 hover:opacity-100" data-leave-name="' + escapeHtml(name) + '" data-leave-id="' + escapeHtml(l.id) + '" aria-label="Remove this leave">' + svgIcon('x', 'w-3 h-3') + '</button>' : '') +
@@ -14217,6 +14268,17 @@
           '<input type="date" class="leave-start text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-500/40" data-leave-name="' + escapeHtml(name) + '" value="' + escapeHtml(leaveDraft.start || '') + '">' +
           '<span class="text-xs text-zinc-400 dark:text-zinc-500">to</span>' +
           '<input type="date" class="leave-end text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-500/40" data-leave-name="' + escapeHtml(name) + '" value="' + escapeHtml(leaveDraft.end || '') + '">' +
+          // Repeats: one entry for a regular day off instead of one per week. "Until" only
+          // appears once a repeat is picked (progressive disclosure); blank = no end.
+          '<select class="leave-repeat text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-500/40" aria-label="Repeats" data-leave-name="' + escapeHtml(name) + '">' +
+            '<option value=""' + (!leaveDraft.repeat ? ' selected' : '') + '>Doesn\'t repeat</option>' +
+            '<option value="weekly"' + (leaveDraft.repeat === 'weekly' ? ' selected' : '') + '>Every week</option>' +
+            '<option value="fortnightly"' + (leaveDraft.repeat === 'fortnightly' ? ' selected' : '') + '>Every 2 weeks</option>' +
+          '</select>' +
+          (leaveDraft.repeat
+            ? '<span class="text-xs text-zinc-400 dark:text-zinc-500">until</span>' +
+              '<input type="date" class="leave-until text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-500/40" aria-label="Repeat until (optional)" title="Leave blank to keep repeating" data-leave-name="' + escapeHtml(name) + '" value="' + escapeHtml(leaveDraft.until || '') + '">'
+            : '') +
           '<input type="text" maxlength="40" placeholder="Reason (optional)" class="leave-note flex-1 min-w-[7rem] text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-500/40" data-leave-name="' + escapeHtml(name) + '" value="' + escapeHtml(leaveDraft.note || '') + '">' +
           '<button type="button" class="leave-save text-xs font-semibold px-2 py-1 rounded-lg bg-brand-600 text-white hover:bg-brand-700" data-leave-name="' + escapeHtml(name) + '">Add</button>' +
           '<button type="button" class="leave-cancel text-xs font-medium px-2 py-1 rounded-lg text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">Cancel</button>' +
@@ -14264,7 +14326,7 @@
   function renderPeople() {
     // Hold the render while someone is typing in the open leave form (see leaveDraft).
     var ae = document.activeElement;
-    if (leaveEditingFor && ae && ae.closest && ae.closest('#people-grid .leave-editor')) { peopleRenderPending = true; return; }
+    if (!leaveRepeatRedraw && leaveEditingFor && ae && ae.closest && ae.closest('#people-grid .leave-editor')) { peopleRenderPending = true; return; }
     peopleRenderPending = false;
     var filtered = applyFilters(activeTasks());
     var container = document.getElementById('people-grid');
@@ -14441,6 +14503,18 @@
     if (t.classList.contains('leave-start')) leaveDraft.start = t.value;
     else if (t.classList.contains('leave-end')) leaveDraft.end = t.value;
     else if (t.classList.contains('leave-note')) leaveDraft.note = t.value;
+    else if (t.classList.contains('leave-until')) leaveDraft.until = t.value;
+    else if (t.classList.contains('leave-repeat')) {
+      leaveDraft.repeat = t.value;
+      // Keep what's typed in the other boxes, then redraw so "until" shows or hides.
+      var g = document.getElementById('people-grid');
+      ['start', 'end', 'note'].forEach(function (k) { var el = g.querySelector('.leave-' + k); if (el) leaveDraft[k] = el.value; });
+      peopleRenderPending = false;
+      leaveRepeatRedraw = true;
+      renderPeople();
+      leaveRepeatRedraw = false;
+      var sel = g.querySelector('.leave-repeat'); if (sel) sel.focus();
+    }
   });
   document.getElementById('people-grid').addEventListener('focusout', function () {
     setTimeout(function () {
@@ -14473,9 +14547,9 @@
     if (removeBtn) {
       var rmName = removeBtn.getAttribute('data-leave-name');
       var rmId = removeBtn.getAttribute('data-leave-id');
-      var removed = leaveFor(rmName).find(function (l) { return l.id === rmId; });
-      saveLeave(rmName, leaveFor(rmName).filter(function (l) { return l.id !== rmId; }),
-        removed ? 'Removed leave for ' + rmName + ': ' + formatShortDate(removed.start) + ' – ' + formatShortDate(removed.end) : null);
+      var removed = leaveRulesFor(rmName).find(function (l) { return l.id === rmId; });
+      saveLeave(rmName, leaveRulesFor(rmName).filter(function (l) { return l.id !== rmId; }),
+        removed ? 'Removed leave for ' + rmName + ': ' + (removed.repeat ? leaveRepeatLabel(removed) : formatShortDate(removed.start) + ' – ' + formatShortDate(removed.end)) : null);
       return;
     }
 
@@ -14492,13 +14566,16 @@
       // hang a message on, and the message would be wiped by the next render anyway.
       if (!start || !end) { showToast('Pick both a start and an end date.', 'error'); return; }
       if (end < start) { showToast('The end date has to be on or after the start date.', 'error'); return; }
-      var periods = leaveFor(name).concat([{
-        id: uid(),
-        start: start,
-        end: end,
-        note: noteEl ? noteEl.value.trim().slice(0, 40) : ''
-      }]);
-      saveLeave(name, periods, 'Booked leave for ' + name + ': ' + formatShortDate(start) + ' – ' + formatShortDate(end));
+      var repeatEl = document.querySelector('#people-grid .leave-repeat');
+      var untilEl = document.querySelector('#people-grid .leave-until');
+      var repeat = repeatEl && LEAVE_REPEAT_DAYS[repeatEl.value] ? repeatEl.value : '';
+      var until = repeat && untilEl ? untilEl.value : '';
+      if (repeat && daysBetween(parseDate(start), parseDate(end)) >= LEAVE_REPEAT_DAYS[repeat]) { showToast('A repeating day off has to be shorter than the gap between repeats.', 'error'); return; }
+      if (until && until < start) { showToast('"Until" has to be on or after the first day.', 'error'); return; }
+      var entry = { id: uid(), start: start, end: end, note: noteEl ? noteEl.value.trim().slice(0, 40) : '' };
+      if (repeat) { entry.repeat = repeat; if (until) entry.until = until; }
+      var periods = leaveRulesFor(name).concat([entry]);
+      saveLeave(name, periods, 'Booked leave for ' + name + ': ' + (repeat ? leaveRepeatLabel(entry) + ' from ' + formatShortDate(start) : formatShortDate(start) + ' – ' + formatShortDate(end)));
       return;
     }
   });
@@ -15973,10 +16050,12 @@
     var rows = [];
     teamPeople.forEach(function (person) {
       if (!person.name) return;
-      (person.leave || []).forEach(function (l) {
-        if (!l || !l.start || !l.end) return;
+      var seenRule = {};
+      leaveFor(person.name).forEach(function (l) {
         if (l.end < today || l.start > horizon) return;
-        rows.push({ name: person.name, start: l.start, end: l.end, note: l.note || '' });
+        // A repeat is one row ("Every Mon"), dated by its next occurrence in the window.
+        if (l.ruleId) { if (seenRule[l.ruleId]) return; seenRule[l.ruleId] = true; }
+        rows.push({ name: person.name, start: l.start, end: l.end, note: l.note || '', repeatLabel: l.ruleId ? leaveRepeatLabel(l) : '' });
       });
     });
     return rows.sort(function (a, b) { return a.start < b.start ? -1 : a.start > b.start ? 1 : a.name.localeCompare(b.name); });
@@ -15996,7 +16075,9 @@
         avatarHtml(r.name, 'w-7 h-7 shrink-0', 'text-[10px]') +
         '<div class="min-w-0 flex-1">' +
           '<p class="text-sm font-semibold text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(r.name) + '</p>' +
-          '<p class="text-xs text-zinc-500 dark:text-zinc-400 break-words mt-0.5">' + escapeHtml(formatShortDate(r.start) + ' – ' + formatShortDate(r.end) + ' · ' + span + ' day' + (span === 1 ? '' : 's') + (r.note ? ' · ' + r.note : '')) + '</p>' +
+          '<p class="text-xs text-zinc-500 dark:text-zinc-400 break-words mt-0.5">' + escapeHtml(r.repeatLabel
+            ? r.repeatLabel + (r.start >= today ? ' · next ' + formatShortDate(r.start) : ' · today') + (r.note ? ' · ' + r.note : '')
+            : formatShortDate(r.start) + ' – ' + formatShortDate(r.end) + ' · ' + span + ' day' + (span === 1 ? '' : 's') + (r.note ? ' · ' + r.note : '')) + '</p>' +
         '</div>' +
         (awayNow ? '<span class="shrink-0 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + WIP_TONES.amber + '">Away now</span>' : '') +
       '</div>';
@@ -16909,6 +16990,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-12h', date: '2026-10-12', items: [
+      { type: 'new', title: 'Regular days off, booked once', text: "In \"+ Add leave\" on People, choose Repeats: every week or every 2 weeks, with an optional end date. It shows as one entry, like \"Every Mon until Nov 30\", and the Timeline, Calendar and meetings all show each day off." }
+    ] },
     { id: '2026-10-12g', date: '2026-10-12', items: [
       { type: 'improved', title: 'One owner per task', text: "A task's Owner is the one person who answers for it, start to finish. To hand work over, add the next person to a checklist step: they get \"You're up\" when the step before is ticked. If you change the Owner on a task with steps, a short tip shows how, with a one-click way to keep the old owner." },
       { type: 'fixed', title: 'Copy/Production icon no longer cut off', text: "The clapperboard's snap is no longer clipped when you point at it." }
@@ -19276,9 +19360,11 @@
     teamPeople.forEach(function (p) {
       if (!p.name || seen[p.name]) return;
       seen[p.name] = true;
-      (Array.isArray(p.leave) ? p.leave : []).forEach(function (l) {
-        if (!l || !l.start || !l.end || l.end < today || l.start > end) return;
-        rows.push({ name: p.name, start: l.start, end: l.end, note: l.note || '', now: l.start <= today });
+      var seenRule = {};
+      leaveFor(p.name).forEach(function (l) {
+        if (l.end < today || l.start > end) return;
+        if (l.ruleId) { if (seenRule[l.ruleId]) return; seenRule[l.ruleId] = true; }
+        rows.push({ name: p.name, start: l.start, end: l.end, note: l.note || '', now: l.start <= today, repeatLabel: l.ruleId ? leaveRepeatLabel(l) : '' });
       });
     });
     return rows.sort(function (a, b) { return a.start < b.start ? -1 : 1; });
@@ -19287,7 +19373,7 @@
     return mGroup(rows.map(function (r) {
       return '<button type="button" class="m-row" data-m-person="' + escapeHtml(r.name) + '">' + avatarHtml(r.name, 'w-9 h-9', 'text-xs') +
         '<span class="m-row-main"><span class="m-row-title">' + escapeHtml(r.name) + '</span><span class="m-row-sub">' +
-          (r.now ? 'Back after ' + escapeHtml(formatShortDate(r.end)) : escapeHtml(formatShortDate(r.start)) + ' to ' + escapeHtml(formatShortDate(r.end))) +
+          (r.repeatLabel ? escapeHtml(r.repeatLabel) + (r.now ? ' · away today' : ' · next ' + escapeHtml(formatShortDate(r.start))) : r.now ? 'Back after ' + escapeHtml(formatShortDate(r.end)) : escapeHtml(formatShortDate(r.start)) + ' to ' + escapeHtml(formatShortDate(r.end))) +
           (r.note ? ' · ' + escapeHtml(r.note) : '') + '</span></span>' +
         (r.now ? '<span class="m-chip" style="background:#fef3c7;color:#92400e">Away</span>' : '') + '</button>';
     }).join(''));
@@ -20821,7 +20907,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-12T08:20:31Z";
+  var CURRENT_BUILD_VERSION = "2026-10-12T08:41:42Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
