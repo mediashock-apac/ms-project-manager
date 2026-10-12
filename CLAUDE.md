@@ -116,6 +116,30 @@ syncronisingly and not in separately"*, then *"make this a rule"*. For every cha
   the project doc follows a renamed project).
 - Before building, list what else reads or writes the same data and wire it in the same change.
 
+## Standing rule: meeting text size
+
+Asked for Monday Meeting ("Can all the text and everything be larger so that it is viewable when we
+are having the meeting?"), then "Same enlargement should apply to WIP meeting and all future
+meetings", then "have an option to increase 1.2x, 1.5x and 1.8x ... should not add to visual clutter
+but also still be visibly intuitive", then "the default look should stay as 1x".
+
+- **Every meeting view** (Monday Meeting, WIP Meeting, and any added later) carries the
+  `meeting-zoom` class on its content and a text-size control in its header
+  (`data-meeting-zoom-slot`, or `meetingZoomCtlHtml()` in a rendered header). That is all a new
+  meeting page needs.
+- **The control** (MEETING TEXT SIZE in index.html) is four "A"s of growing size in a small
+  segmented control: normal (default), 1.2x, 1.5x, 1.8x; the tooltip names the size. One setting
+  for all meetings, remembered on that computer (`flowboard_meeting_zoom`), not shared: whoever
+  drives the meeting screen sets it. Desktop only; the phone has its own layout.
+- **How:** CSS `zoom: var(--meeting-zoom, 1)` from 768px, plus `html[data-meeting-zoom]` when not
+  1x. One scale, so text, icons, avatars and columns keep their proportions.
+- **Two things to get right in a zoomed view:** (1) anything that turns mouse positions into CSS
+  sizes must divide by `el.currentCSSZoom` (the WIP Task-column drag does); (2) side-by-side
+  layouts that switch on screen width must wait for a proportionally wider screen when enlarged,
+  or the main column gets squeezed (WIP's rules under `html[data-meeting-zoom]`: breakpoint x size).
+- Tested in `tests/monday-follow.test.js` (default 1x, picking 1.5x reaches both meetings and is
+  remembered, WIP stacks at 1.5x on 1440px, the drag tracks the cursor).
+
 ## Standing rule: learn from the reference tools
 
 Stated directly (2026-10-08): *"always take references from these tools when building new features and
@@ -4131,10 +4155,8 @@ their week into a cell before the Monday meeting. Asked: "Is there a way to inte
     ("It should say 'This week' to avoid confusion", "should not have an arrow on the right");
     older weeks keep their date, a "This week" link and the arrow. Once nobody is waiting it reads a
     green **"All in!"** with a full green bar instead of "10 of 10 in". Same on the phone.
-  - **Bigger for the meeting screen:** `#weekly-bar, #weekly-view { zoom: 1.2 }` from 768px ("Can
-    all the text and everything be larger"). One scale, so text, icons, avatars and the status
-    column stay in proportion; the page keeps its 64rem cap (`max-w-5xl`). Not the editor, not the
-    phone.
+  - **Bigger for the meeting screen:** see "Standing rule: meeting text size" (first shipped as a
+    fixed 1.2x here, then made a choice for every meeting, 1x by default).
   - **Editor: a dropdown per project, not six pills** ("It adds to visual clutter ... make this
     interface visually simpler"). Each of your projects is one line: name, "Coming up", and a
     `<select data-weekly-select>` (the app's own list on desktop via `openSelectMenu`). "Same as

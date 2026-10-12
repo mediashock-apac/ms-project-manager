@@ -93,11 +93,29 @@
      it will land (a shadow, since the card clips anything positioned outside it). */
   .weekly-dragging { opacity: 0.45; }
   .weekly-drop-before { box-shadow: 0 -9px 0 -6px #ff4e20 !important; }
-  /* Monday Meeting is read together on one screen (asked: "Can all the text and everything be larger
-     so that it is viewable when we are having the meeting?"). One scale for the whole page, so text,
-     icons, avatars and the status column all grow together and keep their proportions. Desktop only:
-     the phone has its own layout. */
-  @media (min-width: 768px) { #weekly-bar, #weekly-view { zoom: 1.2; } }
+  /* Meeting views are read together on one screen, so they're drawn bigger (asked for Monday
+     Meeting: "Can all the text and everything be larger so that it is viewable when we are having the
+     meeting?", then "Same enlargement should apply to WIP meeting and all future meetings"). One
+     scale for the whole view, so text, icons, avatars and columns grow together and keep their
+     proportions. A new meeting view just adds `meeting-zoom`. Desktop only: the phone has its own
+     layout. Anything that turns mouse positions into CSS sizes inside it must divide by
+     `el.currentCSSZoom` (see the WIP Task-column drag). The size is a choice (asked: "have an
+     option to increase 1.2x, 1.5x and 1.8x ... should not add to visual clutter but also still be
+     visibly intuitive", then "the default look should stay as 1x"): --meeting-zoom, set by the
+     small A A A A control (MEETING TEXT SIZE), 1 by default. */
+  @media (min-width: 768px) { .meeting-zoom { zoom: var(--meeting-zoom, 1); } }
+  /* WIP's side-by-side layouts switch on SCREEN width (1400px, lg 1024px), but enlarged content needs
+     proportionally more of it, or the project list is squeezed beside the Away column. At a bigger
+     size they stack until the screen is that much wider (breakpoint x size). */
+  html[data-meeting-zoom] #wip-projects-wrap, html[data-meeting-zoom] #wip-agenda-grid { grid-template-columns: minmax(0, 1fr); }
+  html[data-meeting-zoom] #wip-away-side { position: static; }
+  html[data-meeting-zoom] #wip-ahead { grid-column: auto; }
+  @media (min-width: 1680px) { html[data-meeting-zoom="1.2"] #wip-projects-wrap { grid-template-columns: minmax(0, 1fr) 24rem; } html[data-meeting-zoom="1.2"] #wip-away-side { position: sticky; } }
+  @media (min-width: 2100px) { html[data-meeting-zoom="1.5"] #wip-projects-wrap { grid-template-columns: minmax(0, 1fr) 24rem; } html[data-meeting-zoom="1.5"] #wip-away-side { position: sticky; } }
+  @media (min-width: 2520px) { html[data-meeting-zoom="1.8"] #wip-projects-wrap { grid-template-columns: minmax(0, 1fr) 24rem; } html[data-meeting-zoom="1.8"] #wip-away-side { position: sticky; } }
+  @media (min-width: 1229px) { html[data-meeting-zoom="1.2"] #wip-agenda-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } html[data-meeting-zoom="1.2"] #wip-ahead { grid-column: span 2 / span 2; } }
+  @media (min-width: 1536px) { html[data-meeting-zoom="1.5"] #wip-agenda-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } html[data-meeting-zoom="1.5"] #wip-ahead { grid-column: span 2 / span 2; } }
+  @media (min-width: 1843px) { html[data-meeting-zoom="1.8"] #wip-agenda-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } html[data-meeting-zoom="1.8"] #wip-ahead { grid-column: span 2 / span 2; } }
   .weekly-drop-after { box-shadow: 0 9px 0 -6px #ff4e20 !important; }
   /* [data-column] (the column wrapper) has no Tailwind `transition` class of its own, unlike
      .task-card, so the drop-target highlight needs an explicit one to fade in/out instead of
@@ -393,32 +411,185 @@
   .updates-unread:not(.active) > svg { animation: updates-ring 3.2s ease-in-out infinite; transform-origin: 30% 70%; }
   @keyframes updates-ring { 0%, 55%, 100% { transform: rotate(0); } 60% { transform: rotate(-16deg); } 66% { transform: rotate(14deg); } 72% { transform: rotate(-10deg); } 78% { transform: rotate(8deg); } 84% { transform: rotate(0); } }
 
-  /* Sidebar icons move a little on hover -- each one says something about its tab. Hover only,
-     under 0.7s, and skipped entirely under reduced motion. */
-  @keyframes nav-pop { 0%, 100% { transform: scale(1); } 45% { transform: scale(1.22); } }
-  @keyframes nav-nudge-right { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(3px); } }
-  @keyframes nav-hop { 0%, 100% { transform: translateY(0); } 40% { transform: translateY(-3px); } 70% { transform: translateY(1px); } }
-  @keyframes nav-drop { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(3px); } }
-  @keyframes nav-spin { to { transform: rotate(360deg); } }
-  @keyframes nav-wiggle { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-12deg); } 75% { transform: rotate(12deg); } }
-  @keyframes nav-flip { 0%, 100% { transform: rotateY(0); } 50% { transform: rotateY(180deg); } }
-  @keyframes nav-beat { 0%, 100% { transform: scaleX(1); } 30% { transform: scaleX(1.25); } 60% { transform: scaleX(0.9); } }
+  /* ICON HOVER MOTION. Every clickable icon acts out what it means when you point at it (asked:
+     "All icons should animate when hover ... The animation should relate to what the icon is and
+     not a generic animation movement"): a bin lifts its lid, a pencil scribbles, a bell rings, a
+     clock's hands go round, a chevron nudges the way it opens. Rules, so it stays a delight and not
+     a distraction:
+     - Only icons you can click (directly inside a button, link, role="button" row, or a field's own
+       caret/magnifier). An icon that is just a label (the calendar beside a deadline, page titles,
+       status marks) stays still: motion on hover says "you can click this", and a label that moves
+       would be lying.
+     - Plays once per hover, under 0.8s, never loops. Keyboard focus plays it too.
+     - The PARTS move, not the whole <svg>: the svg often carries its own transform (a chevron turned
+       with rotate-180, the collapse arrows flipped, the search icon's -translate-y-1/2), and parts
+       move in the icon's own frame, so a turned chevron still nudges the way it points.
+     - Off under reduced motion. Not on the phone layout (no hover there). The Google "G" on the
+       sign-in button stays still: Google's brand rules say not to rotate or animate their logo.
+     - Icons are found by data-ic (svgIcon adds it; inline <svg>s carry it by hand). **A new icon
+       needs a data-ic and a motion here that says what it is**, not a borrowed bounce. */
+  :where(svg[data-ic]) { overflow: visible; }
+  :where(svg[data-ic]) > * { transform-box: view-box; transform-origin: 12px 12px; }
+  @keyframes ic-nudge-down { 0%, 100% { translate: 0 0; } 45% { translate: 0 3px; } 70% { translate: 0 -.5px; } }
+  @keyframes ic-nudge-up { 0%, 100% { translate: 0 0; } 45% { translate: 0 -3px; } 70% { translate: 0 .5px; } }
+  @keyframes ic-nudge-right { 0%, 100% { translate: 0 0; } 45% { translate: 3px 0; } 70% { translate: -.5px 0; } }
+  @keyframes ic-nudge-left { 0%, 100% { translate: 0 0; } 45% { translate: -3px 0; } 70% { translate: .5px 0; } }
+  @keyframes ic-twist { from { rotate: 0deg; } to { rotate: 90deg; } }
+  @keyframes ic-add { 0% { rotate: 0deg; scale: 1; } 60% { rotate: 90deg; scale: 1.18; } 100% { rotate: 90deg; scale: 1; } }
+  @keyframes ic-squish { 0%, 100% { scale: 1 1; } 40% { scale: .5 1; } 70% { scale: 1.1 1; } }
+  @keyframes ic-lid { 0%, 100% { translate: 0 0; rotate: 0deg; } 35%, 60% { translate: 0 -2px; rotate: -20deg; } }
+  @keyframes ic-scribble { 0%, 100% { translate: 0 0; rotate: 0deg; } 20% { translate: -2px 1.5px; rotate: -6deg; } 40% { translate: 1px -.5px; rotate: 4deg; } 60% { translate: -1px 1.5px; rotate: -5deg; } 80% { translate: 1.5px 0; rotate: 3deg; } }
+  @keyframes ic-draw { from { stroke-dashoffset: var(--ic-len); } to { stroke-dashoffset: 0; } }
+  @keyframes ic-link-a { 0%, 100% { translate: 0 0; } 40% { translate: 2px -2px; } 70% { translate: -.5px .5px; } }
+  @keyframes ic-link-b { 0%, 100% { translate: 0 0; } 40% { translate: -2px 2px; } 70% { translate: .5px -.5px; } }
+  @keyframes ic-lift { 0%, 100% { translate: 0 0; } 40% { translate: 0 -3px; } 75% { translate: 0 .5px; } }
+  @keyframes ic-drop-in { 0% { translate: 0 -5px; opacity: 0; } 60% { translate: 0 1px; opacity: 1; } 100% { translate: 0 0; } }
+  @keyframes ic-scan { 0%, 100% { translate: 0 0; } 25% { translate: -2px -1.5px; } 50% { translate: 1.5px -2px; } 75% { translate: 1px 1.5px; } }
+  @keyframes ic-page { 0%, 100% { scale: 1 1; } 40% { scale: 1 .78; } 70% { scale: 1 1.05; } }
+  @keyframes ic-hop { 0%, 100% { translate: 0 0; } 40% { translate: 0 -2.5px; } 70% { translate: 0 .5px; } }
+  @keyframes ic-spin { from { rotate: 0deg; } to { rotate: 360deg; } }
+  @keyframes ic-half-turn { from { rotate: 0deg; } to { rotate: 180deg; } }
+  @keyframes ic-star { 0% { rotate: 0deg; scale: 1; } 50% { scale: 1.25; } 100% { rotate: 72deg; scale: 1; } }
+  @keyframes ic-twinkle { 0%, 100% { rotate: 0deg; scale: 1; } 30% { rotate: 20deg; scale: 1.3; } 60% { rotate: -8deg; scale: .9; } }
+  @keyframes ic-pop { 0%, 100% { scale: 1; rotate: 0deg; } 35% { scale: 1.15; rotate: -6deg; } 65% { scale: .95; rotate: 3deg; } }
+  @keyframes ic-ring { 0%, 100% { rotate: 0deg; } 15% { rotate: 16deg; } 30% { rotate: -14deg; } 45% { rotate: 10deg; } 60% { rotate: -7deg; } 75% { rotate: 3deg; } }
+  @keyframes ic-clapper { 0%, 100% { translate: 0 0; } 15% { translate: -1.5px 0; } 30% { translate: 1.5px 0; } 45% { translate: -1px 0; } 60% { translate: 1px 0; } }
+  @keyframes ic-shake { 0%, 100% { translate: 0 0; } 20%, 60% { translate: -1.5px 0; } 40%, 80% { translate: 1.5px 0; } }
+  @keyframes ic-press { 0%, 100% { translate: 0 0; } 35% { translate: 0 2.5px; } 55% { translate: 0 1.5px; } }
+  @keyframes ic-shout { 0%, 100% { scale: 1; rotate: 0deg; } 25% { scale: 1.15; rotate: -8deg; } 50% { scale: 1; rotate: 2deg; } 70% { scale: 1.1; rotate: -5deg; } }
+  @keyframes ic-tilt-open { 0%, 100% { rotate: 0deg; } 45% { rotate: -10deg; } 75% { rotate: 2deg; } }
+  @keyframes ic-grow { 0% { scale: .25 1; } 70% { scale: 1.08 1; } 100% { scale: 1 1; } }
+  @keyframes ic-wonder { 0%, 100% { rotate: 0deg; translate: 0 0; } 30% { rotate: -14deg; translate: 0 -1px; } 65% { rotate: 10deg; } }
+  @keyframes ic-sift { 0%, 100% { scale: 1 1; } 45% { scale: .55 1; } }
+  @keyframes ic-grin { 0%, 100% { rotate: 0deg; } 30% { rotate: -12deg; } 65% { rotate: 9deg; } }
+  @keyframes ic-swing-left { 0%, 100% { translate: 0 0; } 45% { translate: -1.5px 0; } }
+  @keyframes ic-swing-right { 0%, 100% { translate: 0 0; } 45% { translate: 1.5px 0; } }
+  @keyframes ic-copy-front { 0%, 100% { translate: 0 0; } 45% { translate: 2px 2px; } }
+  @keyframes ic-copy-back { 0%, 100% { translate: 0 0; } 45% { translate: -1.5px -1.5px; } }
+  @keyframes ic-dip { 0%, 100% { translate: 0 0; } 45% { translate: 0 2px; } 75% { translate: 0 -.5px; } }
+  @keyframes ic-glow { 0%, 100% { scale: 1; } 40% { scale: 1.12; } 70% { scale: .97; } }
+  @keyframes ic-sun-rise { 0%, 100% { translate: 0 0; } 45% { translate: 1px -2.5px; } }
+  @keyframes ic-rock { 0%, 100% { rotate: 0deg; } 30% { rotate: -22deg; } 65% { rotate: 10deg; } }
   @media (prefers-reduced-motion: no-preference) {
-    .view-toggle-btn > svg { transform-origin: center; }
-    .view-toggle-btn[data-view-btn="board"]:hover > svg { animation: nav-pop 0.45s ease; }
-    .view-toggle-btn[data-view-btn="gantt"]:hover > svg { animation: nav-nudge-right 0.5s ease; }
-    .view-toggle-btn[data-view-btn="calendar"]:hover > svg { animation: nav-flip 0.6s ease; }
-    .view-toggle-btn[data-view-btn="people"]:hover > svg { animation: nav-hop 0.5s ease; }
-    .view-toggle-btn[data-view-btn="projects"]:hover > svg { animation: nav-spin 0.6s ease; }
-    .view-toggle-btn[data-view-btn="chat"]:hover > svg { animation: nav-wiggle 0.5s ease; }
-    .view-toggle-btn[data-view-btn="wip"]:hover > svg { animation: nav-hop 0.5s ease; }
-    .view-toggle-btn[data-view-btn="weekly"]:hover > svg { animation: nav-wiggle 0.5s ease; }
-    .view-toggle-btn[data-view-btn="activity"]:hover > svg { animation: nav-beat 0.5s ease; }
-    .view-toggle-btn[data-view-btn="suggestions"]:hover > svg { animation: nav-wiggle 0.5s ease; }
-    .view-toggle-btn[data-view-btn="archived"]:hover > svg { animation: nav-drop 0.45s ease; }
-    .view-toggle-btn[data-view-btn="updates"]:hover > svg { animation: nav-wiggle 0.5s ease; }
-    #btn-export:hover > svg { animation: nav-drop 0.45s ease; }
-    #btn-import:hover > svg { animation: nav-hop 0.45s ease; }
+    :is(button:not(:disabled), a, [role="button"], summary, label, :has(> input:not(:disabled), > select:not(:disabled))):is(:hover, :focus-visible) > svg {
+      /* Directions: the chevron nudges the way it opens; arrows travel the way they point. */
+      &[data-ic="chevronDown"] > * { animation: ic-nudge-down .5s ease; }
+      &[data-ic="chevronUp"] > * { animation: ic-nudge-up .5s ease; }
+      &[data-ic="chevronRight"] > *, &[data-ic="arrowRight"] > * { animation: ic-nudge-right .5s ease; }
+      &[data-ic="chevronLeft"] > * { animation: ic-nudge-left .5s ease; }
+      /* Collapse: the two arrows fold in one after the other. */
+      &[data-ic="collapse"] > * { animation: ic-nudge-left .5s ease; }
+      &[data-ic="collapse"] > :last-child { animation-delay: .07s; }
+      /* Close twists shut; add turns like a dial and swells; minus squeezes. */
+      &[data-ic="x"] > * { animation: ic-twist .35s ease; }
+      &[data-ic="plus"] > * { animation: ic-add .45s cubic-bezier(.34,1.56,.64,1); }
+      &[data-ic="minus"] > * { animation: ic-squish .45s ease; }
+      /* Bin: the lid tips open. */
+      &[data-ic="trash"] > :first-child { transform-origin: 3px 6px; animation: ic-lid .6s ease; }
+      /* Pencil: scribbles while its line is drawn. */
+      &[data-ic="pencil"] > :last-child { transform-origin: 6px 18px; animation: ic-scribble .6s ease; }
+      &[data-ic="pencil"] > :first-child { --ic-len: 9; stroke-dasharray: 9; animation: ic-draw .6s ease; }
+      /* Link: the two halves pull apart and snap back together. */
+      &[data-ic="link"] > :first-child { animation: ic-link-a .55s ease; }
+      &[data-ic="link"] > :last-child { animation: ic-link-b .55s ease; }
+      /* Archive box: the lid lifts and the item drops in. */
+      &[data-ic="archive"] > rect { animation: ic-lift .55s ease; }
+      &[data-ic="archive"] > line { animation: ic-drop-in .55s ease; }
+      /* Download / upload (also Export / Import): the arrow travels into or out of the tray. */
+      &[data-ic="download"] > polyline, &[data-ic="download"] > line { animation: ic-nudge-down .5s ease; }
+      &[data-ic="upload"] > polyline, &[data-ic="upload"] > line { animation: ic-nudge-up .5s ease; }
+      /* Search: the magnifier scans around. */
+      &[data-ic="search"] > * { animation: ic-scan .7s ease; }
+      /* Calendar: the rings hop and the page flips. */
+      &[data-ic="calendar"] > rect, &[data-ic="calendar"] > line:last-child { transform-origin: 12px 4px; animation: ic-page .55s ease; }
+      &[data-ic="calendar"] > line:nth-child(2), &[data-ic="calendar"] > line:nth-child(3) { animation: ic-hop .55s ease; }
+      /* Clock: the hands go round. */
+      &[data-ic="clock"] > polyline { animation: ic-spin .7s ease-in-out; }
+      /* Ticks are drawn: done circle, delivery ticks, checklists, the Monday clipboard. */
+      &[data-ic="check"] > path { --ic-len: 9; stroke-dasharray: 9; animation: ic-draw .45s ease; }
+      &[data-ic="checkTick"] > * { --ic-len: 24; stroke-dasharray: 24; animation: ic-draw .45s ease; }
+      &[data-ic="checkTickDouble"] > * { --ic-len: 17; stroke-dasharray: 17; animation: ic-draw .45s ease; }
+      &[data-ic="checkTickDouble"] > :last-child { animation-delay: .12s; animation-fill-mode: backwards; }
+      &[data-ic="checklist"] > [d^="m3"] { --ic-len: 9; stroke-dasharray: 9; animation: ic-draw .4s ease backwards; }
+      &[data-ic="checklist"] > [d^="m3 15"], &[data-ic="checklist"] > [d^="m3 17"] { animation-delay: .18s; }
+      &[data-ic="clipboardCheck"] > [d^="M9 2"] { animation: ic-hop .5s ease; }
+      &[data-ic="clipboardCheck"] > [d^="m9 12"] { --ic-len: 9; stroke-dasharray: 9; animation: ic-draw .45s ease .1s backwards; }
+      /* People: the front person hops, then the one behind. One person nods. */
+      &[data-ic="users"] > :nth-child(-n+2) { animation: ic-hop .5s ease; }
+      &[data-ic="users"] > :nth-child(n+3) { animation: ic-hop .5s ease .12s; }
+      &[data-ic="user"] > circle { animation: ic-hop .45s ease; }
+      /* Speech bubbles pop from their tail. */
+      &[data-ic="message"] > path, &[data-ic="messagePlus"] > path { transform-origin: 3px 21px; animation: ic-pop .5s ease; }
+      &[data-ic="messageCircle"] > path { transform-origin: 3px 21px; animation: ic-pop .5s ease; }
+      &[data-ic="messagePlus"] > line { transform-origin: 12px 10px; animation: ic-add .45s ease .1s; }
+      /* Grip: the dots shuffle, like something being picked up. */
+      &[data-ic="grip"] > [cx="9"] { animation: ic-nudge-up .45s ease; }
+      &[data-ic="grip"] > [cx="15"] { animation: ic-nudge-down .45s ease; }
+      /* Copy: the two sheets slide apart. */
+      &[data-ic="copy"] > rect { animation: ic-copy-front .45s ease; }
+      &[data-ic="copy"] > path { animation: ic-copy-back .45s ease; }
+      /* Reply goes back, forward goes on. */
+      &[data-ic="reply"] > polyline { animation: ic-nudge-left .45s ease; }
+      &[data-ic="reply"] > path { animation: ic-swing-left .45s ease; }
+      &[data-ic="forward"] > polyline { animation: ic-nudge-right .45s ease; }
+      &[data-ic="forward"] > path { animation: ic-swing-right .45s ease; }
+      /* Bell rings from its top, clapper swinging; a muted bell only shudders and gets struck through. */
+      &[data-ic="bell"] > :first-child { transform-origin: 12px 2px; animation: ic-ring .7s ease; }
+      &[data-ic="bell"] > :last-child { animation: ic-clapper .7s ease .03s; }
+      &[data-ic="bellOff"] > :not(line) { animation: ic-shake .4s ease; }
+      &[data-ic="bellOff"] > line { --ic-len: 29; stroke-dasharray: 29; animation: ic-draw .45s ease; }
+      /* Star turns one point and swells; sparkles twinkle. */
+      &[data-ic="star"] > * { animation: ic-star .55s ease; }
+      &[data-ic="sparkles"] > * { animation: ic-twinkle .6s ease; }
+      /* Pin presses in. */
+      &[data-ic="pin"] > * { animation: ic-press .45s ease; }
+      /* Picture: the sun comes up over the hills. */
+      &[data-ic="image"] > circle { animation: ic-sun-rise .55s ease; }
+      /* More: the dots ripple. */
+      &[data-ic="moreHorizontal"] > * { animation: ic-hop .4s ease backwards; }
+      &[data-ic="moreHorizontal"] > :nth-child(2) { animation-delay: .07s; }
+      &[data-ic="moreHorizontal"] > :nth-child(3) { animation-delay: .14s; }
+      /* Repeat cycles half way; refresh goes all the way round; the compass needle swings and settles. */
+      &[data-ic="repeat"] > * { animation: ic-half-turn .6s ease-in-out; }
+      &[data-ic="refresh"] > * { animation: ic-spin .7s ease-in-out; }
+      &[data-ic="compass"] > polygon { animation: ic-spin .8s cubic-bezier(.34,1.3,.64,1); }
+      /* Theme: the sun's rays turn and it glows; the moon rocks. */
+      &[data-ic="sun"] > line { animation: ic-half-turn .7s ease; }
+      &[data-ic="sun"] > circle { animation: ic-glow .7s ease; }
+      &[data-ic="moon"] > * { animation: ic-rock .6s ease; }
+      /* Drive tray dips as if something landed in it. */
+      &[data-ic="drive"] > * { animation: ic-dip .5s ease; }
+      /* Folder flap opens; a folder with a plus also turns its plus. */
+      &[data-ic="folder"] > *, &[data-ic="folderPlus"] > path { transform-origin: 2px 20px; animation: ic-tilt-open .5s ease; }
+      &[data-ic="folderPlus"] > line { animation: ic-add .45s ease; }
+      /* Board: the column lines shift as cards move. Timeline: the bars grow along their dates. */
+      &[data-ic="columns"] > line:nth-of-type(1) { animation: ic-swing-left .5s ease; }
+      &[data-ic="columns"] > line:nth-of-type(2) { animation: ic-swing-right .5s ease; }
+      &[data-ic="gantt"] > rect { animation: ic-grow .5s ease backwards; }
+      &[data-ic="gantt"] > rect:nth-child(1) { transform-origin: 3px 6px; }
+      &[data-ic="gantt"] > rect:nth-child(2) { transform-origin: 7px 12px; animation-delay: .08s; }
+      &[data-ic="gantt"] > rect:nth-child(3) { transform-origin: 11px 18px; animation-delay: .16s; }
+      /* WIP Meeting screen lights up; Activity's pulse line is traced like a heartbeat. */
+      &[data-ic="presentation"] > rect { animation: ic-glow .5s ease; }
+      &[data-ic="activity"] > * { --ic-len: 50; stroke-dasharray: 50; animation: ic-draw .7s ease; }
+      /* New Updates megaphone shouts. */
+      &[data-ic="megaphone"] > * { transform-origin: 3px 12px; animation: ic-shout .6s ease; }
+      /* Tour: the question mark tilts, wondering; the compass needle (above) spins for "Take the tour".
+         Sign out: you step through the door. */
+      &[data-ic="help"] > :not(circle) { animation: ic-wonder .55s ease; }
+      &[data-ic="logout"] > polyline, &[data-ic="logout"] > line { animation: ic-nudge-right .5s ease; }
+      /* Menu lines shuffle; filter lines narrow like a funnel. */
+      &[data-ic="menu"] > :nth-child(odd) { animation: ic-swing-left .45s ease; }
+      &[data-ic="menu"] > :nth-child(2) { animation: ic-swing-right .45s ease; }
+      &[data-ic="filter"] > * { animation: ic-sift .5s ease backwards; }
+      &[data-ic="filter"] > :nth-child(2) { animation-delay: .06s; }
+      &[data-ic="filter"] > :nth-child(3) { animation-delay: .12s; }
+      /* Emoji: the face grins side to side. Lock: the shackle is tried. Brief: its lines are written. */
+      &[data-ic="smile"] > * { animation: ic-grin .5s ease; }
+      &[data-ic="lock"] > path { animation: ic-lift .5s ease; }
+      &[data-ic="fileText"] > line { --ic-len: 8; stroke-dasharray: 8; animation: ic-draw .4s ease backwards; }
+      &[data-ic="fileText"] > line:last-child { animation-delay: .12s; }
+    }
   }
 
   /* A teammate's edit landing live: a brief brand tint plus a left edge on the row that changed,
@@ -848,7 +1019,7 @@
   <div class="bg-white dark:bg-zinc-800 w-full max-w-sm rounded-2xl shadow-pop overflow-hidden text-center">
     <div class="p-6">
       <div class="w-12 h-12 mx-auto rounded-xl bg-gradient-to-br from-brand-600 to-brand-400 flex items-center justify-center shadow-card mb-4">
-        <svg class="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1"></rect><rect x="14" y="3" width="7" height="5" rx="1"></rect><rect x="14" y="12" width="7" height="9" rx="1"></rect><rect x="3" y="16" width="7" height="5" rx="1"></rect></svg>
+        <svg data-ic="dashboard" class="w-6 h-6 text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="9" rx="1"></rect><rect x="14" y="3" width="7" height="5" rx="1"></rect><rect x="14" y="12" width="7" height="9" rx="1"></rect><rect x="3" y="16" width="7" height="5" rx="1"></rect></svg>
       </div>
       <h2 class="text-base font-bold text-zinc-900 dark:text-zinc-100 mb-1">MediaShock APAC — Project Manager</h2>
       <p id="auth-status" class="text-sm text-zinc-500 dark:text-zinc-400 mb-4">Sign in with your Mediashock Google account to continue.</p>
@@ -903,7 +1074,7 @@
               class="tooltip-right w-full flex items-center gap-2.5 px-2 py-1.5 rounded-lg border border-zinc-300 dark:border-zinc-600 bg-zinc-50 dark:bg-zinc-700/50 text-sm font-semibold text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700">
         <span id="teamspace-watermark" class="ts-watermark" aria-hidden="true"></span><span id="teamspace-tile-wrap" class="flex shrink-0"></span>
         <span id="teamspace-current" class="sidebar-label flex-1 text-left truncate">All teamspaces</span>
-        <svg class="sidebar-label w-3.5 h-3.5 shrink-0 text-zinc-400 dark:text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+        <svg data-ic="chevronDown" class="sidebar-label w-3.5 h-3.5 shrink-0 text-zinc-400 dark:text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
       </button>
       <!-- z-[28] for the same reason the toolbar dropdowns use it: clear of the Gantt's frozen
            header/corner cells (25/26), below the app header's own panels (30). -->
@@ -920,30 +1091,30 @@
     <nav id="sidebar-nav" class="flex-1 overflow-y-auto py-2 px-2 flex flex-col gap-0.5">
       <p class="sidebar-label px-2.5 pt-1 pb-1.5 mb-1 border-b border-zinc-200 dark:border-zinc-700 text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Work</p>
       <button data-view-btn="board" data-tooltip="Board" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
-        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line></svg>
+        <svg data-ic="columns" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line></svg>
         <span class="sidebar-label truncate">Board</span>
       </button>
       <button data-view-btn="gantt" data-tooltip="Timeline" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
-        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="10" height="4" rx="1.5"></rect><rect x="7" y="10" width="12" height="4" rx="1.5"></rect><rect x="11" y="16" width="10" height="4" rx="1.5"></rect></svg>
+        <svg data-ic="gantt" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="10" height="4" rx="1.5"></rect><rect x="7" y="10" width="12" height="4" rx="1.5"></rect><rect x="11" y="16" width="10" height="4" rx="1.5"></rect></svg>
         <span class="sidebar-label truncate">Timeline</span>
       </button>
       <button data-view-btn="calendar" data-tooltip="Calendar" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
-        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+        <svg data-ic="calendar" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
         <span class="sidebar-label truncate">Calendar</span>
       </button>
       <button data-view-btn="projects" data-tooltip="Projects" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
-        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
+        <svg data-ic="folder" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path></svg>
         <span class="sidebar-label truncate">Projects</span>
       </button>
       <p class="sidebar-label px-2.5 pt-3 pb-1.5 mb-1 border-b border-zinc-200 dark:border-zinc-700 text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Team</p>
       <button data-view-btn="people" data-tooltip="People" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
-        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+        <svg data-ic="users" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
         <span class="sidebar-label truncate">People</span>
       </button>
       <!-- messageCircle (rounded bubble), not the rectangular "message" icon Suggestions already
            uses (now in the sidebar footer) -- the two would be indistinguishable at a glance otherwise. -->
       <button data-view-btn="chat" data-tooltip="Chat" class="view-toggle-btn tooltip-right relative w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
-        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+        <svg data-ic="messageCircle" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
         <span class="sidebar-label truncate">Chat</span>
         <!-- Unread @mentions in any project chat -- same rose dot+count as the notification
              bell's own badge, positioned absolute so it still shows (over the icon) when the
@@ -962,23 +1133,23 @@
       <!-- Monday Meeting: everyone's weekly update (replaces the MMM Pulse-board sheet). A
            clipboard with ticks -- not WIP's screen, People's users or Calendar's grid. -->
       <button data-view-btn="weekly" data-tooltip="Monday Meeting" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
-        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"></rect><path d="M9 2h6v4H9z"></path><path d="m9 12 2 2 4-4"></path><path d="M9 17h6"></path></svg>
+        <svg data-ic="clipboardCheck" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5" y="4" width="14" height="17" rx="2"></rect><path d="M9 2h6v4H9z"></path><path d="m9 12 2 2 4-4"></path><path d="M9 17h6"></path></svg>
         <span class="sidebar-label truncate">Monday Meeting</span>
       </button>
       <!-- A presentation screen on a stand: deliberately not `users` (People has it), not
            `calendar` (Calendar has it) and not `message` (Suggestions has it). -->
       <button data-view-btn="wip" data-tooltip="WIP Meeting" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
-        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="12" rx="2"></rect><line x1="12" y1="15" x2="12" y2="19"></line><line x1="8" y1="19" x2="16" y2="19"></line></svg>
+        <svg data-ic="presentation" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="12" rx="2"></rect><line x1="12" y1="15" x2="12" y2="19"></line><line x1="8" y1="19" x2="16" y2="19"></line></svg>
         <span class="sidebar-label truncate">WIP Meeting</span>
       </button>
 
       <p class="sidebar-label px-2.5 pt-3 pb-1.5 mb-1 border-b border-zinc-200 dark:border-zinc-700 text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">History</p>
       <button data-view-btn="activity" data-tooltip="Activity" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
-        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+        <svg data-ic="activity" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
         <span class="sidebar-label truncate">Activity</span>
       </button>
       <button data-view-btn="archived" data-tooltip="Archived" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
-        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>
+        <svg data-ic="archive" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>
         <span class="sidebar-label truncate">Archived</span>
       </button>
       <input type="file" id="import-file-input" accept="application/json" class="hidden">
@@ -998,12 +1169,12 @@
            entries this person hasn't seen; plain like every other item once they have. The count
            is absolute, same as Chat's badge, so it still shows over the icon on the collapsed rail. -->
       <button data-view-btn="updates" id="updates-nav-btn" data-tooltip="New Updates" class="view-toggle-btn tooltip-right relative w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
-        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 11 18-5v12L3 14v-3z"></path><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"></path></svg>
+        <svg data-ic="megaphone" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 11 18-5v12L3 14v-3z"></path><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"></path></svg>
         <span class="sidebar-label truncate">New Updates</span>
         <span id="updates-nav-badge" class="hidden absolute top-1 right-1.5 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-brand-500 text-white text-[10px] font-bold flex items-center justify-center updates-pulse">0</span>
       </button>
       <button data-view-btn="suggestions" data-tooltip="Suggestions" class="view-toggle-btn tooltip-right w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-sm font-medium">
-        <svg class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+        <svg data-ic="message" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
         <span class="sidebar-label truncate">Suggestions</span>
       </button>
       <!-- data-tooltip says "Expand", not "Collapse" -- the tooltip only ever shows once the
@@ -1011,14 +1182,14 @@
            tooltip needed then), so it should describe what clicking it does next, not repeat
            the visible label from the other state. -->
       <button id="sb-collapse-btn" type="button" data-tooltip="Expand sidebar" class="tooltip-right hidden md:flex w-full items-center gap-3 px-2.5 py-2 rounded-lg text-sm text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700/60">
-        <svg id="sb-collapse-icon" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 19l-7-7 7-7"></path><path d="M20 19l-7-7 7-7"></path></svg>
+        <svg data-ic="collapse" id="sb-collapse-icon" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 19l-7-7 7-7"></path><path d="M20 19l-7-7 7-7"></path></svg>
         <span class="sidebar-label truncate">Collapse</span>
       </button>
       <div id="user-chip" class="hidden items-center">
         <button id="user-menu-trigger" class="tooltip-right w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-sm text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700/60 transition">
           <span id="user-chip-avatar" class="w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0"></span>
           <span id="user-chip-name" class="sidebar-label flex-1 min-w-0 text-left truncate"></span>
-          <svg id="user-menu-chevron" class="sidebar-label w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg>
+          <svg data-ic="chevronRight" id="user-menu-chevron" class="sidebar-label w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg>
         </button>
       </div>
       <div id="user-menu-panel" class="hidden absolute z-30 w-[min(14rem,calc(100vw-2rem))] bg-white dark:bg-zinc-700 border border-zinc-300 dark:border-zinc-600 rounded-xl panel-raised py-1 text-sm panel-pop-in">
@@ -1041,11 +1212,11 @@
           <span id="desktop-notif-toggle-label">Desktop notifications: Off</span>
         </button>
         <button type="button" id="btn-take-tour" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-600">
-          <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
+          <svg data-ic="compass" class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
           <span>Take the tour</span>
         </button>
         <button type="button" id="btn-tour-page" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-600">
-          <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+          <svg data-ic="help" class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
           <span>Tour this page</span>
         </button>
         <div class="border-t border-zinc-100 dark:border-zinc-600 my-1"></div>
@@ -1054,16 +1225,16 @@
              their handlers are untouched. -->
         <p class="px-3.5 pt-1 pb-0.5 text-[11px] font-semibold text-zinc-400 dark:text-zinc-500">Data</p>
         <button type="button" id="btn-export" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-600">
-          <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+          <svg data-ic="download" class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
           <span>Export board</span>
         </button>
         <button type="button" id="btn-import" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-600">
-          <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+          <svg data-ic="upload" class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
           <span>Import board</span>
         </button>
         <div class="border-t border-zinc-100 dark:border-zinc-600 my-1"></div>
         <button type="button" id="btn-sign-out" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-rose-50 dark:hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400">
-          <svg class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+          <svg data-ic="logout" class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
           <span>Sign out</span>
         </button>
       </div>
@@ -1088,7 +1259,7 @@
       <div id="header-row-inner" class="flex flex-wrap items-center gap-3 justify-between w-full">
         <div id="header-title-group" class="flex items-center gap-3 min-w-0">
           <button type="button" id="mobile-menu-btn" class="md:hidden inline-flex items-center justify-center w-9 h-9 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 shrink-0">
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
+            <svg data-ic="menu" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
           </button>
           <h2 id="current-view-title" class="text-base font-bold text-zinc-900 dark:text-white truncate">Board</h2>
           <!-- Stats: no coloured dots (the amber "high priority" dot clashed with amber = Medium
@@ -1107,7 +1278,7 @@
         <div id="header-actions" class="flex items-center gap-2 flex-wrap justify-end ml-auto relative">
           <div id="digest-bell-wrap" class="hidden">
             <button id="btn-digest" title="This Week" class="relative inline-flex items-center justify-center w-9 h-9 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition">
-              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 7 2 2 4-4"></path><path d="m3 17 2 2 4-4"></path><line x1="13" y1="8" x2="21" y2="8"></line><line x1="13" y1="18" x2="21" y2="18"></line></svg>
+              <svg data-ic="checklist" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 7 2 2 4-4"></path><path d="m3 17 2 2 4-4"></path><line x1="13" y1="8" x2="21" y2="8"></line><line x1="13" y1="18" x2="21" y2="18"></line></svg>
               <span id="digest-badge" class="hidden absolute -top-1 -right-1 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">0</span>
             </button>
           </div>
@@ -1121,7 +1292,7 @@
           </div>
           <div id="notification-bell-wrap" class="hidden">
             <button id="btn-notifications" title="Notifications" class="relative inline-flex items-center justify-center w-9 h-9 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition">
-              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg>
+              <svg data-ic="bell" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"></path><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"></path></svg>
               <span id="notification-badge" class="hidden absolute -top-1 -right-1 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">0</span>
             </button>
           </div>
@@ -1136,7 +1307,7 @@
             <div id="notification-list" class="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-700"></div>
           </div>
           <button id="btn-add-task" class="inline-flex items-center gap-1.5 text-sm font-semibold px-3.5 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700 shadow-card transition">
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg><span>Add Task</span>
+            <svg data-ic="plus" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg><span>Add Task</span>
           </button>
         </div>
       </div>
@@ -1167,11 +1338,11 @@
       <div class="flex sm:hidden items-center gap-2 w-full order-1">
         <button type="button" id="mobile-filters-trigger" class="flex-1 flex items-center justify-between gap-2 text-sm font-medium px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-600 dark:text-zinc-300">
           <span class="flex items-center gap-1.5">
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="7" y1="12" x2="17" y2="12"></line><line x1="10" y1="18" x2="14" y2="18"></line></svg>
+            <svg data-ic="filter" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="7" y1="12" x2="17" y2="12"></line><line x1="10" y1="18" x2="14" y2="18"></line></svg>
             Filters
             <span id="mobile-filters-badge" class="hidden text-[10px] font-bold min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-brand-600 text-white items-center justify-center">0</span>
           </span>
-          <svg id="mobile-filters-chevron" class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+          <svg data-ic="chevronDown" id="mobile-filters-chevron" class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 transition-transform" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
         </button>
       </div>
 
@@ -1185,7 +1356,7 @@
            fall back to the default order 0, ahead of anything merely ordered "2". Search has to
            outrank that with order-first to actually render first, not just be numbered lower. -->
       <div class="relative w-full sm:w-64 order-2 sm:order-first">
-        <svg class="w-4 h-4 text-zinc-400 dark:text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        <svg data-ic="search" class="w-4 h-4 text-zinc-400 dark:text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
         <button type="button" id="cmdk-hint" title="Jump to any task, project, chat or page" class="hidden sm:flex absolute right-1.5 top-1/2 -translate-y-1/2 items-center px-1.5 py-0.5 rounded border border-zinc-200 dark:border-zinc-600 text-[10px] font-semibold text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 hover:border-brand-300">Ctrl K</button>
         <input id="filter-search" type="text" placeholder="Search…" class="w-full pl-8 pr-3 sm:pr-14 py-2 text-sm text-ellipsis rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
       </div>
@@ -1198,13 +1369,13 @@
           <option value="Medium">Medium</option>
           <option value="Low">Low</option>
         </select>
-        <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+        <svg data-ic="chevronDown" class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
       </div>
       <div id="filter-project-wrap" class="relative w-full sm:w-auto">
         <select id="filter-project" class="w-full sm:w-auto appearance-none text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 focus:bg-white dark:focus:bg-zinc-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-8">
           <option value="">All projects</option>
         </select>
-        <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+        <svg data-ic="chevronDown" class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
       </div>
       <!-- Checkbox multi-select, not a single-value <select> -- "who's schedule/workload do I
            want to see" is a subscribe-to-several-people question, not a pick-one one. Built as
@@ -1215,7 +1386,7 @@
       <div id="filter-people-wrap" class="relative w-full sm:w-auto">
         <button type="button" id="filter-people-trigger" title="Filter by people" class="filter-pill w-full sm:w-auto flex items-center justify-between gap-2 text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 hover:bg-white dark:hover:bg-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500/40 py-2 pl-2.5 pr-2.5" aria-haspopup="true" aria-expanded="false">
           <span id="filter-people-label" class="truncate">All people</span>
-          <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+          <svg data-ic="chevronDown" class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
         </button>
         <!-- z-[28], not z-20: the Gantt's frozen header/corner cells sit at 25/26, and this
              toolbar sits ABOVE the chart in the DOM, so at z-20 the header painted straight
@@ -1236,7 +1407,7 @@
           <option value="deadline">Sort: Deadline</option>
           <option value="project">Sort: Project</option>
         </select>
-        <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+        <svg data-ic="chevronDown" class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
       </div>
       <button id="btn-clear-filters" class="text-sm font-medium text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 px-2 py-2 hidden">Clear filters</button>
       </div>
@@ -1250,7 +1421,7 @@
       <div class="flex items-center justify-between mb-2.5">
         <div class="flex items-center gap-2">
           <div class="w-7 h-7 rounded-lg bg-amber-100 dark:bg-amber-500/15 flex items-center justify-center">
-            <svg class="w-4 h-4 text-amber-700 dark:text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg>
+            <svg data-ic="flame" class="w-4 h-4 text-amber-700 dark:text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg>
           </div>
           <h2 class="text-base font-bold text-zinc-900 dark:text-zinc-100">Focus of the Day</h2>
           <span id="focus-caption" class="text-xs text-zinc-400 dark:text-zinc-500">— highest priority &amp; most urgent, auto-sorted</span>
@@ -1282,7 +1453,7 @@
       <div class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card p-4">
         <div class="flex items-center justify-between mb-3">
           <div class="flex items-center gap-2">
-            <svg class="w-4 h-4 text-zinc-400 dark:text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="10" height="4" rx="1.5"></rect><rect x="7" y="10" width="12" height="4" rx="1.5"></rect><rect x="11" y="16" width="10" height="4" rx="1.5"></rect></svg>
+            <svg data-ic="gantt" class="w-4 h-4 text-zinc-400 dark:text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="10" height="4" rx="1.5"></rect><rect x="7" y="10" width="12" height="4" rx="1.5"></rect><rect x="11" y="16" width="10" height="4" rx="1.5"></rect></svg>
             <h2 class="text-base font-bold text-zinc-900 dark:text-zinc-100">Workload Timeline</h2>
           </div>
           <div id="gantt-legend" class="flex items-center justify-end flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-500 dark:text-zinc-400">
@@ -1319,11 +1490,11 @@
             </div>
             <div class="flex items-center gap-1">
               <button type="button" id="calendar-prev-btn" title="Previous month" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-400">
-                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                <svg data-ic="chevronLeft" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg>
               </button>
               <button type="button" id="calendar-today-btn" class="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">Today</button>
               <button type="button" id="calendar-next-btn" title="Next month" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-400">
-                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                <svg data-ic="chevronRight" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg>
               </button>
             </div>
           </div>
@@ -1362,7 +1533,7 @@
           <div class="px-3.5 py-3 border-b border-zinc-100 dark:border-zinc-700 flex items-center justify-between gap-2">
             <p class="text-xs font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Chats</p>
             <button type="button" id="chat-new-btn" class="shrink-0 flex items-center gap-1 text-xs font-semibold text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300">
-              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              <svg data-ic="plus" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
               New chat
             </button>
           </div>
@@ -1371,7 +1542,7 @@
           <div class="px-3.5 py-2 border-b border-zinc-100 dark:border-zinc-700 flex items-center gap-1.5">
             <button type="button" id="chat-mine-toggle" title="Show only chats you've posted in" class="flex-1 text-center text-[11px] font-semibold px-2 py-1 rounded-full border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-600">My chats</button>
             <button type="button" id="chat-favorites-toggle" title="Show only favourite chats" class="flex-1 flex items-center justify-center gap-1 text-center text-[11px] font-semibold px-2 py-1 rounded-full border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-600">
-              <svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+              <svg data-ic="star" class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
               Favourites
             </button>
             <button type="button" id="chat-unread-toggle" title="Show only unread chats" class="flex-1 flex items-center justify-center gap-1 text-center text-[11px] font-semibold px-2 py-1 rounded-full border border-zinc-200 dark:border-zinc-700 text-zinc-500 dark:text-zinc-400 hover:border-zinc-300 dark:hover:border-zinc-600">
@@ -1412,13 +1583,13 @@
                    means by "search within the chat itself" for a group thread they're scrolling
                    back through. -->
               <button type="button" id="chat-search-toggle" title="Search in this chat" class="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-zinc-400 dark:text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700 hover:text-zinc-600 dark:hover:text-zinc-300">
-                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+                <svg data-ic="search" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
               </button>
               <!-- Admin-only: wiping the whole thread (not one message) is real data loss for
                    the whole team, so it stays behind the same isAdminUser() gate as every other
                    admin-only action in this app -- hidden by default, shown by selectChatProject. -->
               <button type="button" id="chat-delete-btn" title="Delete this entire chat (admin only)" class="hidden shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-zinc-400 dark:text-zinc-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400">
-                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                <svg data-ic="trash" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
               </button>
             </div>
             <!-- `flex` deliberately NOT in this static class list -- same `hidden`+`flex`
@@ -1427,23 +1598,23 @@
                  display property at rest regardless of the attribute. JS toggles `flex`
                  alongside `.hidden` in openChatSearch/closeChatSearch instead. -->
             <div id="chat-search-bar" hidden class="items-center gap-2 px-4 sm:px-5 py-2 border-b border-zinc-100 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700/40">
-              <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+              <svg data-ic="search" class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
               <input id="chat-search-input" type="text" placeholder="Search in this chat" class="flex-1 min-w-0 bg-transparent text-sm text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none">
               <span id="chat-search-count" class="shrink-0 text-xs text-zinc-400 dark:text-zinc-500 tabular-nums"></span>
               <button type="button" id="chat-search-prev" title="Previous match" class="shrink-0 w-6 h-6 flex items-center justify-center rounded text-zinc-400 dark:text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-30 disabled:pointer-events-none">
-                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                <svg data-ic="chevronUp" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="18 15 12 9 6 15"></polyline></svg>
               </button>
               <button type="button" id="chat-search-next" title="Next match" class="shrink-0 w-6 h-6 flex items-center justify-center rounded text-zinc-400 dark:text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-300 disabled:opacity-30 disabled:pointer-events-none">
-                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                <svg data-ic="chevronDown" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
               </button>
               <button type="button" id="chat-search-close" title="Close search" class="shrink-0 w-6 h-6 flex items-center justify-center rounded text-zinc-400 dark:text-zinc-500 hover:bg-zinc-200 dark:hover:bg-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-300">
-                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                <svg data-ic="x" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
               </button>
             </div>
             <div class="px-4 sm:px-5 py-3 border-b border-zinc-100 dark:border-zinc-700 space-y-2">
               <div class="flex items-center justify-between gap-2">
                 <p class="flex items-center gap-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-400">
-                  <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path></svg>
+                  <svg data-ic="pin" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path></svg>
                   Pinned links
                 </p>
                 <!-- The label/url/submit row below stays hidden until this is clicked -- reported
@@ -1451,7 +1622,7 @@
                      spend two permanent input rows on a feature used only occasionally. Same
                      reveal-on-click idiom as the Projects tab's own "+ Deadline" affordance. -->
                 <button type="button" id="project-chat-link-toggle" class="shrink-0 flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300">
-                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                  <svg data-ic="plus" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                   Add
                 </button>
               </div>
@@ -1473,7 +1644,7 @@
                  trap as #chat-reply-preview/#chat-search-bar elsewhere in this file. -->
             <div id="project-chat-pinned-wrap" hidden class="flex-col px-4 sm:px-5 py-2.5 border-b border-zinc-100 dark:border-zinc-700 space-y-1.5">
               <p class="flex items-center gap-1.5 text-xs font-semibold text-zinc-600 dark:text-zinc-400">
-                <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path></svg>
+                <svg data-ic="pin" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path></svg>
                 Pinned messages
               </p>
               <div id="project-chat-pinned-list" class="flex flex-col gap-1"></div>
@@ -1489,7 +1660,7 @@
                    specificity trap documented on #chat-edit-preview/#chat-reply-preview
                    elsewhere in this file; JS toggles both `hidden` and `flex` together. -->
               <button type="button" id="chat-scroll-to-bottom-btn" hidden aria-label="Scroll to latest messages" class="absolute bottom-3 right-4 items-center justify-center w-9 h-9 rounded-full bg-white dark:bg-zinc-700 border border-zinc-200 dark:border-zinc-600 shadow-pop text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-600 panel-pop-in">
-                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                <svg data-ic="chevronDown" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>
                 <span id="chat-scroll-to-bottom-badge" class="hidden absolute -top-1 -right-1 min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold flex items-center justify-center">0</span>
               </button>
             </div>
@@ -1512,7 +1683,7 @@
                   <p id="chat-reply-preview-text" class="text-xs text-zinc-500 dark:text-zinc-400 truncate"></p>
                 </div>
                 <button type="button" id="chat-reply-cancel" class="shrink-0 p-0.5 text-zinc-400 dark:text-zinc-500 hover:text-zinc-600 dark:hover:text-zinc-300" aria-label="Cancel reply">
-                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                  <svg data-ic="x" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                 </button>
               </div>
               <!-- Edit preview -- shown above the compose box while editing a previously-sent
@@ -1523,14 +1694,14 @@
               <div id="chat-edit-preview" hidden class="items-center gap-2 mb-1.5 pl-2.5 pr-2 py-1.5 rounded-lg bg-amber-100 dark:bg-amber-500/10 border-l-2 border-amber-500">
                 <span class="flex-1 min-w-0 text-xs font-semibold text-amber-800 dark:text-amber-400">Editing message</span>
                 <button type="button" id="chat-edit-cancel" class="shrink-0 p-0.5 text-amber-700 dark:text-amber-400 hover:text-amber-900 dark:hover:text-amber-300" aria-label="Cancel edit">
-                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                  <svg data-ic="x" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                 </button>
               </div>
               <div class="relative">
                 <textarea id="project-chat-input" rows="2" maxlength="2000" placeholder="Message the team about this project… (@name to mention, *bold*, _italic_)" class="w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 pl-3 pr-10 py-2 resize-none focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400"></textarea>
                 <div id="project-chat-mention-menu" class="float-panel hidden absolute left-0 bottom-full mb-1 z-20 w-full min-w-max bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop py-1 panel-pop-in"></div>
                 <button type="button" id="project-chat-emoji-toggle" title="Insert emoji" aria-expanded="false" aria-controls="project-chat-emoji-picker" class="absolute right-2 bottom-2 w-6 h-6 flex items-center justify-center rounded text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-zinc-100 dark:hover:bg-zinc-600">
-                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg>
+                  <svg data-ic="smile" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg>
                 </button>
                 <div id="project-chat-emoji-picker" hidden class="float-panel absolute right-0 bottom-11 z-20 w-64 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop p-2">
                   <div id="project-chat-emoji-tabs" class="flex flex-wrap gap-0.5 mb-1.5" role="tablist" aria-label="Emoji categories"></div>
@@ -1547,7 +1718,7 @@
     </section>
 
     <!-- ============ EVENTS: WIP ============ -->
-    <section id="view-wip" data-view class="flex-1">
+    <section id="view-wip" data-view class="flex-1 meeting-zoom">
       <div class="flex items-start justify-between gap-3 flex-wrap mb-4">
         <div class="min-w-0">
           <h2 class="text-lg font-bold text-zinc-900 dark:text-zinc-100">WIP Meeting</h2>
@@ -1573,6 +1744,7 @@
           <button type="button" data-wip-range="14" class="calendar-scope-btn px-2.5 py-1 rounded-md">2 weeks</button>
           <button type="button" data-wip-range="28" class="calendar-scope-btn px-2.5 py-1 rounded-md">4 weeks</button>
         </div>
+        <div data-meeting-zoom-slot></div>
         </div>
       </div>
       <div id="wip-alerts" class="mb-4"></div>
@@ -1588,7 +1760,7 @@
            project name ("Bosch Building Technologies -- AIDC Infrastructure & Security" is a real
            one) sets the column's min-content width and widens the whole grid past its container
            instead of truncating inside it. -->
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+      <div id="wip-agenda-grid" class="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
         <div id="wip-ahead" class="lg:col-span-2 min-w-0"></div>
         <div id="wip-away" class="min-w-0"></div>
       </div>
@@ -1601,8 +1773,8 @@
       <!-- One column, capped at 64rem: full width on a wide screen would put each row's date far
            from its project. -->
       <div class="w-full max-w-5xl mx-auto">
-      <div id="weekly-bar" class="flex flex-wrap items-center gap-3 mb-4"></div>
-      <div id="weekly-view"></div>
+      <div id="weekly-bar" class="meeting-zoom flex flex-wrap items-center gap-3 mb-4"></div>
+      <div id="weekly-view" class="meeting-zoom"></div>
       </div>
     </section>
 
@@ -1644,7 +1816,7 @@
                how wide the browser window itself is. -->
           <div class="flex flex-wrap items-center justify-between gap-2">
             <p class="text-xs text-zinc-500 dark:text-zinc-400 flex items-center gap-1.5">
-              <svg class="w-3.5 h-3.5 shrink-0 text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"></path></svg>
+              <svg data-ic="sparkles" class="w-3.5 h-3.5 shrink-0 text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287Z"></path></svg>
               Pulls suggestions filed by the scheduled Product Evaluator routine
             </p>
             <div class="flex flex-wrap items-center gap-2">
@@ -1715,10 +1887,10 @@
       </div>
       <div class="flex items-center gap-1">
         <button id="task-copy-link-btn" type="button" class="hidden w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500" title="Copy a link to this task card">
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+          <svg data-ic="link" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
         </button>
         <button id="task-modal-close" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500">
-          <svg class="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          <svg data-ic="x" class="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
       </div>
     </div>
@@ -1736,7 +1908,7 @@
             <input id="task-project" list="project-suggestions" type="text" maxlength="200" title="Type a project name, or paste a Drive folder link" placeholder="e.g. Acme Rebrand" class="w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 pr-9 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
             <datalist id="project-suggestions"></datalist>
             <button type="button" id="task-project-browse" title="Browse Drive for a project folder" class="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400">
-              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="12" x2="2" y2="12"></line><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path><line x1="6" y1="16" x2="6.01" y2="16"></line><line x1="10" y1="16" x2="10.01" y2="16"></line></svg>
+              <svg data-ic="drive" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="12" x2="2" y2="12"></line><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path><line x1="6" y1="16" x2="6.01" y2="16"></line><line x1="10" y1="16" x2="10.01" y2="16"></line></svg>
             </button>
           </div>
           <!-- The Drive link has no field of its own any more -- it rides along on the Project
@@ -1748,13 +1920,13 @@
                  than a grey hint. Hidden once a folder is attached or found on the project's other tasks. -->
             <span id="task-project-hint" class="items-center gap-1.5 min-w-0 text-zinc-500 dark:text-zinc-400">
               <button type="button" id="task-project-add-folder" class="inline-flex items-center gap-1 shrink-0 font-semibold text-brand-800 dark:text-brand-300 hover:underline focus:outline-none focus:underline">
-                <svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2z"></path><line x1="12" y1="10" x2="12" y2="16"></line><line x1="9" y1="13" x2="15" y2="13"></line></svg>
+                <svg data-ic="folderPlus" class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2z"></path><line x1="12" y1="10" x2="12" y2="16"></line><line x1="9" y1="13" x2="15" y2="13"></line></svg>
                 Add the Drive folder
               </button>
               <span class="truncate">or paste its link above</span>
             </span>
             <span id="task-project-link-row" class="hidden min-w-0 flex-1 items-center gap-1.5">
-              <svg class="w-3 h-3 shrink-0 text-brand-600 dark:text-brand-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2z"></path></svg>
+              <svg data-ic="folder" class="w-3 h-3 shrink-0 text-brand-600 dark:text-brand-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2z"></path></svg>
               <a id="task-drive-open" href="#" target="_blank" rel="noopener noreferrer" class="min-w-0 mr-auto truncate font-medium text-brand-600 dark:text-brand-400 hover:underline"></a>
               <span id="task-drive-derived" class="hidden shrink-0 text-zinc-500 dark:text-zinc-400" title="The same folder as this project's other tasks">from this project</span>
               <button type="button" id="task-drive-copy" class="shrink-0 font-medium text-zinc-500 dark:text-zinc-400 hover:text-brand-600 dark:hover:text-brand-400">Copy</button>
@@ -1777,7 +1949,7 @@
                visible trigger instead. -->
           <div class="relative">
             <select id="task-assignee" class="w-full appearance-none text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 pl-3 pr-8 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400"></select>
-            <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+            <svg data-ic="chevronDown" class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
           </div>
           <!-- The escape hatch for the one case the picker can't serve: assigning work to
                someone before their first sign-in (a new starter, an intern). Hidden until
@@ -1818,7 +1990,7 @@
               <option value="Medium" selected>Medium</option>
               <option value="Low">Low</option>
             </select>
-            <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+            <svg data-ic="chevronDown" class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
           </div>
         </div>
         <div>
@@ -1830,7 +2002,7 @@
               <option value="Review">Review</option>
               <option value="Done">Completed</option>
             </select>
-            <svg class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
+            <svg data-ic="chevronDown" class="w-3.5 h-3.5 text-zinc-400 dark:text-zinc-500 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"></path></svg>
           </div>
           <p id="task-review-rounds" class="hidden mt-1 text-[11px] font-medium text-zinc-500 dark:text-zinc-400"></p>
         </div>
@@ -1848,7 +2020,7 @@
               <!-- Repeat (as in Asana/Monday/Todoist): completing the task makes the next one. A native
                    select styled as quiet text in the label row, so it costs no extra line. -->
               <label id="task-repeat-wrap" class="inline-flex items-center gap-1 text-[11px] font-medium text-zinc-500 dark:text-zinc-400 cursor-pointer">
-                <svg class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m17 2 4 4-4 4"></path><path d="M3 11v-1a4 4 0 0 1 4-4h14"></path><path d="m7 22-4-4 4-4"></path><path d="M21 13v1a4 4 0 0 1-4 4H3"></path></svg>
+                <svg data-ic="repeat" class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m17 2 4 4-4 4"></path><path d="M3 11v-1a4 4 0 0 1 4-4h14"></path><path d="m7 22-4-4 4-4"></path><path d="M21 13v1a4 4 0 0 1-4 4H3"></path></svg>
                 <select id="task-repeat" aria-label="Repeat" class="appearance-none bg-transparent text-[11px] font-medium cursor-pointer rounded focus:outline-none focus:ring-2 focus:ring-brand-500/40 disabled:cursor-not-allowed [color-scheme:light] dark:[color-scheme:dark]">
                   <option value="">Doesn't repeat</option>
                   <option value="weekly">Every week</option>
@@ -1895,11 +2067,11 @@
         <div class="flex flex-wrap items-center gap-2">
           <div class="flex items-center shrink-0 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 overflow-hidden">
             <button type="button" id="task-time-hours-dec" title="Decrease hours" aria-label="Decrease hours" class="w-7 h-9 flex items-center justify-center text-zinc-400 dark:text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-300">
-              <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              <svg data-ic="minus" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             </button>
             <input type="number" id="task-time-hours" step="0.25" min="0" placeholder="0" class="w-12 text-sm text-center bg-transparent text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 py-2 focus:outline-none [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none [-moz-appearance:textfield]">
             <button type="button" id="task-time-hours-inc" title="Increase hours" aria-label="Increase hours" class="w-7 h-9 flex items-center justify-center text-zinc-400 dark:text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-600 hover:text-zinc-600 dark:hover:text-zinc-300">
-              <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              <svg data-ic="plus" class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             </button>
           </div>
           <span class="text-xs text-zinc-400 dark:text-zinc-500 shrink-0">hrs</span>
@@ -1930,7 +2102,7 @@
     </form>
     <div class="flex items-center justify-between gap-2 px-5 py-4 border-t border-zinc-100 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-700/50">
       <button id="task-delete-btn" class="hidden text-sm font-medium text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 inline-flex items-center gap-1.5">
-        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>Delete
+        <svg data-ic="trash" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>Delete
       </button>
       <div class="flex items-center gap-2 ml-auto">
         <button id="task-cancel-btn" type="button" class="text-sm font-medium px-4 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-white dark:hover:bg-zinc-700">Cancel</button>
@@ -1950,7 +2122,7 @@
   <div class="bg-white dark:bg-zinc-800 w-full max-w-md rounded-2xl shadow-pop overflow-hidden modal-pop-in">
     <div class="p-5">
       <div class="w-10 h-10 rounded-full bg-brand-100 dark:bg-brand-500/15 flex items-center justify-center mb-3">
-        <svg class="w-5 h-5 text-brand-600 dark:text-brand-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg>
+        <svg data-ic="grid" class="w-5 h-5 text-brand-600 dark:text-brand-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg>
       </div>
       <h3 id="department-modal-title" class="text-base font-bold text-zinc-900 dark:text-zinc-100">Which teams are you on?</h3>
       <p id="department-modal-body" class="text-sm text-zinc-500 dark:text-zinc-400 mt-1">Pick as many as apply — you can change this any time from the People tab. Project Manager will open on your work, and you can switch teamspaces whenever you like.</p>
@@ -1965,7 +2137,7 @@
   <div class="bg-white dark:bg-zinc-800 w-full max-w-sm rounded-2xl shadow-pop overflow-hidden modal-pop-in">
     <div class="p-5">
       <div id="confirm-icon-wrap" class="w-10 h-10 rounded-full bg-rose-100 dark:bg-rose-500/15 flex items-center justify-center mb-3">
-        <svg class="w-5 h-5 text-rose-600 dark:text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+        <svg data-ic="alert" class="w-5 h-5 text-rose-600 dark:text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m21.73 18-8-14a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
       </div>
       <h3 id="confirm-title" class="text-sm font-bold text-zinc-900 dark:text-zinc-100 mb-1 break-words">Are you sure?</h3>
       <p id="confirm-body" class="text-sm text-zinc-500 dark:text-zinc-400 break-words"></p>
@@ -1986,7 +2158,7 @@
     <div class="flex items-center justify-between px-4 py-3 border-b border-zinc-100 dark:border-zinc-700">
       <h3 id="calendar-day-modal-title" class="text-sm font-bold text-zinc-900 dark:text-zinc-100"></h3>
       <button type="button" id="calendar-day-modal-close" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500">
-        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        <svg data-ic="x" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
       </button>
     </div>
     <p id="calendar-day-modal-leave" class="hidden px-4 pt-3 text-xs text-amber-700 dark:text-amber-400"></p>
@@ -2004,7 +2176,7 @@
         <p id="weekly-modal-sub" class="text-sm text-zinc-500 dark:text-zinc-400"></p>
       </div>
       <button type="button" id="weekly-modal-close" aria-label="Close" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500">
-        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        <svg data-ic="x" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
       </button>
     </div>
     <div id="weekly-modal-body" class="overflow-y-auto"></div>
@@ -2044,7 +2216,7 @@
      reported as easy to miss. Slides up once, then a soft glow pulses until it's clicked. -->
 <div id="update-banner" role="status" aria-live="polite" class="hidden update-banner fixed bottom-6 left-1/2 -translate-x-1/2 z-[70] items-center gap-3 sm:gap-4 w-[calc(100%-2rem)] max-w-lg pl-3 pr-3 py-3 rounded-xl text-white bg-gradient-to-r from-brand-600 to-brand-500 ring-1 ring-white/25">
   <span class="update-banner-icon shrink-0 w-9 h-9 rounded-full bg-white/20 flex items-center justify-center">
-    <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 1-15.4 6.4L3 16"></path><path d="M3 21v-5h5"></path><path d="M3 12a9 9 0 0 1 15.4-6.4L21 8"></path><path d="M21 3v5h-5"></path></svg>
+    <svg data-ic="refresh" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 0 1-15.4 6.4L3 16"></path><path d="M3 21v-5h5"></path><path d="M3 12a9 9 0 0 1 15.4-6.4L21 8"></path><path d="M21 3v5h-5"></path></svg>
   </span>
   <div class="min-w-0 flex-1">
     <p class="text-sm font-bold leading-snug">A new version of Project Manager is ready</p>
@@ -2083,33 +2255,33 @@
 <div id="chat-message-menu" hidden class="float-panel fixed z-40 w-52 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-lg shadow-pop p-1.5 panel-pop-in">
   <div id="chat-message-menu-reactions" class="flex items-center gap-0.5 px-0.5 pb-1.5 mb-1 border-b border-zinc-100 dark:border-zinc-700"></div>
   <button type="button" id="chat-message-menu-reply" class="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-zinc-700 dark:text-zinc-200 rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-700/60">
-    <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 14 4 9 9 4"></polyline><path d="M20 20v-7a4 4 0 0 0-4-4H4"></path></svg>
+    <svg data-ic="reply" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 14 4 9 9 4"></polyline><path d="M20 20v-7a4 4 0 0 0-4-4H4"></path></svg>
     Reply
   </button>
   <!-- Own messages only (an image-only message has no text to edit) -- toggled by
        openChatMessageMenu, same isAdminUser()-free "author must match" gate Delete already
        uses. -->
   <button type="button" id="chat-message-menu-edit" class="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-zinc-700 dark:text-zinc-200 rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-700/60">
-    <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>
+    <svg data-ic="pencil" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"></path></svg>
     Edit
   </button>
   <!-- Pinning is open to anyone, not author/admin-scoped -- a lower-stakes, fully reversible
        action closer to reacting than to deleting. Label/icon swap between Pin/Unpin handled by
        openChatMessageMenu. -->
   <button type="button" id="chat-message-menu-pin" class="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-zinc-700 dark:text-zinc-200 rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-700/60">
-    <svg id="chat-message-menu-pin-icon" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path></svg>
+    <svg data-ic="pin" id="chat-message-menu-pin-icon" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="17" x2="12" y2="22"></line><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"></path></svg>
     <span id="chat-message-menu-pin-label">Pin</span>
   </button>
   <button type="button" id="chat-message-menu-forward" class="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-zinc-700 dark:text-zinc-200 rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-700/60">
-    <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 14 20 9 15 4"></polyline><path d="M4 20v-7a4 4 0 0 1 4-4h12"></path></svg>
+    <svg data-ic="forward" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 14 20 9 15 4"></polyline><path d="M4 20v-7a4 4 0 0 1 4-4h12"></path></svg>
     Forward
   </button>
   <button type="button" id="chat-message-menu-copy" class="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-zinc-700 dark:text-zinc-200 rounded-md hover:bg-zinc-50 dark:hover:bg-zinc-700/60">
-    <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+    <svg data-ic="copy" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
     Copy
   </button>
   <button type="button" id="chat-message-menu-delete" class="w-full flex items-center gap-2 px-2 py-1.5 text-sm text-rose-600 dark:text-rose-400 rounded-md hover:bg-rose-50 dark:hover:bg-rose-500/10">
-    <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+    <svg data-ic="trash" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
     Delete
   </button>
 </div>
@@ -3947,6 +4119,7 @@
     var btn = document.getElementById('chat-mute-toggle');
     btn.title = muted ? 'Unmute this chat' : 'Mute this chat';
     document.getElementById('chat-mute-toggle-icon').innerHTML = ICONS[muted ? 'bellOff' : 'bell'];
+    document.getElementById('chat-mute-toggle-icon').setAttribute('data-ic', muted ? 'bellOff' : 'bell');
     btn.classList.toggle('text-brand-600', muted);
     btn.classList.toggle('dark:text-brand-400', muted);
     btn.classList.toggle('text-zinc-400', !muted);
@@ -4133,7 +4306,7 @@
           var starBtn = '<button type="button" class="chat-favorite-toggle shrink-0 p-0.5 rounded ' +
             (favActive ? 'text-amber-500' : 'text-zinc-300 dark:text-zinc-600 hover:text-zinc-400 dark:hover:text-zinc-500') +
             '" data-project="' + escapeHtml(name) + '" title="' + (favActive ? 'Remove from favourites' : 'Add to favourites') + '" aria-pressed="' + favActive + '">' +
-            '<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="' + (favActive ? 'currentColor' : 'none') + '" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICONS.star + '</svg>' +
+            '<svg data-ic="star" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="' + (favActive ? 'currentColor' : 'none') + '" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + ICONS.star + '</svg>' +
           '</button>';
           var nameClass = 'text-sm truncate ' + (unread ? 'font-bold text-zinc-900 dark:text-zinc-50' : 'font-medium text-zinc-800 dark:text-zinc-100');
           var metaClass = unread ? 'text-zinc-600 dark:text-zinc-300 font-semibold' : 'text-zinc-400 dark:text-zinc-500';
@@ -4309,7 +4482,7 @@
     var subtitleEl = document.getElementById('project-chat-subtitle');
     subtitleEl.innerHTML = driveLink
       ? '<span class="flex items-center gap-1 w-full min-w-0">' +
-          '<svg class="w-3 h-3 shrink-0 text-brand-600 dark:text-brand-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2z"></path></svg>' +
+          '<svg data-ic="folder" class="w-3 h-3 shrink-0 text-brand-600 dark:text-brand-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2z"></path></svg>' +
           '<a href="' + escapeHtml(normalizeUrl(driveLink)) + '" target="_blank" rel="noopener noreferrer" class="min-w-0 flex-1 truncate font-medium text-brand-600 dark:text-brand-400 hover:underline" title="' + escapeHtml(driveLink) + '">' + escapeHtml(driveLink.replace(/^https?:\/\//i, '')) + '</a>' +
         '</span>'
       : 'No project folder linked yet — add one from any of this project\'s tasks.';
@@ -6042,8 +6215,12 @@
       var box = document.getElementById('wip-timeline-grid');
       if (!box) return;
       var r = box.getBoundingClientRect();
-      var max = Math.min(GANTT_LABEL_WIDTH_MAX, r.width * 0.45);
-      GANTT_LABEL_WIDTH = Math.min(max, Math.max(GANTT_LABEL_WIDTH_MIN, e.clientX - r.left));
+      // WIP is drawn at 1.2x (meeting-zoom): the rect and the mouse are in screen pixels, the width
+      // is in CSS pixels shared with the Timeline tab, so divide by the zoom or the column outruns
+      // the cursor.
+      var z = box.currentCSSZoom || 1;
+      var max = Math.min(GANTT_LABEL_WIDTH_MAX, r.width / z * 0.45);
+      GANTT_LABEL_WIDTH = Math.min(max, Math.max(GANTT_LABEL_WIDTH_MIN, (e.clientX - r.left) / z));
       box.style.setProperty('--wip-label-w', wipLabelWidthCss(GANTT_LABEL_WIDTH));
     });
     document.addEventListener('mouseup', function () {
@@ -6171,7 +6348,10 @@
   };
 
   function svgIcon(name, cls) {
-    return '<svg class="' + (cls || '') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
+    // data-ic names the icon so its hover motion can find it (ICON HOVER MOTION). Team icons keep
+    // their own switch animation and are left out.
+    var ic = /^team/.test(name) ? '' : ' data-ic="' + name + '"';
+    return '<svg' + ic + ' class="' + (cls || '') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" ' +
       'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + (ICONS[name] || '') + '</svg>';
   }
 
@@ -9367,8 +9547,8 @@
   var BRIEF_STEPS_ENABLED = true;
   function briefStepsAllowed() { return BRIEF_STEPS_ENABLED && canSeeBriefBudget(); }
 
-  var BRIEF_LOCK_ICON = '<svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>';
-  var BRIEF_DOC_ICON = '<svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="13" x2="16" y2="13"></line><line x1="8" y1="17" x2="13" y2="17"></line></svg>';
+  var BRIEF_LOCK_ICON = '<svg data-ic="lock" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>';
+  var BRIEF_DOC_ICON = '<svg data-ic="fileText" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="13" x2="16" y2="13"></line><line x1="8" y1="17" x2="13" y2="17"></line></svg>';
 
   // Section types. `kind` decides how a section is edited and shown: text, list (comma tags),
   // rows (repeating rows of fields), fields (a small fixed set of labelled boxes).
@@ -12957,6 +13137,48 @@
     return rows;
   }
 
+  /* ---------- MEETING TEXT SIZE ----------
+     One setting for every meeting view (Monday Meeting, WIP Meeting, any added later): normal size
+     by default, or 1.2x, 1.5x, 1.8x for whoever runs the meeting on a big screen. Four "A"s of
+     growing size in a small
+     segmented control, the usual text-size pattern, so it explains itself without a label; the
+     tooltip names the size. Remembered on this computer (a display preference, like the chat list
+     width), not shared. A new meeting view adds `meeting-zoom` to its content and a
+     `data-meeting-zoom-slot` (or meetingZoomCtlHtml()) in its header. */
+  var MEETING_ZOOMS = ['1', '1.2', '1.5', '1.8'];
+  var MEETING_ZOOM_KEY = 'flowboard_meeting_zoom';
+  var meetingZoom = '1';
+  try { var mzSaved = localStorage.getItem(MEETING_ZOOM_KEY); if (MEETING_ZOOMS.indexOf(mzSaved) !== -1) meetingZoom = mzSaved; } catch (e) { /* ignore */ }
+  function applyMeetingZoom() {
+    document.documentElement.style.setProperty('--meeting-zoom', meetingZoom);
+    if (meetingZoom === '1') document.documentElement.removeAttribute('data-meeting-zoom');
+    else document.documentElement.setAttribute('data-meeting-zoom', meetingZoom);
+  }
+  applyMeetingZoom();
+  function meetingZoomCtlHtml() {
+    return '<div class="hidden md:flex items-center rounded-lg border border-zinc-200 dark:border-zinc-700 p-0.5" role="group" aria-label="Text size">' +
+      MEETING_ZOOMS.map(function (z, i) {
+        var on = z === meetingZoom;
+        return '<button type="button" data-meeting-zoom="' + z + '" aria-pressed="' + on + '" aria-label="Text size ' + (z === '1' ? 'normal' : z + 'x') + '" data-tooltip="Text size ' + (z === '1' ? 'normal' : z + '×') + '" class="tooltip-top calendar-scope-btn' + (on ? ' active' : '') + ' w-7 h-6 flex items-end justify-center pb-0.5 rounded-md font-bold leading-none" style="font-size:' + (9 + i * 2.5) + 'px">A</button>';
+      }).join('') + '</div>';
+  }
+  function renderMeetingZoomSlots() {
+    document.querySelectorAll('[data-meeting-zoom-slot]').forEach(function (el) { el.innerHTML = meetingZoomCtlHtml(); });
+  }
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest && e.target.closest('[data-meeting-zoom]');
+    if (!b) return;
+    meetingZoom = b.getAttribute('data-meeting-zoom');
+    applyMeetingZoom();
+    try { localStorage.setItem(MEETING_ZOOM_KEY, meetingZoom); } catch (err) { /* ignore */ }
+    document.querySelectorAll('[data-meeting-zoom]').forEach(function (x) {
+      var on = x.getAttribute('data-meeting-zoom') === meetingZoom;
+      x.classList.toggle('active', on);
+      x.setAttribute('aria-pressed', String(on));
+    });
+  });
+  renderMeetingZoomSlots();
+
   function renderWeeklyBar() {
     var bar = document.getElementById('weekly-bar');
     var html = '';
@@ -12969,7 +13191,7 @@
     var allIn = people.length > 0 && !waiting.length;
     html +=
       '<div class="flex items-center gap-0.5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-800 p-0.5">' +
-        '<button type="button" data-weekly-nav="-1" aria-label="Previous week" class="w-8 h-8 flex items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700">' + '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg>' + '</button>' +
+        '<button type="button" data-weekly-nav="-1" aria-label="Previous week" class="w-8 h-8 flex items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700">' + '<svg data-ic="chevronLeft" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"></path></svg>' + '</button>' +
         // The current week reads "This week" (asked: "It should say 'This week' to avoid confusion",
         // the date is on hover), and has no forward arrow: nothing is written ahead of time (asked:
         // "should not have an arrow on the right"). Older weeks keep the date and a way back.
@@ -12977,7 +13199,7 @@
           ? '<span class="text-sm font-bold text-zinc-900 dark:text-white px-1.5 pr-3 whitespace-nowrap" data-tooltip="' + escapeHtml(weeklyLabel(key)) + '">This week</span>'
           : '<span class="text-sm font-bold text-zinc-900 dark:text-white px-1.5 whitespace-nowrap">' + escapeHtml(weeklyLabel(key)) + '</span>' +
             '<button type="button" data-weekly-nav="0" class="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline px-1.5">This week</button>' +
-            '<button type="button" data-weekly-nav="1" aria-label="Next week" class="w-8 h-8 flex items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700">' + '<svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg>' + '</button>') +
+            '<button type="button" data-weekly-nav="1" aria-label="Next week" class="w-8 h-8 flex items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700">' + '<svg data-ic="chevronRight" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg>' + '</button>') +
       '</div>' +
       '<div class="flex items-center gap-2.5 min-w-0">' +
         '<div class="w-28 h-2 rounded-full bg-zinc-200 dark:bg-zinc-700 overflow-hidden shrink-0"><div class="h-full ' + (allIn ? 'bg-emerald-500' : 'bg-zinc-800 dark:bg-zinc-200') + '" style="width:' + pct + '%"></div></div>' +
@@ -12990,7 +13212,7 @@
     // No Write/Edit button here any more: it sits on each person's card (asked: "Make the button
     // within each person's line instead of one button on top"). The top one always opened THIS
     // week even while an older week was on screen, so a past update looked editable and wasn't.
-    bar.innerHTML = html;
+    bar.innerHTML = html + '<div class="ml-auto">' + meetingZoomCtlHtml() + '</div>';
   }
 
   // Under each project: where it stands, from what's already written on the board (asked: "It
@@ -14365,7 +14587,7 @@
                 : 'border-zinc-300 text-zinc-600 hover:bg-zinc-50 hover:border-zinc-400 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-700') +
               '" data-project="' + escapeHtml(p.name) + '" aria-expanded="' + expanded + '">' +
               (expanded ? 'Hide tasks' : 'Show ' + p.rows.length + ' task' + (p.rows.length === 1 ? '' : 's')) +
-              '<svg class="w-3.5 h-3.5 transition-transform' + (expanded ? ' rotate-180' : '') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>' +
+              '<svg data-ic="chevronDown" class="w-3.5 h-3.5 transition-transform' + (expanded ? ' rotate-180' : '') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>' +
             '</button>' +
           '</div>' +
         '</div>' +
@@ -14495,7 +14717,7 @@
     var completedOpen = projectsCompletedOpen || (completed.length > 0 && (ongoing.length === 0 || !!q));
     var completedHtml = '<details id="projects-completed-details"' + (completedOpen ? ' open' : '') + '>' +
       '<summary class="flex items-center gap-2 cursor-pointer select-none text-lg font-bold text-zinc-800 dark:text-zinc-100 hover:text-brand-600 dark:hover:text-brand-400 mb-3">' +
-        '<svg class="disclosure-chevron w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"></polyline></svg>' +
+        '<svg data-ic="chevronRight" class="disclosure-chevron w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"></polyline></svg>' +
         'Completed' + projectSectionCount(completed.length) +
       '</summary>' +
       (completed.length
@@ -16454,6 +16676,10 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-12d', date: '2026-10-12', items: [
+      { type: 'new', title: 'Choose the text size for meetings', text: "Monday Meeting and WIP Meeting have a small A A A A switch at the top right. Pick a bigger size for the meeting screen; it applies to both meetings and is remembered on that computer. Normal size stays the default." },
+      { type: 'improved', title: 'Icons that move with meaning', text: "Point at any button's icon and it acts out what it does: the bin tips its lid, the bell rings, the pencil scribbles, arrows nudge the way they go. Icons that are just labels stay still." }
+    ] },
     { id: '2026-10-12c', date: '2026-10-12', items: [
       { type: 'improved', title: 'Monday Meeting is easier to read together', text: "Everything on the page is bigger for the meeting screen. The week reads \"This week\", and once everyone has updated it says \"All in!\" in green." },
       { type: 'improved', title: 'A simpler Monday update', text: "Each project now has one status dropdown instead of a row of buttons, with \"Same as last week\" as one of the choices. The note box appears once you pick a status, and projects their owner already answered are listed together at the end." },
@@ -20336,7 +20562,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-12T03:48:46Z";
+  var CURRENT_BUILD_VERSION = "2026-10-12T04:38:51Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

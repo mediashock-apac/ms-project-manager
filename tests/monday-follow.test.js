@@ -174,6 +174,26 @@ function rowOf(page, sel, attr, project) {
   await page.screenshot({ path: path.join(OUT, 'wk-follow-dark.png'), fullPage: true });
   check('no page errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 
+  // ---------- WIP Meeting gets the same meeting enlargement; its column drag still tracks the mouse ----------
+  await page.click('[data-view-btn="wip"]'); await page.waitForTimeout(1300); await skipTours(page);
+  check('meetings stay at normal size by default', await page.evaluate(() => getComputedStyle(document.getElementById('view-wip')).zoom === '1' && getComputedStyle(document.getElementById('weekly-view')).zoom === '1'));
+  await page.screenshot({ path: path.join(OUT, 'wip-zoom.png') });
+  check('text size control on WIP: normal picked, 1.2x/1.5x/1.8x offered', JSON.stringify(await page.$$eval('#view-wip [data-meeting-zoom]', bs => bs.map(b => b.getAttribute('data-meeting-zoom') + (b.getAttribute('aria-pressed') === 'true' ? '*' : '')))) === JSON.stringify(['1*', '1.2', '1.5', '1.8']));
+  await page.click('#view-wip [data-meeting-zoom="1.5"]'); await page.waitForTimeout(300);
+  check('1.5x applies to every meeting and is remembered', await page.evaluate(() => getComputedStyle(document.getElementById('view-wip')).zoom === '1.5' && getComputedStyle(document.getElementById('weekly-view')).zoom === '1.5' && localStorage.getItem('flowboard_meeting_zoom') === '1.5'));
+  await page.screenshot({ path: path.join(OUT, 'wip-zoom-15.png') });
+  check('at 1.5x on a 1440px screen WIP stacks instead of squeezing the projects', await page.evaluate(() => getComputedStyle(document.getElementById('wip-projects-wrap')).gridTemplateColumns.trim().split(/\s+/).length === 1));
+  await page.click('[data-wip-mode="agenda"]'); await page.waitForTimeout(500); await skipTours(page);
+  if (await page.$('#wip-resize-handle')) { await page.locator('#wip-resize-handle').scrollIntoViewIfNeeded(); await page.waitForTimeout(200); }
+  const hb = await page.locator('#wip-resize-handle').boundingBox();
+  if (hb) {
+    const colBefore = await page.evaluate(() => { const h = document.getElementById('wip-resize-handle').getBoundingClientRect(); return h.left + h.width / 2; });
+    await page.mouse.move(hb.x + hb.width / 2, hb.y + 10); await page.mouse.down();
+    await page.mouse.move(hb.x + hb.width / 2 - 100, hb.y + 10, { steps: 5 }); await page.mouse.up(); await page.waitForTimeout(200);
+    const colAfter = await page.evaluate(() => { const h = document.getElementById('wip-resize-handle').getBoundingClientRect(); return h.left + h.width / 2; });
+    check('WIP Task-column drag follows the cursor when enlarged', Math.abs((colBefore - colAfter) - 100) <= 4, 'moved ' + Math.round(colAfter - colBefore) + 'px for a 100px drag');
+  } else check('WIP timeline has a resize handle', false);
+
   // ---------- People card: leave that ended over 30 days ago is no longer listed ----------
   await page.click('[data-view-btn="people"]'); await page.waitForTimeout(1300); await skipTours(page);
   const peopleText = await page.textContent('#people-grid');
