@@ -151,7 +151,7 @@ here (dependencies, Gantt grouping, the progress column) stay out even when a re
 
 ## Commands
 
-**Browser tests: `node tests/run.mjs`** (see `tests/README.md`). 21 suites, ~390 checks, each loading
+**Browser tests: `node tests/run.mjs`** (see `tests/README.md`). 24 suites, ~480 checks, each loading
 the real `index.html` in Chromium with Firebase replaced by `tests/fbstub.js`. They run on every push to
 `main` and every weekday at 7am Singapore (`.github/workflows/tests.yml`); a failure is a red X plus
 GitHub's email. Asked for directly: "Constantly run checks as I did today to make sure everything is
@@ -916,6 +916,11 @@ to bottom:
        two-track approach as the Calendar span logic): focus mode still returns 6 and still keeps
        both Review tasks; deadline returns the six soonest in date order; priority leads with
        every High; project groups alphabetically and sorts the unprojected task last overall.
+   - **Focus of the Day's flame flickers, but never loops** (2026-10-12, asked "Can focus of the day
+     icon be constantly animating?"; agreed instead, as constant motion on a strip that's on screen all
+     day pulls the eye and is soon ignored): once when a page opens (`setView`), when the six change
+     (`lastFocusSig` in `renderFocus`), and on hover (`[data-focus-icon]`). `flickerFocusFlame`, off
+     under reduced motion.
    - **`focusScore(t)`** (shared by `renderFocus` and the Board's "Sort: Focus" option) weighs
      deadline proximity above priority tier, not just alongside it: a Low-priority task due
      today outscores a High-priority task due in three weeks. Priority (`PRIORITY_WEIGHT × 1000`)
@@ -3600,7 +3605,7 @@ switcher button takes the team's tint (`DEPARTMENT_TRIGGER_TINT`) only while ONE
 coloured button always means "you're seeing one team"; the selected menu row lost its orange label
 (orange is the brand/button colour), the tick marks it. **Motion only on change**: a pick in the menu
 plays a one-off animation (`.ts-anim`: tile pops, briefcase hops, clapper snaps, palette wobbles, clipboard
-ticks), menu rows nudge their icon on hover; nothing loops, since the switcher is on screen all day.
+ticks), hovering a team (menu row or the switcher button) plays that same team motion once (2026-10-12, reported: "teamspaces icons are not animating like their representation"; hover used to be one generic tilt for every team); nothing loops, since the switcher is on screen all day.
 The button tile is redrawn only when the team changes, so a re-render can't restart the animation.
 A new department needs an entry in `DEPARTMENT_ICON` and `DEPARTMENT_TRIGGER_TINT` too.
 **Colours: Suits blue, Creative/Post violet, Copy/Production teal, Admin lime** (same day, reported:
@@ -3797,6 +3802,16 @@ decides what to move.
   `computeGanttDeadlineStacks` learned by shipping the wrong version first: a task merely
   *spanning* someone's time off is normal, they work either side of it. A deadline landing while
   they're away can't resolve itself.
+- **The owner pickers show leave while you choose (2026-10-12)** (`leaveDuring`/`awayDuringLabel`,
+  `assigneeOptionHtml`; Google Calendar and Linear show "out of office" in their people pickers).
+  Anyone with leave overlapping the task's dates gets an amber "Away Oct 14–16" tag (+N for more
+  periods; the note, and "the deadline falls on this leave", on hover) in the task window's Owner
+  list and on the field once picked, so the clash is seen before handing work over rather than as a
+  `leave_clash` alert afterwards. Window: the later of today and the start date, to the deadline; two
+  weeks ahead with no deadline; ended leave never counts. Overlap (not deadline-only) is right here
+  because it's information at the moment of choosing, not a warning. Rebuilt when the dates change
+  (`refreshAssigneeAway`). The phone's quick add puts the same text after the name (" · Away …").
+  Not on the step/involved pickers. `tests/leave-step-shift.test.js`.
 - **The band is a diagonal hatch (`.gantt-leave`), not a flat tint.** The day columns already use
   flat tints for weekend and for today; a third flat colour reads as a fourth kind of *day*
   rather than as "this one person is away". Emitted before the bar in the same relative container
@@ -4193,6 +4208,12 @@ their week into a cell before the Monday meeting. Asked: "Is there a way to inte
     ("It should say 'This week' to avoid confusion", "should not have an arrow on the right");
     older weeks keep their date, a "This week" link and the arrow. Once nobody is waiting it reads a
     green **"All in!"** with a full green bar instead of "10 of 10 in". Same on the phone.
+    "All in!" carries a green tick (phone too). **When an update lands live** (asked: "animate this
+    bar when it is updated live"), the fill slides to its new length with a soft glow, green once all
+    are in, and the tick pops in when the last one arrives. Only a live change on the week on screen
+    animates (`weeklyBarLast`), never a first draw or a change of week; a redraw within
+    `WEEKLY_BAR_ANIM_MS` carries the animation on with a negative delay (`weeklyBarAnim`), because the
+    same update often arrives through two listeners and the second draw used to cut it off.
   - **Bigger for the meeting screen:** see "Standing rule: meeting text size" (first shipped as a
     fixed 1.2x here, then made a choice for every meeting, 1x by default).
   - **Editor: a dropdown per project, not six pills** ("It adds to visual clutter ... make this
@@ -4430,6 +4451,15 @@ draws one Timeline diamond instead of six, and hides a late size inside the batc
 - **Dragging an item into another date's group gives it that date** (in the drop handler);
   otherwise it would jump straight back to its old group. A toast always says so ("... is now due
   Oct 9"), so a drag meant only to reorder never changes a date silently.
+- **Step dates can follow a moved deadline (2026-10-12)** ("Step dates follow a moved deadline" in
+  index.html, `offerStepShift`; TeamGantt shifts dates hanging off a slipped date). Changing the
+  deadline in the task window shows a toast, "Deadline moved 3 days later. Move the 2 open steps
+  too?", with **Move steps**, then Undo. **An offer, not automatic**: nothing moves unless asked.
+  Done, TBD and undated steps stay; a step landing on a weekend goes back to the Friday before (as
+  Copy steps does) unless it was on a weekend already. Fires 1.2s after the last change or on leaving
+  the field; a year still being typed (0002, 0020...) is ignored and the finished date is measured from
+  the deadline the person started from. A teammate's live change to the deadline offers nothing. Not
+  dependencies (still removed): it only moves steps inside one task.
 - **The Add button says "Add 6"** once the box holds several lines, so a paragraph pasted by
   mistake shows what it would do before it's done.
 - **A hint shows only while the add row has focus** (`#task-checklist-hint`, focusin/focusout on

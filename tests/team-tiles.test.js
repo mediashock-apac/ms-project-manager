@@ -101,6 +101,10 @@ async function skipTours(page) {
       await page.click('#teamspace-trigger'); await page.waitForTimeout(200);
       check('menu: a tile on every option (6)', (await page.$$('#teamspace-menu [data-teamspace] .ts-tile')).length === 6);
       check('menu: each team has its own icon', (await page.$$eval('#teamspace-menu .ts-tile svg', s => new Set(s.map(x => x.innerHTML)).size)) === 6);
+      // Hover plays each team's own motion, not one generic tilt
+      const hoverAnim = async (key, sel) => { await page.hover('#teamspace-menu [data-teamspace="' + key + '"]'); await page.waitForTimeout(60); return page.$eval('#teamspace-menu [data-teamspace="' + key + '"] ' + sel, e => getComputedStyle(e).animationName); };
+      const hov = { suits: await hoverAnim('suits', '.ts-tile svg'), production: await hoverAnim('production', '.ts-tile svg'), copy: await hoverAnim('copy', '.ts-clap'), admin: await hoverAnim('admin', '.ts-tick') };
+      check('hover: briefcase hops, palette wobbles, clapper snaps, clipboard ticks', hov.suits === 'ts-hop' && hov.production === 'ts-wobble' && hov.copy === 'ts-clap' && hov.admin === 'ts-tick', JSON.stringify(hov));
     } else {
       await page.click('#teamspace-trigger'); await page.waitForTimeout(200);
     }
@@ -114,6 +118,15 @@ async function skipTours(page) {
       check('animation class removed afterwards', !(await page.$eval('#teamspace-tile-wrap', e => e.classList.contains('ts-anim'))));
       await page.click('#teamspace-trigger'); await page.click('#teamspace-menu [data-teamspace="all"]'); await page.waitForTimeout(200);
       check('All is neutral again', await page.$eval('#teamspace-trigger', e => !e.className.includes('blue-50') && e.classList.contains('bg-zinc-50')));
+      // Focus of the Day's flame: still at rest, flickers once when a page opens
+      await page.waitForTimeout(1400);
+      check('flame is still at rest', await page.$eval('#focus-section', e => !e.classList.contains('focus-flicker')));
+      await page.evaluate(() => document.querySelector('[data-view-btn="archived"]').click()); await page.waitForTimeout(60);
+      check('flame flickers when a page opens', await page.$eval('#focus-flame', e => getComputedStyle(e).animationName === 'focus-flicker'));
+      await page.waitForTimeout(1400);
+      check('...once, then still again', await page.$eval('#focus-flame', e => getComputedStyle(e).animationName === 'none'));
+      await skipTours(page);
+      await page.evaluate(() => document.querySelector('[data-view-btn="board"]').click()); await page.waitForTimeout(1400); await skipTours(page);
       await page.click('#teamspace-trigger'); await page.click('#teamspace-menu [data-teamspace="production"]'); await page.waitForTimeout(300);
     } else { await page.waitForTimeout(1100); }
     for (const t of ['suits','production','copy','admin','all']) {

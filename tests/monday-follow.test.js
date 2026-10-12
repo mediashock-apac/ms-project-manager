@@ -146,6 +146,12 @@ function rowOf(page, sel, attr, project) {
   const allIn = await page.textContent('#weekly-bar');
   check('All in! once everyone has updated', /All in!/.test(allIn) && !/3 of 3/.test(allIn), allIn);
   check('All in! is green', await page.$eval('#weekly-bar', b => [...b.querySelectorAll('span')].some(x => x.textContent === 'All in!' && /emerald/.test(x.className))));
+  check('All in! has a green tick that pops in when the last update lands live', await page.$eval('#weekly-allin-tick', e => !!e.querySelector('svg') && e.classList.contains('weekly-allin-pop')));
+  check('the bar glows green and fills to 100% on that live update', await page.$eval('#weekly-progress', e => e.classList.contains('weekly-progress-glow-done')) && await page.$eval('#weekly-progress-fill', e => e.style.width === '100%'));
+  await page.waitForTimeout(1500);
+  await page.evaluate(() => window.__fb.remote(function (d) { d.people.u3.lastSeen = new Date().toISOString(); d.people.u3.toursSeen = (d.people.u3.toursSeen || []).concat(['x']); }));
+  await page.waitForTimeout(300);
+  check('an unrelated redraw does not animate again', !(await page.$('#weekly-progress.weekly-progress-glow-done, #weekly-progress.weekly-progress-glow, #weekly-allin-tick.weekly-allin-pop')));
 
   // ---------- Answering yourself wins ----------
   await page.click('[data-weekly-edit="Deane Cheng"]'); await page.waitForSelector('#weekly-modal:not(.hidden)');
