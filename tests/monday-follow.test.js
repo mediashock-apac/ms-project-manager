@@ -35,7 +35,9 @@ function seed(tours) {
         // Deane is only involved in Lark AI, only on a step in GWS recording, and owns My own thing.
         t1: T({ name: 'Script', project: 'Lark AI', deadline: '2026-10-12', assignee: 'Arvind Kumaraguru', involved: ['Deane Cheng'] }),
         t2: T({ name: 'Edit', project: 'GWS recording', deadline: '2026-10-14', assignee: 'Arvind Kumaraguru', checklist: [{ id: 'c1', text: 'Rough cut', due: '2026-10-09', done: false, assignees: ['Deane Cheng'], assignee: 'Deane Cheng' }] }),
-        t3: T({ name: 'Deck', project: 'My own thing', deadline: '2026-10-15', assignee: 'Deane Cheng' })
+        t3: T({ name: 'Deck', project: 'My own thing', deadline: '2026-10-15', assignee: 'Deane Cheng', checklist: [
+          { id: 's1', text: 'Step one', due: '2026-10-08', done: false }, { id: 's2', text: 'Step two', due: '2026-10-09', done: false },
+          { id: 's3', text: 'Step three', due: '2026-10-10', done: false }, { id: 's4', text: 'Step four', due: '2026-10-13', done: false }] })
       },
       projects: {}, activity: {}, notifications: {}, suggestions: {}, notificationDedup: {}
     }
@@ -120,7 +122,9 @@ function rowOf(page, sel, attr, project) {
   const mine = await page.evaluate(() => window.__fb.data.people.u1.weekly.find(e => e.week === '2026-10-05'));
   check('saved: my own row only, attached projects followed', mine && mine.rows.length === 1 && mine.rows[0].project === 'My own thing' && JSON.stringify(mine.follows.slice().sort()) === JSON.stringify(['GWS recording', 'Lark AI']), JSON.stringify(mine));
   const card = () => page.innerText('[data-weekly-card="Deane Cheng"]');
+  const cardText = await card();
   check("my card shows the owner's row, marked", /Waiting on client[\s\S]*Lark AI – Client to approve the script · from Arvind/.test(await card()), (await card()).slice(0, 300));
+  check('Next lists every step, no "+N more"', ['Step one', 'Step two', 'Step three', 'Step four', 'Deck'].every(x => (/My own thing[\s\S]*/.exec(cardText) || [''])[0].includes(x)) && !/more/.test(cardText), cardText);
   check('a followed row is not marked NEW', !/NEW/.test(await card()));
 
   // ---------- The owner updates: my card follows without me ----------

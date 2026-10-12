@@ -4070,7 +4070,7 @@ their week into a cell before the Monday meeting. Asked: "Is there a way to inte
   or next steps?"): `weeklyRowContextHtml` adds a "Next" list, one step per line with its date in a
   short column first (agenda style; a single wrapping line was "hard to read", and a right-hand date
   column sat far from its step at full width): this person's late (rose, "· late") then upcoming
-  steps/tasks there, then undated steps ("No date"), up to 3 plus "+N more"; and "Latest
+  steps/tasks there, then undated steps ("No date"), ALL of them (it was 3 plus "+N more"; 2026-10-12: "Should not show +1. Just show the entire list"); and "Latest
   status:" (the newest WIP status line) when they wrote no note. Current meeting week only (the board
   is now, not last week), not on Done rows. It replaced the right-hand next-date column. This is
   text people typed on the board, unlike the removed "From the board" list on cards with no update.

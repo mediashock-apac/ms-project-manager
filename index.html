@@ -12967,7 +12967,8 @@
     g.items.filter(function (x) { return x.date < today; }).sort(function (a, b) { return a.date < b.date ? -1 : 1; }).forEach(function (x) { push(x, true); });
     g.items.filter(function (x) { return x.date >= today; }).sort(function (a, b) { return a.date < b.date ? -1 : 1; }).forEach(function (x) { push(x, false); });
     (g.undated || []).forEach(function (t) { push({ text: t, date: '' }, false); });
-    var shown = items.slice(0, 3), more = items.length - shown.length;
+    // Every step, no "+N more" (asked: "Should not show +1. Just show the entire list").
+    var shown = items;
     var out = '';
     if (shown.length) {
       // A list, one step per line with its date in a right-hand column (asked: "Next to have a
@@ -12978,8 +12979,7 @@
           return '<span class="grid grid-cols-[3.25rem_minmax(0,1fr)] gap-x-2 items-baseline' + (x.late ? ' text-rose-600 dark:text-rose-400 font-semibold' : '') + '">' +
             '<span class="whitespace-nowrap tabular-nums">' + (x.date ? escapeHtml(formatShortDate(x.date)) : 'No date') + '</span>' +
             '<span class="min-w-0 break-words">' + escapeHtml(x.text) + (x.late ? ' · late' : '') + '</span></span>';
-        }).join('') +
-        (more > 0 ? '<span class="block pl-[3.75rem]">+' + more + ' more</span>' : '') + '</span>';
+        }).join('') + '</span>';
     }
     if (!row.note && g.latest && g.latest.text) {
       out += '<span class="block mt-0.5 text-xs text-zinc-500 dark:text-zinc-400"><span class="font-semibold">Latest status:</span> ' + escapeHtml(g.latest.text) +
@@ -16357,6 +16357,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-12b', date: '2026-10-12', items: [
+      { type: 'improved', title: 'Every next step on Monday Meeting', text: "The Next list under each project now shows every step in full, instead of the first three and \"+1 more\"." }
+    ] },
     { id: '2026-10-12a', date: '2026-10-12', items: [
       { type: 'improved', title: 'Edit your Monday update from your own card', text: "The Edit button now sits on your card in Monday Meeting, and it edits the week you're looking at, so last week's update can be fixed too. Admins get a small pencil on everyone's card." },
       { type: 'new', title: "Project owners answer for everyone on the project", text: "If you're only involved in a project, or only on its steps, you're no longer asked about it in your Monday update. The owner's update shows on your card, and it changes when they change it. Tap \"Answer myself\" to give your own." },
@@ -20204,7 +20207,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-12T02:05:59Z";
+  var CURRENT_BUILD_VERSION = "2026-10-12T02:22:47Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
