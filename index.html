@@ -7962,7 +7962,7 @@
       var taskDeadline = document.getElementById('task-deadline').value;
       var anyOpen = members.some(function (x) { return !x.item.done; });
       if (anyOpen && parseDate(key) < todayMidnight()) { cls = 'text-rose-600 dark:text-rose-400'; note = ' · overdue'; }
-      else if (taskDeadline && key > taskDeadline) { cls = 'text-amber-700 dark:text-amber-400'; note = ' · after the task deadline'; }
+      else if (anyOpen && taskDeadline && key > taskDeadline) { cls = 'text-amber-700 dark:text-amber-400'; note = ' · after the task deadline'; }
     }
     var who = people && people.length
       ? '<span class="inline-flex items-center gap-1 ml-2 font-medium text-zinc-500 dark:text-zinc-400">' + people.map(function (n) { return avatarHtml(n, 'w-3.5 h-3.5 shrink-0', 'text-[8px]'); }).join('') + escapeHtml(stepPeopleLabel({ assignees: people })) + '</span>'
@@ -7972,11 +7972,14 @@
 
   function renderChecklistEditor() {
     var el = document.getElementById('task-checklist-editor');
-    function rowHtml(item, i, inGroup, peopleOnHead, linkOnHead) {
+    // `compact`: a done step on ONE line -- name, then a small link icon and avatars, date on the
+    // right (asked: "Any way to condense this?" about nine done steps of two or three lines each).
+    function rowHtml(item, i, inGroup, peopleOnHead, linkOnHead, compact) {
           var editing = checklistEditIndex === i;
+          compact = compact && !editing;
           var itemMinutes = checklistItemMinutes(item.id);
           return '<div class="checklist-item-row rounded-lg hover:bg-zinc-50 dark:hover:bg-zinc-700/50' + (justCheckedItemIds[item.id] ? ' checklist-just-checked' : '') + '" data-checklist-i="' + i + '" data-flip="' + escapeHtml(item.id || '') + '">' +
-            '<div class="flex items-center gap-2 px-2 py-1.5">' +
+            '<div class="flex items-center gap-2 px-2 ' + (compact ? 'py-1' : 'py-1.5') + '">' +
               '<span draggable="true" data-checklist-drag-handle data-checklist-i="' + i + '" title="Drag to reorder" aria-label="Drag to reorder" class="hidden sm:flex shrink-0 w-4 h-4 items-center justify-center text-zinc-300 dark:text-zinc-600 hover:text-zinc-500 dark:hover:text-zinc-400 cursor-grab active:cursor-grabbing">' + svgIcon('grip', 'w-3.5 h-3.5') + '</span>' +
               '<input type="checkbox" data-checklist-i="' + i + '" ' + (item.done ? 'checked' : '') + ' class="brand-checkbox checklist-toggle w-4 h-4 rounded border border-zinc-300 dark:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500/40 shrink-0 cursor-pointer">' +
               (editing
@@ -7990,6 +7993,16 @@
                     '</div>' +
                     checklistPeopleEditorHtml(stepPeople(item)) +
                   '</div>'
+                : compact
+                ? '<div class="flex-1 min-w-0 flex items-center gap-1.5">' +
+                    '<span class="checklist-name min-w-0 truncate cursor-text text-sm text-zinc-500 dark:text-zinc-400" data-checklist-i="' + i + '" title="' + escapeHtml(item.text) + ' (click to edit)">' + escapeHtml(item.text) + '</span>' +
+                    (item.link && !linkOnHead
+                      ? '<a href="' + escapeHtml(item.link) + '" target="_blank" rel="noopener noreferrer" data-tooltip="' + escapeHtml(linkChipLabel(item.link)) + '" aria-label="Open ' + escapeHtml(linkChipLabel(item.link)) + '" class="tooltip-top shrink-0 inline-flex p-0.5 rounded text-brand-700 dark:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-500/10">' + svgIcon('link', 'w-3.5 h-3.5') + '</a>'
+                      : '') +
+                    (stepPeople(item).length && !peopleOnHead
+                      ? '<span data-tooltip="' + escapeHtml(stepPeople(item).join(', ')) + '" class="tooltip-top shrink-0 inline-flex -space-x-1">' + stepPeople(item).map(function (n) { return avatarHtml(n, 'w-4 h-4 shrink-0 ring-1 ring-white dark:ring-zinc-800', 'text-[8px]'); }).join('') + '</span>'
+                      : '') +
+                  '</div>'
                 : '<div class="flex-1 min-w-0">' +
                   '<span class="checklist-name block w-fit max-w-full cursor-text text-sm ' + (item.done ? 'text-zinc-500 dark:text-zinc-400' : 'text-zinc-700 dark:text-zinc-200 hover:text-zinc-900 dark:hover:text-white') + '" data-checklist-i="' + i + '" title="Click to edit">' + escapeHtml(item.text) + '</span>' +
                   (item.link && !linkOnHead ? '<div>' + linkChipHtml(item.link) + '</div>' : '') +
@@ -8002,11 +8015,41 @@
             '</div>' +
           '</div>';
     }
-    var openItems = [], doneRows = [];
+    // Rows under one heading per due date, with a shared person or link named once on the heading.
+    function groupedRowsHtml(list, compact) {
+      var out = [], singles = [], groups = {};
+      list.forEach(function (x) { var k = checklistGroupKey(x.item); (groups[k] = groups[k] || []).push(x); });
+      Object.keys(groups).sort(function (a, b) {
+        var rank = function (k) { return k === 'none' ? '~2' : k === 'tbd' ? '~1' : k; };
+        return rank(a) < rank(b) ? -1 : 1;
+      }).forEach(function (k) {
+        var first = JSON.stringify(stepPeople(groups[k][0].item));
+        var shared = groups[k].length > 1 && first !== '[]' && groups[k].every(function (x) { return JSON.stringify(stepPeople(x.item)) === first; });
+        var firstLink = groups[k][0].item.link || '';
+        var sharedLink = groups[k].length > 1 && firstLink && groups[k].every(function (x) { return (x.item.link || '') === firstLink; });
+        // Done steps (compact): a date with ONE step keeps its date on the row; a heading over a
+        // single line would only add a line.
+        // Listed before the groups, so a single step never reads as part of the group above it.
+        if (compact && groups[k].length === 1) { singles.push(rowHtml(groups[k][0].item, groups[k][0].i, false, false, false, true)); return; }
+        out.push(checklistGroupHeadHtml(k, groups[k], shared ? stepPeople(groups[k][0].item) : null, sharedLink ? firstLink : null));
+        groups[k].forEach(function (x) { var notEditing = checklistEditIndex !== x.i; out.push(rowHtml(x.item, x.i, true, shared && notEditing, sharedLink && notEditing, compact)); });
+      });
+      return singles.concat(out);
+    }
+    var openItems = [], doneItems = [];
     currentChecklist.forEach(function (item, i) {
       var inOpen = !item.done || checklistShownDone[item.id] || checklistEditIndex === i;
-      if (inOpen) openItems.push({ item: item, i: i }); else doneRows.push(rowHtml(item, i));
+      (inOpen ? openItems : doneItems).push({ item: item, i: i });
     });
+    // Done steps: one line each, and grouped by date the same way as open steps once two of them
+    // share a date (six ad sizes done the same day read as one batch).
+    var doneDates = {}, doneGrouped = doneItems.some(function (x) {
+      if (!x.item.due) return false;
+      if (doneDates[x.item.due]) return true;
+      doneDates[x.item.due] = true;
+      return false;
+    });
+    var doneRows = doneGrouped ? groupedRowsHtml(doneItems, true) : doneItems.map(function (x) { return rowHtml(x.item, x.i, false, false, false, true); });
     // Open items sit under a heading per due date, so a batch due together reads as one batch
     // (asked: items "due on the same day same time"). Only once something has a date or TBD; a
     // checklist with no dates looks as before. Items keep their own order inside a group, and the
@@ -8016,26 +8059,13 @@
     if (!grouped) {
       openItems.forEach(function (x) { openRows.push(rowHtml(x.item, x.i)); });
     } else {
-      var groups = {};
-      openItems.forEach(function (x) { var k = checklistGroupKey(x.item); (groups[k] = groups[k] || []).push(x); });
-      Object.keys(groups).sort(function (a, b) {
-        var rank = function (k) { return k === 'none' ? '~2' : k === 'tbd' ? '~1' : k; };
-        return rank(a) < rank(b) ? -1 : 1;
-      }).forEach(function (k) {
-        // Same people on every step in the group (2+ steps): named once on the heading.
-        var first = JSON.stringify(stepPeople(groups[k][0].item));
-        var shared = groups[k].length > 1 && first !== '[]' && groups[k].every(function (x) { return JSON.stringify(stepPeople(x.item)) === first; });
-        // Same for a link: one shared link (e.g. one folder for six ad sizes) shows once on the heading.
-        var firstLink = groups[k][0].item.link || '';
-        var sharedLink = groups[k].length > 1 && firstLink && groups[k].every(function (x) { return (x.item.link || '') === firstLink; });
-        openRows.push(checklistGroupHeadHtml(k, groups[k], shared ? stepPeople(groups[k][0].item) : null, sharedLink ? firstLink : null));
-        groups[k].forEach(function (x) { var notEditing = checklistEditIndex !== x.i; openRows.push(rowHtml(x.item, x.i, true, shared && notEditing, sharedLink && notEditing)); });
-      });
+      // Same people (or one shared link) on every step in a group: named once on the heading.
+      openRows = groupedRowsHtml(openItems, false);
     }
     // Done steps are always shown, below the open ones so the to-do stays on top (asked: "Do not
     // strikethrough when checked. Also do not hide"; they used to fold under "N done").
-    var doneHead = doneRows.length
-      ? '<p class="checklist-done-head px-2 pt-2 text-[11px] font-bold text-zinc-500 dark:text-zinc-400">' + (openRows.length ? 'Done' : 'All done') + ' · ' + doneRows.length + '</p>'
+    var doneHead = doneItems.length
+      ? '<p class="checklist-done-head px-2 pt-2 text-[11px] font-bold text-zinc-500 dark:text-zinc-400">' + (openRows.length ? 'Done' : 'All done') + ' · ' + doneItems.length + '</p>'
       : '';
     var stepsBefore = flipCapture(el, '[data-flip]', 'data-flip');
     el.innerHTML = currentChecklist.length
@@ -16990,6 +17020,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-12i', date: '2026-10-12', items: [
+      { type: 'improved', title: 'Done steps take less room', text: "In a task's checklist, each done step is now one line: its name, a small link icon and who did it, with the date on the right. Done steps from the same day sit under one heading, with the person named once." }
+    ] },
     { id: '2026-10-12h', date: '2026-10-12', items: [
       { type: 'new', title: 'Regular days off, booked once', text: "In \"+ Add leave\" on People, choose Repeats: every week or every 2 weeks, with an optional end date. It shows as one entry, like \"Every Mon until Nov 30\", and the Timeline, Calendar and meetings all show each day off." }
     ] },
@@ -20907,7 +20940,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-12T08:41:42Z";
+  var CURRENT_BUILD_VERSION = "2026-10-12T09:11:40Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

@@ -1100,6 +1100,13 @@ to bottom:
        the current open of the modal stays in place, struck through (`checklistShownDone`), so a
        row never vanishes under the cursor and can be unticked; it folds away next time. Both
        reset in `openTaskModal`. Rows keep their real array index, so drag-reorder is unchanged.
+     - **Done steps are condensed (2026-10-12, asked: "Any way to condense this?" of nine done steps
+       at two or three lines each):** one line per done step (`rowHtml(..., compact)`): name, a small
+       link icon (site name on hover), avatars (names on hover), date on the right. Two or more done
+       steps on the same date sit under one heading, with a shared person or link named once
+       (`groupedRowsHtml`, shared with open steps); a date with one done step keeps its date on the
+       row and is listed before the groups, so it never reads as part of the group above it. Open
+       steps keep their full layout. `tests/checklist-done.test.js`.
      - **Superseded (2026-10-12): done steps are always shown and never struck through** (asked: "Do
        not strikethrough when checked. Also do not hide. Bring the due date up to same line where the
        edit button is"). They sit below the open ones under a plain "Done · N" label (no fold, no
