@@ -4024,9 +4024,17 @@ Client contact / Key links columns).
     shipped an hour earlier. "A lead needs at least one open task to appear" was the first
     answer, and was reversed the same day once the sheet's Cold leads (a client + one line, no
     tasks, no Drive folder) and Pending closing reports (all work done) were shown — see below.
-- **A categorised project stays on WIP with no open tasks** (`wipProjectsHtml` adds every
-  `projectDocs` entry with a valid `wipCategory`), which is what keeps Closing reports populated
-  after the work is done. **Setting Not sorted is how anything leaves WIP.**
+- **A categorised project can stay on WIP with no open tasks** (`wipListsWithoutOpenTasks`), which
+  is what keeps leads and Closing reports populated. **But a finished Active job or Content
+  marketing project leaves on its own** (2026-10-19, asked: "Is it done? If it's done it should
+  not be here", option A over an "All done · Remove from WIP" button that would be a click per
+  project): in those two categories (`WIP_DONE_LEAVES`) a project with no open task and no typed
+  deliverable isn't listed, desktop and phone. One that never had a task stays while it has a
+  note. New open work brings it back. WIP loads archived tasks to tell "finished" from "new".
+  **Trade-off, accepted:** a job that needs a closing report must be moved to Closing reports
+  before its last task is done. "+ Add entry" refuses a bare Active/Content entry with nothing
+  open and asks for a first deliverable, so it can't vanish on save. Not sorted still takes
+  anything off by hand. `tests/wip-finished.test.js`.
 - **"+ Add entry"** (section header) adds a WIP-only entry: name, one-line note, category pills
   (`wipAddEntryHtml`, `addWipEntry`). It is just a `projects` doc with `wipCategory` + `wipNote`
   and no tasks; a name matching an existing project only categorises that project. **It never

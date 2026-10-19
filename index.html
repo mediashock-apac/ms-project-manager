@@ -2851,6 +2851,23 @@
     var key = (projectDeadlineDoc(name) || {}).wipCategory;
     return wipCategoryLabel(key) ? key : '';
   }
+  // Finished projects leave WIP on their own (2026-10-19, asked: "Is it done? If it's done it
+  // should not be here", option A). A project in Active jobs or Content marketing with no open task
+  // and no typed-in deliverable is done, so it isn't listed. Leads (no tasks yet) and Closing
+  // reports (work done, report to write) still stay with nothing open: that's what they're for.
+  // An entry that never had a task stays while it has a note (someone typed it into WIP).
+  // Only for projects with NO open tasks: anything with open work is always listed.
+  var WIP_DONE_LEAVES = ['active', 'content'];
+  function wipListsWithoutOpenTasks(name) {
+    var cat = name ? projectWipCategory(name) : '';
+    if (!cat) return false;
+    if (WIP_DONE_LEAVES.indexOf(cat) === -1) return true;
+    var pd = projectDeadlineDoc(name) || {};
+    if (wipDeliverablesOf(pd).length) return true;
+    var key = projectKey(name);
+    var hadTasks = tasks.concat(archivedTasks).some(function (t) { return t.project && projectKey(t.project) === key; });
+    return !hadTasks && !!String(pd.wipNote || '').trim();
+  }
   function setProjectWipCategory(name, key) {
     return ensureProjectDoc(name).then(function (id) {
       return updateDoc(doc(projectsCol, id), { wipCategory: key || null });
@@ -16944,6 +16961,13 @@
       var entryName = (d.entryName || '').trim();
       if (!entryName) { showToast('Give the entry a name', 'info'); return; }
       if (!d.cat) { showToast('Pick a category for it', 'info'); return; }
+      // An Active job / Content marketing entry with nothing open would leave WIP straight away.
+      var entryKey = projectKey(canonicalProjectName(entryName));
+      if (WIP_DONE_LEAVES.indexOf(d.cat) !== -1 && !(d.entryNote || '').trim() &&
+          !activeTasks().some(function (t) { return t.status !== 'Done' && t.project && projectKey(t.project) === entryKey; })) {
+        showToast("Add a first deliverable too: an active job with nothing open doesn't show on WIP", 'info');
+        return;
+      }
       p = addWipEntry(entryName.slice(0, 100), d.cat, (d.entryNote || '').trim().slice(0, 200));
     } else if (e.kind === 'deliv') {
       var dText = (d.delivText != null ? d.delivText : '').trim();
@@ -17061,11 +17085,12 @@
     var helpBy = weeklyHelpByProject();
     var byProject = {};
     open.forEach(function (t) { (byProject[t.project || ''] = byProject[t.project || ''] || []).push(t); });
-    // A project with a category stays listed with NO open tasks too: a lead typed straight into
+    // A project with a category can stay listed with NO open tasks: a lead typed straight into
     // WIP ("+ Add entry", no tasks at all) and a finished project waiting on its closing report.
-    // Setting it back to Not sorted is how it leaves WIP.
+    // A finished Active job / Content marketing project leaves on its own (wipListsWithoutOpenTasks);
+    // Not sorted takes anything off by hand.
     projectDocs.forEach(function (pd) {
-      if (pd.name && projectWipCategory(pd.name) && !byProject[pd.name]) byProject[pd.name] = [];
+      if (pd.name && !byProject[pd.name] && wipListsWithoutOpenTasks(pd.name)) byProject[pd.name] = [];
     });
     var names = Object.keys(byProject);
     wipProjectNamesShown = names;
@@ -17493,6 +17518,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-19b', date: '2026-10-19', items: [
+      { type: 'improved', title: 'Finished projects leave WIP on their own', text: "On WIP Meeting, a project in Active jobs or Content marketing with no open tasks left now drops off by itself, so the list only shows live work. Leads and Closing reports stay as before. To keep a finished job for its closing report, move it to Closing reports before its last task is done." }
+    ] },
     { id: '2026-10-19a', date: '2026-10-19', items: [
       { type: 'fixed', title: 'Search keeps your cursor', text: "On a wide screen, typing in the search box used to drop the cursor after one letter while results updated. You can now type straight through." },
       { type: 'improved', title: 'Longer Monday notes, with new lines', text: "In your Monday update, the note boxes now grow as you type and take up to 2,000 characters. Shift+Enter starts a new line; Enter still sends. Line breaks show on the Monday cards." },
@@ -19065,7 +19093,8 @@
     // renderChatProjectList) has real data to check -- archivedTasks otherwise only loads once
     // someone's actually visited Projects or Archived this session.
     if (currentView === 'chat') { ensureArchivedTasksListener(); renderChatView(); }
-    if (currentView === 'wip') renderWipView();
+    // WIP reads archivedTasks to tell a finished project from a new entry (wipListsWithoutOpenTasks).
+    if (currentView === 'wip') { ensureArchivedTasksListener(); renderWipView(); }
     if (currentView === 'weekly' && WEEKLY_ENABLED) renderWeeklyPage();
     if (currentView === 'activity') renderActivityFeed();
     if (currentView === 'suggestions') renderSuggestions();
@@ -20514,7 +20543,7 @@
     }).join('')) : mEmpty('', 'Nothing needs a decision.'));
     var names = {};
     open.forEach(function (t) { if (t.project) names[t.project] = true; });
-    projectDocs.forEach(function (p) { if (p && p.name && projectWipCategory(p.name)) names[p.name] = true; });
+    projectDocs.forEach(function (p) { if (p && p.name && !names[p.name] && wipListsWithoutOpenTasks(p.name)) names[p.name] = true; });
     var cats = WIP_CATEGORIES.concat([{ key: '', label: 'Not sorted' }]);
     cats.forEach(function (c) {
       var list = Object.keys(names).filter(function (n) { return projectWipCategory(n) === c.key; });
@@ -21443,7 +21472,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-19T02:07:28Z";
+  var CURRENT_BUILD_VERSION = "2026-10-19T04:52:16Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
