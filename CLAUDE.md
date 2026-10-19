@@ -169,7 +169,7 @@ here (dependencies, Gantt grouping, the progress column) stay out even when a re
 
 ## Commands
 
-**Browser tests: `node tests/run.mjs`** (see `tests/README.md`). 24 suites, ~480 checks, each loading
+**Browser tests: `node tests/run.mjs`** (see `tests/README.md`). 28 suites, ~545 checks, each loading
 the real `index.html` in Chromium with Firebase replaced by `tests/fbstub.js`. They run on every push to
 `main` and every weekday at 7am Singapore (`.github/workflows/tests.yml`); a failure is a red X plus
 GitHub's email. Asked for directly: "Constantly run checks as I did today to make sure everything is
@@ -3133,6 +3133,10 @@ Asked "what can be improved here?" against a 4K screenshot, then "build all seve
   travel with it) and gets `.toolbar-inline`. Content-aware: if `#header-row-inner` wraps
   (`offsetHeight > 56`) it goes straight back to its own row. Called on resize (debounced), from
   `syncToolbarLayout`, `renderStats` and `renderFilterOptions`. Below 1600px nothing changes.
+  **It never moves while focus is inside the row** (it waits for `focusout`). When the row didn't
+  fit, the check moved it in and straight back out on every redraw, and moving a node takes focus
+  out of it, so typing in the search box lost the cursor after one letter (reported 2026-10-19).
+  `tests/search-focus.test.js`.
 - **Stats have no coloured dots.** The amber "high priority" dot clashed with amber = Medium
   everywhere else. Only the overdue number is coloured (rose, when above 0). Any stat at 0 hides.
 - **"overdue" and "high priority" are filter buttons** (`.stat-chip`, `aria-pressed`). High sets
@@ -3513,11 +3517,15 @@ client-side domain check in `isAllowedEmail` is UX only, not enforcement):
   subcollection. Shared read/write like `tasks`, with two carve-outs: a doc can only be *created*
   with `source: 'ai'` by an admin, and its `status` field (Open/WIP/Fixed — every suggestion, not
   just AI ones) can only be *changed* by an admin — see "AI Product Insights (Suggestions tab)"
-  below for both. **Moving a suggestion INTO Fixed notifies its author** (`notifySuggestionFixed`,
-  notification `type: 'suggestion_fixed'`, carries `suggestionId`; clicking it opens the
-  Suggestions view). Not sent for AI-imported suggestions, nor when the admin is the author, nor
-  when it was already Fixed. "Unable to Fix" deliberately sends nothing — only Fixed was asked for.
-  The author is matched by stored display name, same as every other notification.
+  below for both. **Every status change notifies its author** (2026-10-19, asked: "notify whenever
+  status of the suggestion changes"; it was Fixed only): `notifySuggestionStatus`, notification
+  `type: 'suggestion_status'` with `status` and `suggestionId`, worded by `suggestionStatusWords`
+  ("Your suggestion is being worked on / has been fixed / couldn't be fixed / is open again").
+  **No name in the wording** (asked: the admin changing the status isn't who does the fix).
+  Clicking it opens Suggestions. Older `suggestion_fixed` notifications still read as
+  Fixed (`isSuggestionNotif`). Not sent for AI-imported suggestions, when the admin is the author,
+  or when the status didn't actually change. The author is matched by stored display name, same as
+  every other notification.
 - **`aiSuggestionImports`** — one doc per imported GitHub issue number, dedup bookkeeping for the
   AI Product Insights import flow (below). Same shape as `notificationDedup`, but write is
   admin-only rather than whole-team, since only an admin can trigger an import at all.
@@ -3942,6 +3950,8 @@ hidden. **Needs a decision stays on top in both modes, but in By project it is s
 walkthrough covers anyway and pushed the projects down) and over moving it to the bottom (easy to
 skip; crunch and leave-clash items appear nowhere else). Agenda mode keeps the full list, since
 there it is the first agenda item. The day list, Away and the timeline are the **Agenda** mode.
+**Superseded (2026-10-13): the Away column is gone from By project; leave shows in each person's
+Team load row (see "WIP for resourcing, deconflicting and status" below). Agenda keeps its Away card.**
 **Away is in By project too** (asked for directly): the same Away card as Agenda (`wipAwayHtml`)
 in a narrow right column (`#wip-projects-wrap` grid, `#wip-away-side`, 19rem, sticky) beside the
 projects. It first shipped as a one-line strip above the projects and was replaced minutes later
@@ -4155,6 +4165,43 @@ since that is not a department key, so `indexOf` found it in nobody's list and t
 teamspace listed no roster members at all. That is the one teamspace where people with no
 department are the entire point.
 
+### WIP for resourcing, deconflicting and status (2026-10-13)
+
+Asked: "WIP meeting - This is for resourcing if more hands are needed and deconflicting, project
+statuses. How can the current be improved so its clearer suited to do all that", then "go with your
+recommendation". Four changes, all derived from data already entered (no new fields, nothing to fill in):
+
+- **Team load** (TEAM LOAD in index.html: `wipLoadItems`, `wipLoadHtml`, `#wip-load` above the projects
+  in By project; TeamGantt Workloads / Monday workload / Asana Workload without their hour estimates).
+  One row per person (everyone seen lately via `weeklyPeople`, plus anyone with work), one box per
+  working day in the 1/2/4-week window: how many things are due that person that day = deadlines they
+  own + open steps assigned to them (a step with no people counts for the owner; a step that repeats
+  its task's name and date counts once). Shades: 1 / 2 / 3+ (`wipLoadCellCls`, 3+ is `brand-800` so
+  the white number stays readable); away days amber-hatched (`.wip-load-away`), outlined rose when
+  something is due on one. A weekend date counts on the Friday before. Overdue is counted beside the
+  name, not on a day. Rows sort heaviest first (who needs hands on top, who has room at the bottom),
+  each with "N due · N overdue", a Needs help tag (Monday) and "Away: ..." (`wipAwayText`, shared
+  with the Agenda Away card, so repeating leave reads "Every Mon ... · next Oct 19"). Clicking a
+  person or any of their days opens the list behind the numbers (`wipLoadOpen`, session-only), each
+  line opening its task: a shared screen, so nothing is hover-only. It replaced By project's Away column.
+- **Needs a decision also lists** (`wipAlerts`; the phone's WIP page reads the same list):
+  **Clash** (`WIP_CLASH_COUNT` = 3 or more things due one person on one day, any priority; the
+  High-only Crunch still exists and a day it raised isn't repeated), **a step due while its person is
+  away** (On leave, beside the task-deadline version), and **Needs help**: every open help request
+  from the Monday updates (`weeklyHelpRequests`, which `weeklyHelpByProject`/`weeklyHelpByPerson`
+  now build on), listed right after the overdue roll-ups.
+- **Project health on every project row** (`wipProjectHealth`, `WIP_HEALTH`; Asana / Linear's On track
+  / At risk / Off track). Off track: overdue work, the project's own date passed, or a task dated after
+  it. At risk: a late step, a Monday help request, a review waiting `REVIEW_STALE_DAYS`, a deadline on
+  its owner's leave. Never typed. The chip shows folded or open; folded, the reasons are written beside
+  it (they replaced the separate "N overdue"/"N behind" counts and the Needs help chip) and the latest
+  status line sits under the header ("Latest: ... · Zenon, 3 days ago", `weeklyLatestStatus`; it
+  opens the project too). Within each category: off track, at risk, on track, then soonest deadline.
+  The phone's project rows show the same chip and reasons.
+- **Focus of the Day is hidden on WIP and Monday Meeting** (`setView`): a personal urgent strip that
+  repeated the overdue items on a shared screen and pushed the agenda down.
+- `tests/wip-load.test.js` (27 checks).
+
 ### Monday Meeting (weekly updates)
 
 Replaces the "MMM Pulse-board" Google Sheet's monthly person x week tabs, where everyone typed
@@ -4174,6 +4221,10 @@ their week into a cell before the Monday meeting. Asked: "Is there a way to inte
   Needs help, In review = a Waiting, Behind = derived from dates). A note is optional; picking Needs help focuses it.
   "Same as last week", "Mark the rest On track", "I'm on leave this week" and one line for things
   not on the board (admin, new biz). Unanswered projects are simply left out.
+- **Notes are boxes that grow as you type, up to 2,000 characters** (`WEEKLY_NOTE_MAX`,
+  `weeklyAutosize`; 2026-10-19, from two Suggestions: a one-line box capped at 200/300 couldn't hold
+  a long note or a line break). Shift+Enter is a new line; Enter still sends the update, as in chat
+  and WIP notes. Cards, Needs help and the editor show the line breaks (`whitespace-pre-line`).
 - **Each project row shows what to reference** (asked: "it's hard to reference the latest status"):
   "Latest:" = the newest WIP status line on any of the project's open tasks (`weeklyLatestStatus`,
   with date and first name) plus "Use this" to copy it into the note; "Coming up:" = your next
@@ -4293,6 +4344,17 @@ their week into a cell before the Monday meeting. Asked: "Is there a way to inte
     `weekly-<uid>-<week>-<slot>`, so racing windows write one doc. Sending your update marks any
     unread reminder read. (Reading a missing notification doc is denied by the rules, so the server
     check is on the roster row, not the notification.)
+- **Entering by hand (asked 2026-10-08: "Can Monday meetings be manually input with the ability to
+  tag the project that is mentioned?"; both options picked; shipped 2026-10-16).** (1) **"+ Add a
+  project"** in the editor, under your projects: a search over every open project
+  (`weeklyAddCandidates`: board projects not fully archived, plus WIP entries; every typed word must
+  match; projects already listed are left out; Enter takes the top match). A hand-added row is
+  answered by you (`added`, never folded under its owner and never put in `follows`), saved by
+  project name like any row, and keeps a Remove link when reopened (not on your board and not
+  carried from last week). (2) **Admins fill in for someone with no update:** "Fill in for <first
+  name>" on their card header (same `data-weekly-edit` handler as the pencil, so the week on
+  screen). Saves to their doc with `editedBy`, and the card reads "Updated ... by Deane" even on a
+  first save. No rules change. Tests: `tests/monday-manual-entry.test.js`.
 - **Present mode was built and removed before shipping** ("Present mode is not necessary").
 - **Company-wide, ignores the teamspace switcher**, same reasoning as WIP: one shared meeting.
   Expected people = roster accounts seen in the last `WEEKLY_ACTIVE_DAYS` (45), or who already

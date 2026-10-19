@@ -188,7 +188,7 @@ function rowOf(page, sel, attr, project) {
   await page.click('#view-wip [data-meeting-zoom="1.5"]'); await page.waitForTimeout(300);
   check('1.5x applies to every meeting and is remembered', await page.evaluate(() => getComputedStyle(document.getElementById('view-wip')).zoom === '1.5' && getComputedStyle(document.getElementById('weekly-view')).zoom === '1.5' && localStorage.getItem('flowboard_meeting_zoom') === '1.5'));
   await page.screenshot({ path: path.join(OUT, 'wip-zoom-15.png') });
-  check('at 1.5x on a 1440px screen WIP stacks instead of squeezing the projects', await page.evaluate(() => getComputedStyle(document.getElementById('wip-projects-wrap')).gridTemplateColumns.trim().split(/\s+/).length === 1));
+  check('at 1.5x on a 1440px screen WIP stacks instead of squeezing the projects', await page.evaluate(() => { var l = document.getElementById('wip-load').getBoundingClientRect(), p = document.getElementById('wip-projects').getBoundingClientRect(); return l.bottom <= p.top + 1 && p.width >= l.width - 1; }));
   await page.click('[data-wip-mode="agenda"]'); await page.waitForTimeout(500); await skipTours(page);
   if (await page.$('#wip-resize-handle')) { await page.locator('#wip-resize-handle').scrollIntoViewIfNeeded(); await page.waitForTimeout(200); }
   const hb = await page.locator('#wip-resize-handle').boundingBox();

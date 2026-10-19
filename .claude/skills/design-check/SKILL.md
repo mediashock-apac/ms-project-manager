@@ -7,8 +7,8 @@ description: UI/UX check before shipping any visible change to this tool (clutte
 
 The checklist is shared by all three Mediashock tools and lives in ONE place, so it can't drift:
 
-**Read and follow `../.claude/skills/design-check/SKILL.md`** (the `Claude Projects` folder on the
-Shared Drive, one level above this repo). Apply every section to the change, including this
+**Read and follow `../../../.claude/skills/design-check/SKILL.md`** (the `Claude Projects` folder on the
+Shared Drive, three levels above this repo: it sits in `Claude Projects/MS Art Director/Tools/`). Apply every section to the change, including this
 tool's own entry under "Tool-specific checks", then report what you changed because of it and
 anything you couldn't verify.
 

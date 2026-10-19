@@ -164,7 +164,8 @@ async function skipTours(page) {
   await page.waitForTimeout(300);
   check('no Write/Edit button in the top bar', !(await page.$('#weekly-bar [data-weekly-write]')) && !(await page.$('#weekly-bar [data-weekly-edit]')));
   check("admin gets a pencil on someone else's card", !!(await page.$('[data-weekly-card="Arvind Kumaraguru"] [data-weekly-edit="Arvind Kumaraguru"]')));
-  check('no Edit on a card with no update', !(await page.$('[data-weekly-card="Zenon Kwok Ze Yong"] [data-weekly-edit]')));
+  // An empty card gets "Fill in for Zenon" (admins), not the pencil: see monday-manual-entry.
+  check('empty card: Fill in, not the Edit pencil', /Fill in for Zenon/.test(await page.$eval('[data-weekly-card="Zenon Kwok Ze Yong"] [data-weekly-edit]', b => b.textContent).catch(() => '')));
   await page.click('#weekly-view [data-weekly-write]');
   await page.waitForSelector('#weekly-modal:not(.hidden)');
   const rowsText = await page.textContent('#weekly-modal-body');
@@ -225,8 +226,40 @@ async function skipTours(page) {
   check('edited mark shows', /Edited Tue/.test(view3));
   check('Escape closes editor', await (async () => { await page.click('[data-weekly-edit="Deane Cheng"]'); await page.keyboard.press('Escape'); await page.waitForTimeout(100); return page.$eval('#weekly-modal', e => e.classList.contains('hidden')); })());
 
+  // Notes: Shift+Enter is a new line, Enter still sends, long notes fit (asked in Suggestions)
+  await page.click('[data-weekly-edit="Deane Cheng"]'); await page.waitForSelector('#weekly-modal:not(.hidden)');
+  const noteSel = '#weekly-modal [data-weekly-note="0"]';
+  const h0 = await page.$eval(noteSel, e => e.offsetHeight);
+  await page.fill(noteSel, '');
+  await page.focus(noteSel);
+  const longLine = 'Still waiting on the LinkedIn task fix. '.repeat(8).trim();
+  await page.keyboard.type('Line one');
+  await page.keyboard.press('Shift+Enter');
+  await page.keyboard.type(longLine);
+  check('Shift+Enter adds a new line, editor stays open', (await page.$eval(noteSel, e => e.value)) === 'Line one\n' + longLine && !(await page.$eval('#weekly-modal', e => e.classList.contains('hidden'))));
+  { const row = await page.$('#weekly-modal [data-weekly-project-row="0"]'); await row.screenshot({ path: path.join(OUT, 'wk-note-multiline.png') });
+    await page.evaluate(() => document.documentElement.classList.add('dark')); await page.waitForTimeout(150);
+    await row.screenshot({ path: path.join(OUT, 'wk-note-multiline-dark.png') });
+    await page.evaluate(() => document.documentElement.classList.remove('dark')); }
+  check('note box grows with the text', (await page.$eval(noteSel, e => e.offsetHeight)) > h0, h0 + ' -> ' + (await page.$eval(noteSel, e => e.offsetHeight)));
+  await page.fill('#weekly-extra', '');
+  await page.focus('#weekly-extra');
+  await page.keyboard.type('Admin');
+  await page.keyboard.press('Shift+Enter');
+  await page.keyboard.type('New biz');
+  await page.focus(noteSel);
+  await page.keyboard.press('Enter');
+  await page.waitForTimeout(600);
+  check('Enter in a note box sends the update', await page.$eval('#weekly-modal', e => e.classList.contains('hidden')));
+  const curN = (await page.evaluate(() => window.__fb.data.people.u1.weekly)).find(e => e.week === '2026-10-05');
+  const gws = curN && curN.rows.find(r => r.project === 'GWS recording');
+  check('long note with a line break saved in full', gws && gws.note === 'Line one\n' + longLine && gws.note.length > 300, gws && gws.note.length);
+  check('extra line keeps its line break', curN && curN.extra === 'Admin\nNew biz', curN && JSON.stringify(curN.extra));
+  const cardN = await page.$$eval('#weekly-view section', ss => { const c = ss.find(s => s.textContent.includes('Deane Cheng')); return c ? c.innerText : ''; });
+  check('card shows the note on two lines', /Line one\n\s*Still waiting/.test(cardN) && /Admin\n\s*New biz/.test(cardN), cardN.slice(0, 400));
+
   // Delete my update, then Undo
-  const myWeeks = () => page.evaluate(() => (window.__fb.data.people.u1.weekly || []).map(w => w.week));
+  const myWeeks =() => page.evaluate(() => (window.__fb.data.people.u1.weekly || []).map(w => w.week));
   const weeksBefore = await myWeeks();
   await page.click('[data-weekly-edit="Deane Cheng"]'); await page.waitForSelector('#weekly-modal:not(.hidden)');
   check('editor offers Delete update when one exists', !!(await page.$('#weekly-modal [data-weekly-delete]')));

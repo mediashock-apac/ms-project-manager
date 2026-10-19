@@ -96,7 +96,7 @@ function extra() {
   // 1. WIP
   await page.click('[data-view-btn="wip"]'); await page.waitForTimeout(500); await skipTours(page);
   const hdr = await page.evaluate(() => { var b = [...document.querySelectorAll('[data-wip-fold]')].find(x => /SMB webinars/.test(x.textContent)); return b ? b.textContent : ''; });
-  check('WIP header shows "Needs help"', /Needs help/.test(hdr), hdr.slice(0, 80));
+  check('WIP header says the project needs help (At risk · needs help)', /At risk/.test(hdr) && /needs help/i.test(hdr), hdr.slice(0, 80));
   await page.evaluate(() => { var b = [...document.querySelectorAll('[data-wip-fold]')].find(x => /SMB webinars/.test(x.textContent)); if (b && b.getAttribute('aria-expanded') === 'false') b.click(); });
   await page.waitForTimeout(400);
   const card = await page.evaluate(() => { var b = [...document.querySelectorAll('[data-wip-fold]')].find(x => /SMB webinars/.test(x.textContent)); return b ? b.closest('.border-b').textContent : ''; });

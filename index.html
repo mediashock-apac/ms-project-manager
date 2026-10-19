@@ -136,11 +136,7 @@
      proportionally more of it, or the project list is squeezed beside the Away column. At a bigger
      size they stack until the screen is that much wider (breakpoint x size). */
   html[data-meeting-zoom] #wip-projects-wrap, html[data-meeting-zoom] #wip-agenda-grid { grid-template-columns: minmax(0, 1fr); }
-  html[data-meeting-zoom] #wip-away-side { position: static; }
   html[data-meeting-zoom] #wip-ahead { grid-column: auto; }
-  @media (min-width: 1680px) { html[data-meeting-zoom="1.2"] #wip-projects-wrap { grid-template-columns: minmax(0, 1fr) 24rem; } html[data-meeting-zoom="1.2"] #wip-away-side { position: sticky; } }
-  @media (min-width: 2100px) { html[data-meeting-zoom="1.5"] #wip-projects-wrap { grid-template-columns: minmax(0, 1fr) 24rem; } html[data-meeting-zoom="1.5"] #wip-away-side { position: sticky; } }
-  @media (min-width: 2520px) { html[data-meeting-zoom="1.8"] #wip-projects-wrap { grid-template-columns: minmax(0, 1fr) 24rem; } html[data-meeting-zoom="1.8"] #wip-away-side { position: sticky; } }
   @media (min-width: 1229px) { html[data-meeting-zoom="1.2"] #wip-agenda-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } html[data-meeting-zoom="1.2"] #wip-ahead { grid-column: span 2 / span 2; } }
   @media (min-width: 1536px) { html[data-meeting-zoom="1.5"] #wip-agenda-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } html[data-meeting-zoom="1.5"] #wip-ahead { grid-column: span 2 / span 2; } }
   @media (min-width: 1843px) { html[data-meeting-zoom="1.8"] #wip-agenda-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } html[data-meeting-zoom="1.8"] #wip-ahead { grid-column: span 2 / span 2; } }
@@ -296,6 +292,10 @@
   .dark .gantt-leave {
     background-image: repeating-linear-gradient(45deg, rgba(228, 228, 231, 0.16) 0 4px, transparent 4px 9px);
   }
+  /* WIP Team load: a day someone is away. Amber, the app-wide "not available" colour, hatched so
+     it reads as absence rather than as a busier day. */
+  .wip-load-away { background-color: #fef3c7; background-image: repeating-linear-gradient(45deg, rgba(217, 119, 6, 0.22) 0 4px, transparent 4px 9px); }
+  .dark .wip-load-away { background-color: rgba(245, 158, 11, 0.12); background-image: repeating-linear-gradient(45deg, rgba(245, 158, 11, 0.22) 0 4px, transparent 4px 9px); }
 
   @keyframes checklist-check-pop { from { background-color: rgba(16, 185, 129, 0.2); } to { background-color: transparent; } }
   .checklist-just-checked { animation: checklist-check-pop 0.5s ease-out; }
@@ -1787,12 +1787,12 @@
         </div>
       </div>
       <div id="wip-alerts" class="mb-4"></div>
-      <!-- By project: projects on the left, the Away card in a narrow column on the right (stacks
-           below on narrow screens). Asked for directly, from a wide screen where the project rows
-           left most of their width empty. The column sticks while the project list scrolls. -->
-      <div id="wip-projects-wrap" class="grid grid-cols-1 min-[1400px]:grid-cols-[minmax(0,1fr)_24rem] gap-4 items-start">
+      <!-- By project: Team load (who has what due on which day, and who is away) above the projects,
+           full width. It replaced the Away column that sat beside the projects: leave now shows in
+           each person's row (see TEAM LOAD). -->
+      <div id="wip-projects-wrap">
+        <div id="wip-load" class="mb-4"></div>
         <div id="wip-projects" class="min-w-0"></div>
-        <div id="wip-away-side" class="min-w-0 min-[1400px]:sticky min-[1400px]:top-0"></div>
       </div>
       <div id="wip-agenda-body">
       <!-- min-w-0 on both columns: a grid track defaults to min-width:auto, so without it a long
@@ -2572,7 +2572,7 @@
       : notif.type === 'chat_reaction' ? (who + ' reacted to your message')
       : notif.type === 'assigned' ? (who + ' made you the owner')
       : notif.type === 'involved' ? (who + ' added you to a task')
-      : notif.type === 'suggestion_fixed' ? (who + ' fixed your suggestion')
+      : isSuggestionNotif(notif) ? suggestionStatusWords(notif)
       : notif.type === 'checklist_assigned' ? (who + ' assigned you ' + checklistCountWords(notif.count))
       : notif.type === 'checklist_done' ? (who + ' finished ' + checklistCountWords(notif.count))
       : notif.type === 'step_up' ? (who + ' finished a step: you\'re up')
@@ -2598,7 +2598,7 @@
       if (notif.chatProject) {
         setView('chat');
         selectChatProject(notif.chatProject);
-      } else if (notif.type === 'suggestion_fixed') {
+      } else if (isSuggestionNotif(notif)) {
         setView('suggestions');
       } else if (notif.type === 'weekly_reminder') {
         openWeeklyFromReminder();
@@ -5959,19 +5959,29 @@
     return count > 1 ? count + ' checklist items' : 'a checklist item';
   }
 
-  // Tells a suggestion's author it was marked Fixed -- asked for directly ("when a suggestion is
-  // fixed, can the author be notified?"). Sent only on the transition INTO Fixed (the caller
-  // checks), so re-saving an already-Fixed suggestion doesn't repeat it. AI-imported suggestions
-  // have no person to tell. No rules change: `notifications` create is already open to any
-  // teammate.
-  function notifySuggestionFixed(s) {
+  // Tells a suggestion's author whenever its status changes (asked: "notify whenever status of
+  // the suggestion changes"; it used to be Fixed only). The caller only calls it on a real change,
+  // so re-picking the same status sends nothing. AI-imported suggestions have no person to tell.
+  // No rules change: `notifications` create is already open to any teammate.
+  // Older notifications have type 'suggestion_fixed' and no status: they read as Fixed.
+  // No name in the wording (asked): whoever changes the status isn't necessarily who does the fix.
+  function suggestionStatusWords(n) {
+    var st = n.type === 'suggestion_fixed' ? 'fixed' : n.status;
+    return st === 'wip' ? 'Your suggestion is being worked on'
+      : st === 'fixed' ? 'Your suggestion has been fixed'
+      : st === 'unabletofix' ? "Your suggestion couldn't be fixed"
+      : 'Your suggestion is open again';
+  }
+  function isSuggestionNotif(n) { return n.type === 'suggestion_status' || n.type === 'suggestion_fixed'; }
+  function notifySuggestionStatus(s, status) {
     if (!s || s.source === 'ai' || !s.author) return;
     var user = auth.currentUser;
     var myName = user ? (user.displayName || user.email) : null;
     if (s.author === myName) return;
     setDoc(doc(notificationsCol), {
       recipient: s.author,
-      type: 'suggestion_fixed',
+      type: 'suggestion_status',
+      status: status,
       taskId: null,
       taskName: '',
       chatProject: null,
@@ -5980,7 +5990,7 @@
       snippet: String(s.text || '').slice(0, 140),
       at: new Date().toISOString(),
       read: false
-    }).catch(function (e) { console.error('Failed to notify suggestion fixed', e); });
+    }).catch(function (e) { console.error('Failed to notify suggestion status', e); });
   }
 
   /* =========================================================
@@ -13611,7 +13621,7 @@
         (row.project && row.project !== 'No project'
           ? '<button type="button" ' + ((typeof mActive === 'function' && mActive()) ? 'data-m-project' : 'data-weekly-project') + '="' + escapeHtml(row.project) + '" data-tooltip="Open the project" class="tooltip-top inline text-left font-semibold text-zinc-900 dark:text-white hover:underline decoration-zinc-400 underline-offset-2">' + projectNameHtml(row.project) + '</button>'
           : '<span class="font-semibold text-zinc-900 dark:text-white">' + projectNameHtml(row.project) + '</span>') +
-        (row.note ? ' <span class="text-zinc-600 dark:text-zinc-300">– ' + escapeHtml(row.note) + '</span>' : '') +
+        (row.note ? ' <span class="text-zinc-600 dark:text-zinc-300 whitespace-pre-line">– ' + escapeHtml(row.note) + '</span>' : '') +
         (row.from ? ' <span class="text-xs text-zinc-500 dark:text-zinc-400 whitespace-nowrap" data-tooltip="' + escapeHtml(row.from) + ' owns this project; their update shows here">· from ' + escapeHtml(String(row.from).split(' ')[0]) + '</span>' : '') +
         (isNew ? ' <span class="align-middle text-[10px] font-bold px-1.5 py-px rounded-full bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300">NEW</span>' : '') +
         (key === weeklyCurrentKey() ? weeklyRowContextHtml(row, g) : '') + '</span>' +
@@ -13630,14 +13640,14 @@
       // An admin's edit to someone else's update always shows, with who made it.
       var byOther = entry.editedBy && entry.editedBy !== name;
       var edited = entry.editedAt && (byOther || new Date(entry.editedAt) > weeklyMeetingStart(key));
-      right = '<span class="text-xs text-zinc-500 dark:text-zinc-400">' + (edited ? 'Edited ' + escapeHtml(weeklyStamp(entry.editedAt)) + (byOther ? ' by ' + escapeHtml(String(entry.editedBy).split(' ')[0]) : '') : 'Updated ' + escapeHtml(weeklyStamp(entry.at))) + '</span>';
+      right = '<span class="text-xs text-zinc-500 dark:text-zinc-400">' + (edited ? 'Edited ' + escapeHtml(weeklyStamp(entry.editedAt)) + (byOther ? ' by ' + escapeHtml(String(entry.editedBy).split(' ')[0]) : '') : 'Updated ' + escapeHtml(weeklyStamp(entry.at)) + (byOther ? ' by ' + escapeHtml(String(entry.editedBy).split(' ')[0]) : '')) + '</span>';
       if (entry.leave) {
-        body = '<p class="px-4 py-3 text-sm text-zinc-600 dark:text-zinc-300"><span class="font-semibold text-amber-800 dark:text-amber-300">On leave this week.</span>' + (entry.extra ? ' ' + escapeHtml(entry.extra) : '') + '</p>';
+        body = '<p class="px-4 py-3 text-sm text-zinc-600 dark:text-zinc-300"><span class="font-semibold text-amber-800 dark:text-amber-300">On leave this week.</span>' + (entry.extra ? ' <span class="whitespace-pre-line">' + escapeHtml(entry.extra) + '</span>' : '') + '</p>';
       } else {
         var rows = weeklyRowsSorted(weeklyRowsWithFollowed(name, key, entry));
         body = '<div class="divide-y divide-zinc-100 dark:divide-zinc-700/60">' +
           rows.map(function (r) { return weeklyRowHtml(name, key, r, boardOf[projectKey(r.project)]); }).join('') +
-          (entry.extra ? '<div class="grid grid-cols-1 sm:grid-cols-[8.5rem_minmax(0,1fr)] gap-x-3 gap-y-0.5 items-baseline px-4 py-2.5"><span class="flex items-center gap-1.5 text-xs font-bold text-zinc-500 dark:text-zinc-400">' + weeklyIcon('extra') + 'Also</span><span class="text-sm text-zinc-600 dark:text-zinc-300 break-words">' + escapeHtml(entry.extra) + '</span></div>' : '') +
+          (entry.extra ? '<div class="grid grid-cols-1 sm:grid-cols-[8.5rem_minmax(0,1fr)] gap-x-3 gap-y-0.5 items-baseline px-4 py-2.5"><span class="flex items-center gap-1.5 text-xs font-bold text-zinc-500 dark:text-zinc-400">' + weeklyIcon('extra') + 'Also</span><span class="text-sm text-zinc-600 dark:text-zinc-300 break-words whitespace-pre-line">' + escapeHtml(entry.extra) + '</span></div>' : '') +
           (!rows.length && !entry.extra ? '<p class="px-4 py-3 text-sm text-zinc-400">Nothing to report.</p>' : '') +
         '</div>';
       }
@@ -13677,6 +13687,10 @@
     if (typeof mActive === 'function' && mActive()) edit = '';
     else if (entry && name === me) {
       edit = '<button type="button" data-weekly-edit="' + escapeHtml(name) + '" class="shrink-0 inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg border border-zinc-300 dark:border-zinc-500 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700">' + svgIcon('pencil', 'w-3 h-3') + 'Edit</button>';
+    } else if (!entry && isAdminUser() && name !== me && weeklyPersonDocByName(name)) {
+      // Admins can enter an update for someone who hasn't (asked 2026-10-08: "Can Monday meetings
+      // be manually input"), e.g. live in the meeting. Same editor; saved to their doc with editedBy.
+      edit = '<button type="button" data-weekly-edit="' + escapeHtml(name) + '" class="shrink-0 inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-lg border border-zinc-300 dark:border-zinc-500 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700">' + svgIcon('pencil', 'w-3 h-3') + 'Fill in for ' + escapeHtml(name.split(' ')[0]) + '</button>';
     } else if (entry && isAdminUser()) {
       edit = '<button type="button" data-weekly-edit="' + escapeHtml(name) + '" data-tooltip="Edit ' + escapeHtml(name.split(' ')[0]) + '\'s update" aria-label="Edit ' + escapeHtml(name) + '\'s update" class="tooltip-top shrink-0 w-7 h-7 flex items-center justify-center rounded-md text-zinc-400 dark:text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-600">' + svgIcon('pencil', 'w-3.5 h-3.5') + '</button>';
     }
@@ -13759,7 +13773,7 @@
               '<span class="flex items-center gap-2 min-w-0 text-sm font-semibold text-zinc-800 dark:text-zinc-100">' + avatarHtml(h.name, 'w-6 h-6 shrink-0 self-center', 'text-[10px]') + '<span class="truncate">' + escapeHtml(h.name.split(' ')[0]) + '</span></span>' +
               '<span class="min-w-0 text-sm leading-snug">' +
                 '<button type="button" data-weekly-project="' + escapeHtml(h.project) + '" class="inline text-left font-semibold text-zinc-900 dark:text-white break-words hover:underline decoration-zinc-400 underline-offset-2">' + projectNameHtml(h.project) + '</button>' +
-                '<span class="block mt-0.5 text-zinc-700 dark:text-zinc-200 break-words">' + (h.note ? escapeHtml(h.note) : 'Needs help') + '</span>' +
+                '<span class="block mt-0.5 text-zinc-700 dark:text-zinc-200 break-words whitespace-pre-line">' + (h.note ? escapeHtml(h.note) : 'Needs help') + '</span>' +
                 (weeklyCanResolve(h.name) && !(typeof mActive === 'function' && mActive())
                   ? '<button type="button" data-weekly-resolve="' + escapeHtml(h.project) + '" data-weekly-resolve-who="' + escapeHtml(h.name) + '" class="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg border border-emerald-300 dark:border-emerald-500/40 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-500/10">' + weeklyIcon('done', 'w-3 h-3') + 'Resolve</button>'
                   : '') +
@@ -13828,9 +13842,17 @@
       r.cover = r.attached ? weeklyOwnerRow(r.project, key, me) : null;
       r.mine = !!r.status;
     });
-    weeklyDraft = { week: key, person: me, personId: target.id, rows: rows, extra: existing ? (existing.extra || '') : '', leave: existing ? !!existing.leave : weeklyAwayDuring(me, key), existing: existing };
+    // Rows saved last time for a project that isn't on this person's board and wasn't carried from
+    // last week were added by hand ("+ Add a project"); they keep their Remove link.
+    var boardKeys = {};
+    board.forEach(function (g) { boardKeys[projectKey(g.project)] = true; });
+    rows.forEach(function (r) {
+      if (!boardKeys[projectKey(r.project)] && !(prev && !prev.leave && (prev.rows || []).some(function (x) { return x && x.project === r.project; }))) r.added = true;
+    });
+    weeklyDraft = { week: key, person: me, personId: target.id, rows: rows, extra: existing ? (existing.extra || '') : '', leave: existing ? !!existing.leave : weeklyAwayDuring(me, key), existing: existing, adding: false, addQuery: '' };
     renderWeeklyEditor();
     weeklyModal.classList.remove('hidden');
+    document.querySelectorAll('#weekly-modal-body [data-weekly-note], #weekly-extra').forEach(weeklyAutosize);
     weeklyModal.classList.add('flex');
   }
 
@@ -13851,7 +13873,7 @@
       ? 'Marked as on leave. Add a note if anyone needs to know something.'
       : d.rows.length
         ? 'Pick a status for each project. A note is optional.'
-        : 'Nothing open on the board for ' + (mine ? 'you' : first) + '. Add anything worth saying below.';
+        : 'Nothing open on the board for ' + (mine ? 'you' : first) + '. Add a project or anything worth saying below.';
     /* Simpler editor (asked: "Can statuses be a dropdown instead of pills? It adds to visual clutter.
        Can we also see how we can make this interface visually simpler and easier?"):
        - one dropdown per project instead of six pills, on the project's own line;
@@ -13871,7 +13893,7 @@
           coveredHtml += '<div data-weekly-project-row="' + i + '" class="px-5 py-2.5 flex items-start gap-3 border-b border-zinc-100 dark:border-zinc-700/60">' +
             '<div class="min-w-0 flex-1"><p class="text-sm font-semibold text-zinc-900 dark:text-white break-words">' + projectNameHtml(r.project) + late + '</p>' +
               '<p class="text-xs text-zinc-500 dark:text-zinc-400 break-words mt-0.5">' + escapeHtml(ownerFirst) + ': <b class="' + cm.text + '">' + cm.label + '</b>' +
-                (r.cover.note ? ' – ' + escapeHtml(r.cover.note) : '') + '</p></div>' +
+                (r.cover.note ? ' – <span class="whitespace-pre-line">' + escapeHtml(r.cover.note) + '</span>' : '') + '</p></div>' +
             '<button type="button" data-weekly-own="' + i + '" class="shrink-0 text-xs font-bold text-brand-600 dark:text-brand-400 hover:underline mt-0.5">Answer myself</button>' +
           '</div>';
           return;
@@ -13892,25 +13914,38 @@
             ' <button type="button" data-weekly-use="' + i + '" class="font-bold text-brand-600 dark:text-brand-400 hover:underline">Use this</button></p>'
           : '';
         ownHtml += '<div data-weekly-project-row="' + i + '" class="px-5 py-3 border-b border-zinc-100 dark:border-zinc-700/60 flex flex-col gap-2">' +
-          '<div class="flex items-start gap-3"><div class="min-w-0 flex-1"><p class="text-[15px] font-bold text-zinc-900 dark:text-white break-words">' + projectNameHtml(r.project) + late + '</p>' + upcoming + '</div>' + select + '</div>' +
+          '<div class="flex items-start gap-3"><div class="min-w-0 flex-1"><p class="text-[15px] font-bold text-zinc-900 dark:text-white break-words">' + projectNameHtml(r.project) + late +
+            (r.added ? ' <button type="button" data-weekly-remove="' + i + '" class="text-xs font-semibold text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 hover:underline whitespace-nowrap">Remove</button>' : '') + '</p>' + upcoming + '</div>' + select + '</div>' +
           (r.cover ? '<p class="text-xs text-zinc-500 dark:text-zinc-400">Answering yourself. <button type="button" data-weekly-follow="' + i + '" class="font-bold text-brand-600 dark:text-brand-400 hover:underline">Use ' + escapeHtml(ownerFirst) + '\'s update instead</button></p>' : '') +
           (r.status === 'done' && weeklyOpenTaskCount(r.project)
             ? '<p class="text-xs font-semibold text-amber-700 dark:text-amber-400">' + weeklyOpenTaskCount(r.project) + (weeklyOpenTaskCount(r.project) === 1 ? ' task here is' : ' tasks here are') + ' still open on the board.</p>'
             : '') +
           latest +
           (r.status || r.note
-            ? '<input type="text" data-weekly-note="' + i + '" maxlength="200" value="' + escapeHtml(r.note || '') + '" placeholder="' + (r.status === 'help' ? 'What do you need, and from whom?' : 'Add a note (optional)') + '" aria-label="Note for ' + escapeHtml(r.project) + '" class="w-full text-sm rounded-lg border px-3 py-2 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand-500/40 ' + (r.status === 'help' ? 'border-brand-300 dark:border-brand-500/50' : 'border-zinc-300 dark:border-zinc-600') + '">'
+            ? '<textarea data-weekly-note="' + i + '" rows="1" maxlength="' + WEEKLY_NOTE_MAX + '" placeholder="' + (r.status === 'help' ? 'What do you need, and from whom?' : 'Add a note (Shift+Enter for a new line)') + '" title="Enter sends your update. Shift+Enter starts a new line." aria-label="Note for ' + escapeHtml(r.project) + '" class="block w-full resize-none overflow-hidden text-sm rounded-lg border px-3 py-2 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand-500/40 ' + (r.status === 'help' ? 'border-brand-300 dark:border-brand-500/50' : 'border-zinc-300 dark:border-zinc-600') + '">' + escapeHtml(r.note || '') + '</textarea>'
             : '') +
         '</div>';
       });
       body += ownHtml;
+      // Tag a project the board doesn't link to this person (asked 2026-10-08: "Can Monday meetings
+      // be manually input with the ability to tag the project that is mentioned?"). Searches every
+      // open project; the list under the box redraws on its own (weeklyRenderAddList) so typing
+      // keeps focus.
+      body += '<div class="px-5 py-3 border-b border-zinc-100 dark:border-zinc-700/60">' + (d.adding
+        ? '<label for="weekly-add-input" class="text-sm font-semibold text-zinc-700 dark:text-zinc-200">Add a project</label>' +
+          '<input type="text" id="weekly-add-input" autocomplete="off" value="' + escapeHtml(d.addQuery) + '" placeholder="Search by code, client or name" class="mt-1.5 w-full text-sm rounded-lg border border-zinc-300 dark:border-zinc-600 px-3 py-2 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand-500/40">' +
+          '<div id="weekly-add-list" class="mt-1.5 flex flex-col"></div>'
+        : '<button type="button" data-weekly-add class="text-sm font-bold text-brand-600 dark:text-brand-400 hover:underline">+ Add a project</button>') +
+      '</div>';
       if (coveredHtml) body += '<p class="px-5 pt-4 pb-1.5 text-xs font-bold text-zinc-500 dark:text-zinc-400">Answered by their owners · ' + covered + '</p>' + coveredHtml;
     }
     body += '<div class="px-5 py-4 flex flex-col gap-2 bg-zinc-50 dark:bg-zinc-900/40 border-t border-zinc-200 dark:border-zinc-700">' +
       '<label for="weekly-extra" class="text-sm font-semibold text-zinc-700 dark:text-zinc-200">' + (d.leave ? 'Note (optional)' : 'Anything not on the board? <span class="font-normal text-zinc-500 dark:text-zinc-400">Admin, new biz, training</span>') + '</label>' +
-      '<input type="text" id="weekly-extra" maxlength="300" value="' + escapeHtml(d.extra) + '" placeholder="' + (d.leave ? 'e.g. Invoices sent before I left' : 'e.g. AI course booked for Thursday') + '" class="w-full text-sm rounded-lg border border-zinc-300 dark:border-zinc-600 px-3 py-2 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand-500/40">' +
+      '<textarea id="weekly-extra" rows="1" maxlength="' + WEEKLY_NOTE_MAX + '" title="Enter sends your update. Shift+Enter starts a new line." placeholder="' + (d.leave ? 'e.g. Invoices sent before I left' : 'e.g. AI course booked for Thursday') + '" class="block w-full resize-none overflow-hidden text-sm rounded-lg border border-zinc-300 dark:border-zinc-600 px-3 py-2 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand-500/40">' + escapeHtml(d.extra) + '</textarea>' +
     '</div>';
     document.getElementById('weekly-modal-body').innerHTML = body;
+    document.querySelectorAll('#weekly-modal-body [data-weekly-note], #weekly-extra').forEach(weeklyAutosize);
+    if (d.adding) weeklyRenderAddList();
     var answered = d.rows.filter(function (r) { return r.status || weeklyRowFollowsOwner(r); }).length;
     var open = d.rows.length - answered;
     document.getElementById('weekly-modal-foot').innerHTML =
@@ -13923,8 +13958,65 @@
       '<button type="button" data-weekly-send class="text-sm font-bold px-4 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white">' + (d.existing ? 'Save changes' : 'Send update') + '</button>';
   }
 
+  // Projects "+ Add a project" can offer: open on the board (not fully archived) or a WIP entry,
+  // minus the ones already in the editor. Every typed word must match, in any order.
+  var weeklyAddMatches = [];
+  function weeklyAddCandidates(q) {
+    var d = weeklyDraft;
+    var have = {};
+    (d ? d.rows : []).forEach(function (r) { have[projectKey(r.project)] = true; });
+    var names = allProjectNames().filter(weeklyProjectStillOpen);
+    projectDocs.forEach(function (p) { if (p && p.name && WIP_CATEGORIES.some(function (c) { return c.key === p.wipCategory; })) names.push(p.name); });
+    var words = String(q || '').toLowerCase().split(/\s+/).filter(Boolean);
+    var seen = {};
+    return names.filter(function (n) {
+      var k = projectKey(n);
+      if (have[k] || seen[k]) return false;
+      seen[k] = true;
+      var low = stripZwsp(n).toLowerCase();
+      return words.every(function (w) { return low.indexOf(w) !== -1; });
+    }).sort(function (a, b) { return a.localeCompare(b); });
+  }
+  function weeklyRenderAddList() {
+    var list = document.getElementById('weekly-add-list');
+    var inp = document.getElementById('weekly-add-input');
+    if (!list || !inp || !weeklyDraft) return;
+    weeklyDraft.addQuery = inp.value;
+    var all = weeklyAddCandidates(inp.value);
+    weeklyAddMatches = all.slice(0, 8);
+    list.innerHTML = weeklyAddMatches.length
+      ? weeklyAddMatches.map(function (n, i) {
+          return '<button type="button" data-weekly-pick="' + i + '" class="text-left text-sm px-3 py-2 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-800 dark:text-zinc-100 break-words">' + projectNameHtml(n) + '</button>';
+        }).join('') + (all.length > 8 ? '<p class="px-3 py-1 text-xs text-zinc-400 dark:text-zinc-500">' + (all.length - 8) + ' more. Keep typing to narrow it down.</p>' : '')
+      : '<p class="px-3 py-2 text-sm text-zinc-400 dark:text-zinc-500">' + (inp.value.trim() ? 'No open project matches.' : 'No other open projects.') + '</p>';
+  }
+  // A hand-added row is answered by this person (never folded under its owner's update).
+  function weeklyAddProject(name) {
+    var d = weeklyDraft;
+    if (!d || !name) return;
+    weeklyKeepNotes();
+    var prev = weeklyEntryFor(d.person, weeklyShiftKey(d.week, -1));
+    var last = prev && !prev.leave ? (prev.rows || []).find(function (x) { return x && x.project === name; }) || null : null;
+    d.rows.push({ project: name, status: null, note: '', late: null, upcoming: [], latest: weeklyLatestStatus(name), last: last, added: true, attached: false, cover: null, mine: true });
+    d.adding = false;
+    d.addQuery = '';
+    renderWeeklyEditor();
+    var sel = document.querySelector('#weekly-modal-body [data-weekly-select="' + (d.rows.length - 1) + '"]');
+    if (sel) sel.focus();
+  }
+
   // An editor row answered by the project's owner (you're only attached, and haven't answered it).
   function weeklyRowFollowsOwner(r) { return !!(r && r.cover && !r.mine); }
+
+  // Notes are boxes that grow as you type, with Shift+Enter for a new line (asked in Suggestions:
+  // a one-line box capped at 200 characters couldn't hold a long note or a line break).
+  var WEEKLY_NOTE_MAX = 2000;
+  function weeklyAutosize(el) {
+    if (!el.offsetParent) return;   // not on screen yet: sized again once the editor opens
+    el.style.height = 'auto';
+    el.style.height = Math.min(el.scrollHeight + 2, 240) + 'px';
+    el.style.overflowY = el.scrollHeight + 2 > 240 ? 'auto' : 'hidden';
+  }
 
   function weeklyKeepNotes() {
     // Notes and the extra line are read from the DOM before any re-render throws them away.
@@ -13970,14 +14062,14 @@
     var me = weeklyDraftDoc(d);
     if (!d || !me) return;
     var rows = d.leave ? [] : d.rows.filter(function (r) { return r.status; }).map(function (r) {
-      var out = { project: r.project, status: r.status, note: String(r.note || '').trim().slice(0, 200) };
+      var out = { project: r.project, status: r.status, note: String(r.note || '').trim().slice(0, WEEKLY_NOTE_MAX) };
       if (r.status === 'help' && r.resolved) { out.resolved = true; out.resolvedAt = r.resolved.at || null; out.resolvedBy = r.resolved.by || null; }
       return out;
     });
     // Projects you're only attached to and didn't answer yourself follow their owner's update,
     // including one the owner hasn't written yet: it shows up on your card once they do.
-    var follows = d.leave ? [] : d.rows.filter(function (r) { return r.attached && !r.status; }).map(function (r) { return r.project; });
-    var extra = String(d.extra || '').trim().slice(0, 300);
+    var follows = d.leave ? [] : d.rows.filter(function (r) { return r.attached && !r.status && !r.added; }).map(function (r) { return r.project; });
+    var extra = String(d.extra || '').trim().slice(0, WEEKLY_NOTE_MAX);
     var anyCovered = !d.leave && d.rows.some(weeklyRowFollowsOwner);
     if (!d.leave && !rows.length && !extra && !anyCovered) { showToast('Tap a status on at least one project first', 'info'); return; }
     var now = new Date().toISOString();
@@ -14008,7 +14100,7 @@
       });
       if (patch.leave) logActivity('leave_changed', (d.leave ? 'Booked leave ' : 'Removed leave ') + formatShortDate(d.week) + '–' + formatShortDate(weekEndKey) + forWhom + ' (Monday update)');
       closeWeeklyEditor();
-      showToast(d.existing ? 'Update saved' + forWhom : 'Update sent. Thanks!', 'success');
+      showToast(d.existing || forWhom ? 'Update saved' + forWhom : 'Update sent. Thanks!', 'success');
     }).catch(function (err) {
       if (btn) btn.disabled = false;
       showToast('Could not save your update: ' + err.message, 'error');
@@ -14035,6 +14127,18 @@
         weeklyKeepNotes();
         var ur = weeklyDraft.rows[+t.getAttribute('data-weekly-use')];
         if (ur && ur.latest) ur.note = ur.latest.text;
+        renderWeeklyEditor();
+      } else if (t.hasAttribute('data-weekly-add')) {
+        weeklyKeepNotes();
+        weeklyDraft.adding = true;
+        renderWeeklyEditor();
+        var ai = document.getElementById('weekly-add-input');
+        if (ai) ai.focus();
+      } else if (t.hasAttribute('data-weekly-pick')) {
+        weeklyAddProject(weeklyAddMatches[+t.getAttribute('data-weekly-pick')]);
+      } else if (t.hasAttribute('data-weekly-remove')) {
+        weeklyKeepNotes();
+        weeklyDraft.rows.splice(+t.getAttribute('data-weekly-remove'), 1);
         renderWeeklyEditor();
       } else if (t.hasAttribute('data-weekly-rest')) {
         weeklyKeepNotes();
@@ -14070,9 +14174,23 @@
         if (inp) inp.focus();
       }
     });
+    weeklyModal.addEventListener('input', function (e) {
+      if (e.target.id === 'weekly-add-input') weeklyRenderAddList();
+      if (e.target.matches && e.target.matches('[data-weekly-note], #weekly-extra')) weeklyAutosize(e.target);
+    });
     weeklyModal.addEventListener('keydown', function (e) {
+      // In the project search: Enter adds the top match, Escape closes just the search.
+      if (e.target.id === 'weekly-add-input' && (e.key === 'Enter' || e.key === 'Escape')) {
+        e.preventDefault(); e.stopPropagation();
+        if (e.key === 'Enter') { if (weeklyAddMatches.length) weeklyAddProject(weeklyAddMatches[0]); return; }
+        weeklyDraft.adding = false; weeklyDraft.addQuery = '';
+        renderWeeklyEditor();
+        var ab = document.querySelector('#weekly-modal-body [data-weekly-add]');
+        if (ab) ab.focus();
+        return;
+      }
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeWeeklyEditor(); }
-      else if (e.key === 'Enter' && e.target.tagName === 'INPUT') { e.preventDefault(); saveWeeklyUpdate(); }
+      else if (e.key === 'Enter' && !e.shiftKey && !e.isComposing && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) { e.preventDefault(); saveWeeklyUpdate(); }
     });
 
     document.getElementById('weekly-bar').addEventListener('click', function (e) {
@@ -15535,9 +15653,9 @@
     var newStatus = select.value;
     // Captured BEFORE the write -- the snapshot that follows replaces this object.
     var before = suggestions.find(function (x) { return x.id === suggestionId; });
-    var wasFixed = before && before.status === 'fixed';
+    var oldStatus = (before && before.status) || 'open';
     updateDoc(doc(suggestionsCol, suggestionId), { status: newStatus }).then(function () {
-      if (newStatus === 'fixed' && !wasFixed) notifySuggestionFixed(before);
+      if (newStatus !== oldStatus) notifySuggestionStatus(before, newStatus);
     }).catch(function (err) {
       showToast('Could not update status: ' + err.message, 'error');
       lastSuggestionsRenderKey = null; // force a real rebuild: the data didn't change, the dropdown did
@@ -15809,7 +15927,9 @@
     rose:   'bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300',
     amber:  'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300',
     violet: 'bg-violet-50 text-violet-700 dark:bg-violet-500/15 dark:text-violet-300',
-    purple: 'bg-purple-50 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300'
+    purple: 'bg-purple-50 text-purple-700 dark:bg-purple-500/15 dark:text-purple-300',
+    brand:  'bg-brand-100 text-brand-800 dark:bg-brand-500/15 dark:text-brand-300',
+    emerald: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
   };
 
   // Shared shell so the three sections are visibly one family. The count sits in the header
@@ -15884,6 +16004,57 @@
         overdue: false, date: when, kind: 'Crunch', tone: 'amber',
         title: who + ' — ' + group.length + ' high-priority tasks due the same day',
         detail: wipDayLabel(when) + ' · ' + group.map(function (t) { return t.name; }).join(', '),
+        taskId: null
+      });
+    });
+
+    // CLASH -- WIP_CLASH_COUNT or more things due one person on one day, any priority: deadlines
+    // they own plus steps assigned to them (the same count as the Team load grid, which shows that
+    // day darkest). Crunch above is the narrower High-only rule; a day it already raised isn't
+    // repeated here.
+    var loadBy = wipLoadItems(open, today, horizon);
+    Object.keys(loadBy).forEach(function (who) {
+      Object.keys(loadBy[who].days).forEach(function (day) {
+        var items = loadBy[who].days[day];
+        if (items.length < WIP_CLASH_COUNT) return;
+        if ((spikes[who + '|' + day] || []).length >= 2) return;
+        out.push({
+          overdue: false, date: day, kind: 'Clash', tone: 'amber',
+          title: who + ' — ' + items.length + ' things due ' + wipDayLabel(day),
+          detail: items.map(function (it) { return it.text; }).join(', '),
+          taskId: null
+        });
+      });
+    });
+
+    // A STEP DUE WHILE ITS PERSON IS AWAY -- the task-deadline version is just below; a step has
+    // its own people (or the task owner when it has none) and can clash the same way.
+    open.forEach(function (t) {
+      (t.checklist || []).forEach(function (it) {
+        if (!it || it.done || !it.due || !parseDate(it.due) || it.due < today || it.due > horizon) return;
+        var people = stepPeople(it);
+        if (!people.length && t.assignee) people = [t.assignee];
+        people.forEach(function (n) {
+          if (!isOnLeave(n, it.due)) return;
+          if (n === t.assignee && t.deadline === it.due) return;   // the task's own row below says it
+          out.push({
+            overdue: false, date: it.due, kind: 'On leave', tone: 'violet',
+            title: '"' + (it.text || 'A step') + '" is due while ' + n + ' is away',
+            detail: 'Step in ' + t.name + ' · ' + t.project + ' · due ' + wipDayLabel(it.due),
+            taskId: t.id
+          });
+        });
+      });
+    });
+
+    // ASKED FOR HELP -- every open "Needs help" line from the Monday updates. It used to live only
+    // as a chip inside a project's header; this is the list the room decides from. Listed straight
+    // after the overdue roll-ups (an empty date sorts first).
+    weeklyHelpRequests().forEach(function (h) {
+      out.push({
+        overdue: false, date: '', kind: 'Needs help', tone: 'brand',
+        title: h.who + ' needs help on ' + h.project,
+        detail: h.note ? h.note : 'From their Monday update',
         taskId: null
       });
     });
@@ -16130,6 +16301,177 @@
     return rows.sort(function (a, b) { return a.start < b.start ? -1 : a.start > b.start ? 1 : a.name.localeCompare(b.name); });
   }
 
+  // "Oct 14 – Oct 16 · 3 days · Hospital", or "Every Mon until Nov 30 · next Oct 19" for a repeat.
+  function wipAwayText(r, today) {
+    var span = daysBetween(parseDate(r.start), parseDate(r.end)) + 1;
+    return r.repeatLabel
+      ? r.repeatLabel + (r.start >= today ? ' · next ' + formatShortDate(r.start) : ' · today') + (r.note ? ' · ' + r.note : '')
+      : formatShortDate(r.start) + ' – ' + formatShortDate(r.end) + ' · ' + span + ' day' + (span === 1 ? '' : 's') + (r.note ? ' · ' + r.note : '');
+  }
+
+  /* ---------------------------------------------------------
+     TEAM LOAD (2026-10-13). Asked: WIP is "for resourcing if more hands are needed and
+     deconflicting, project statuses". One row per person, one column per working day in the
+     window: how many things land on them each day, and the days they're away. Heaviest first, so
+     who needs hands is at the top and who has room is at the bottom.
+     From TeamGantt Workloads, Monday's workload view and Asana Workload, but WITHOUT their hour
+     estimates (that would be new work for everyone): it counts what is already dated, deadlines a
+     person owns plus steps assigned to them (a step with no people counts for the task's owner, as
+     on Calendar v2). Overdue work is counted beside the name, not on a day. A weekend date counts
+     on the Friday before. Leave sits in the row, so it replaced the Away column in By project
+     (Agenda keeps its Away card). Click a person, or any of their days, to list what's behind the
+     numbers: it's a shared screen, so nothing is hover-only.
+  --------------------------------------------------------- */
+  var WIP_CLASH_COUNT = 3;   // things due one person on one day that make a Clash
+  var wipLoadOpen = {};      // person -> their list is open (session only)
+
+  function wipLoadItems(open, today, horizon) {
+    var by = {};
+    function add(name, item) {
+      var p = by[name] = by[name] || { days: {}, overdue: [], due: 0 };
+      if (item.late) { p.overdue.push(item); return; }
+      if (item.date < today || item.date > horizon) return;
+      (p.days[item.date] = p.days[item.date] || []).push(item);
+      p.due++;
+    }
+    open.forEach(function (t) {
+      if (t.assignee && t.deadline && parseDate(t.deadline)) {
+        add(t.assignee, { kind: 'task', date: t.deadline, text: t.name, project: t.project, taskId: t.id, late: dueUrgency(t).overdue });
+      }
+      (t.checklist || []).forEach(function (it) {
+        if (!it || it.done || !it.due || !parseDate(it.due)) return;
+        var people = stepPeople(it);
+        if (!people.length && t.assignee) people = [t.assignee];
+        var late = stepIsLate(t, it);
+        people.forEach(function (n) {
+          // A step that is just the task again (same name and date, for its owner) counts once, as
+          // on Monday Meeting.
+          if (n === t.assignee && it.due === t.deadline && String(it.text || '').trim().toLowerCase() === String(t.name || '').trim().toLowerCase()) return;
+          add(n, { kind: 'step', date: it.due, text: it.text || 'Step', task: t.name, project: t.project, taskId: t.id, late: late });
+        });
+      });
+    });
+    return by;
+  }
+  function wipWorkDays(today, horizon) {
+    var out = [], d = parseDate(today), end = parseDate(horizon);
+    while (d && d <= end) {
+      if (d.getDay() !== 0 && d.getDay() !== 6) out.push(toDateInputValue(d));
+      d = addDays(d, 1);
+    }
+    return out;
+  }
+  function wipLoadCellCls(n, away) {
+    if (away && n) return 'wip-load-away ring-2 ring-inset ring-rose-500 text-rose-700 dark:text-rose-300';
+    if (away) return 'wip-load-away text-amber-800 dark:text-amber-300';
+    if (!n) return 'bg-zinc-50 dark:bg-zinc-700/30 text-transparent';
+    if (n === 1) return 'bg-brand-100 text-brand-900 dark:bg-brand-500/20 dark:text-brand-200';
+    if (n === 2) return 'bg-brand-300 text-brand-900 dark:bg-brand-500/50 dark:text-white';
+    return 'bg-brand-800 text-white';
+  }
+  function wipLoadItemLineHtml(it, when) {
+    return '<button type="button" data-open-task="' + escapeHtml(it.taskId) + '" class="w-full flex items-baseline gap-3 px-2 py-1 rounded text-left hover:bg-zinc-100 dark:hover:bg-zinc-700/60">' +
+      '<span class="shrink-0 w-24 text-xs font-semibold ' + (it.late ? 'text-rose-600 dark:text-rose-400' : 'text-zinc-500 dark:text-zinc-400') + '">' + escapeHtml(when) + '</span>' +
+      '<span class="min-w-0 flex-1 text-sm text-zinc-800 dark:text-zinc-100 break-words">' + escapeHtml(it.text) +
+        '<span class="text-xs text-zinc-500 dark:text-zinc-400"> · ' + (it.kind === 'step' ? 'step in ' + escapeHtml(it.task) + ' · ' : '') + projectNameHtml(it.project || '') + '</span></span>' +
+    '</button>';
+  }
+  function wipLoadHtml(open, today, horizon) {
+    var by = wipLoadItems(open, today, horizon);
+    var days = wipWorkDays(today, horizon);
+    if (!days.length) return '';
+    var col = {};
+    days.forEach(function (d) { col[d] = true; });
+    // A weekend date counts on the Friday before, or the Monday after when that Friday has passed.
+    function columnOf(date) {
+      if (col[date]) return date;
+      var d = parseDate(date), w = d.getDay();
+      var fri = toDateInputValue(addDays(d, w === 6 ? -1 : -2));
+      if (col[fri]) return fri;
+      var mon = toDateInputValue(addDays(d, w === 6 ? 2 : 1));
+      return col[mon] ? mon : null;
+    }
+    var helpBy = weeklyHelpByPerson();
+    var names = {};
+    weeklyPeople(weeklyCurrentKey()).forEach(function (n) { names[n] = true; });   // everyone around lately, so who has room shows too
+    Object.keys(by).forEach(function (n) { names[n] = true; });
+    var awayRows = wipAwayRows(today, horizon);
+    var rows = Object.keys(names).map(function (n) {
+      var p = by[n] || { days: {}, overdue: [], due: 0 };
+      var cells = {};
+      Object.keys(p.days).forEach(function (d) { var c = columnOf(d); if (c) cells[c] = (cells[c] || []).concat(p.days[d]); });
+      return { name: n, p: p, cells: cells, help: helpBy[n] || [], away: awayRows.filter(function (r) { return r.name === n; }) };
+    }).sort(function (a, b) {
+      return (b.p.due + b.p.overdue.length) - (a.p.due + a.p.overdue.length) || a.name.localeCompare(b.name);
+    });
+
+    var gridStyle = 'grid-template-columns: minmax(11rem, 16rem) repeat(' + days.length + ', minmax(0, 1fr));';
+    var monthShown = '';
+    var head = '<div class="grid gap-1 px-3 pt-2 pb-1 text-[10px] font-semibold text-zinc-500 dark:text-zinc-400" style="' + gridStyle + '">' +
+      '<span class="self-end">Due each day</span>' +
+      days.map(function (d) {
+        var dt = parseDate(d);
+        var mon = dt.toLocaleDateString('en-US', { month: 'short' });
+        var showMonth = mon !== monthShown; monthShown = mon;
+        var isToday = d === today;
+        return '<span class="text-center leading-tight' + (dt.getDay() === 1 && d !== days[0] ? ' border-l-2 border-zinc-200 dark:border-zinc-600' : '') + (isToday ? ' text-brand-700 dark:text-brand-300' : '') + '">' +
+          '<span class="block">' + (showMonth ? mon : '&nbsp;') + '</span>' +
+          '<span class="block">' + dt.toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 2) + ' ' + dt.getDate() + '</span>' +
+        '</span>';
+      }).join('') +
+    '</div>';
+
+    var body = rows.map(function (r) {
+      var first = r.name.split(' ')[0];
+      var openList = !!wipLoadOpen[r.name];
+      var summary = [];
+      summary.push(r.p.due ? r.p.due + ' due' : 'Nothing due');
+      if (r.p.overdue.length) summary.push('<span class="text-rose-600 dark:text-rose-400 font-semibold">' + r.p.overdue.length + ' overdue</span>');
+      var nameCell = '<button type="button" data-wip-load-person="' + escapeHtml(r.name) + '" aria-expanded="' + openList + '" class="min-w-0 flex items-start gap-2 text-left rounded-md px-1 py-1 hover:bg-zinc-100 dark:hover:bg-zinc-700/60">' +
+        avatarHtml(r.name, 'w-6 h-6 shrink-0 mt-0.5', 'text-[9px]') +
+        '<span class="min-w-0 flex-1">' +
+          '<span class="block text-sm font-semibold text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(r.name) + '</span>' +
+          '<span class="block text-xs text-zinc-500 dark:text-zinc-400">' + summary.join(' · ') +
+            (r.help.length ? ' <span class="ml-1 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + WIP_TONES.brand + '">Needs help</span>' : '') + '</span>' +
+          (r.away.length ? '<span class="block text-xs text-amber-800 dark:text-amber-300 break-words">Away: ' + escapeHtml(r.away.map(function (a) { return wipAwayText(a, today); }).join('; ')) + '</span>' : '') +
+        '</span>' +
+      '</button>';
+      var cells = days.map(function (d) {
+        var items = r.cells[d] || [];
+        var away = isOnLeave(r.name, d);
+        var label = items.length ? String(items.length) : (away ? 'Away' : '');
+        var tip = wipDayLabel(d) + ': ' + (items.length ? items.map(function (it) { return it.text; }).join(', ') : 'nothing due') + (away ? ' (away)' : '');
+        return '<button type="button" data-wip-load-person="' + escapeHtml(r.name) + '" title="' + escapeHtml(first + ', ' + tip) + '" aria-label="' + escapeHtml(r.name + ', ' + tip) + '" class="h-9 rounded-md flex items-center justify-center ' + (away && !items.length ? 'text-[9px] uppercase tracking-wide' : 'text-xs') + ' font-bold ' +
+          wipLoadCellCls(items.length, away) + (parseDate(d).getDay() === 1 && d !== days[0] ? ' ml-1' : '') + '">' + label + '</button>';
+      }).join('');
+      var list = '';
+      if (openList) {
+        var lines = r.p.overdue.slice().sort(function (a, b) { return a.date < b.date ? -1 : 1; }).map(function (it) {
+          return wipLoadItemLineHtml(it, 'Overdue · ' + formatShortDate(it.date));
+        });
+        Object.keys(r.p.days).sort().forEach(function (d) {
+          r.p.days[d].forEach(function (it) { lines.push(wipLoadItemLineHtml(it, wipDayLabel(d))); });
+        });
+        list = '<div class="col-span-full mt-1 mb-2 ml-8 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50/70 dark:bg-zinc-900/30 px-2 py-1.5' + openAnimClass('wipload:' + r.name) + '">' +
+          r.help.map(function (h) {
+            return '<p class="px-2 py-1 text-sm text-brand-800 dark:text-brand-300 break-words"><span class="font-bold">Needs help</span> on ' + projectNameHtml(h.project) + (h.note ? ' · ' + escapeHtml(h.note) : '') + '</p>';
+          }).join('') +
+          (lines.length ? lines.join('') : '<p class="px-2 py-1 text-sm text-zinc-500 dark:text-zinc-400">Nothing due in this window. Has room to help.</p>') +
+        '</div>';
+      }
+      return '<div class="grid gap-1 items-center px-3 py-1" style="' + gridStyle + '">' + nameCell + cells + list + '</div>';
+    }).join('');
+
+    var legend = '<span class="ml-auto flex items-center gap-1.5 text-[11px] text-zinc-500 dark:text-zinc-400">Things due a day' +
+      '<span class="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold ' + wipLoadCellCls(1, false) + '">1</span>' +
+      '<span class="w-5 h-5 rounded flex items-center justify-center text-[10px] font-bold ' + wipLoadCellCls(2, false) + '">2</span>' +
+      '<span class="w-6 h-5 rounded flex items-center justify-center text-[10px] font-bold ' + wipLoadCellCls(3, false) + '">3+</span>' +
+      '<span class="h-5 px-1.5 rounded flex items-center text-[9px] font-bold uppercase tracking-wide ' + wipLoadCellCls(0, true) + '">Away</span>' +
+    '</span>';
+    return wipSectionHtml('Team load', rows.length,
+      head + '<div class="pb-2 divide-y divide-zinc-100 dark:divide-zinc-700/60">' + body + '</div>', legend);
+  }
+
   function wipAwayHtml(today, horizon) {
     var rows = wipAwayRows(today, horizon);
 
@@ -16138,15 +16480,12 @@
     }
 
     var html = rows.map(function (r) {
-      var span = daysBetween(parseDate(r.start), parseDate(r.end)) + 1;
       var awayNow = r.start <= today && r.end >= today;
       return '<div class="flex items-center gap-2.5 px-4 py-2.5">' +
         avatarHtml(r.name, 'w-7 h-7 shrink-0', 'text-[10px]') +
         '<div class="min-w-0 flex-1">' +
           '<p class="text-sm font-semibold text-zinc-800 dark:text-zinc-100 truncate">' + escapeHtml(r.name) + '</p>' +
-          '<p class="text-xs text-zinc-500 dark:text-zinc-400 break-words mt-0.5">' + escapeHtml(r.repeatLabel
-            ? r.repeatLabel + (r.start >= today ? ' · next ' + formatShortDate(r.start) : ' · today') + (r.note ? ' · ' + r.note : '')
-            : formatShortDate(r.start) + ' – ' + formatShortDate(r.end) + ' · ' + span + ' day' + (span === 1 ? '' : 's') + (r.note ? ' · ' + r.note : '')) + '</p>' +
+          '<p class="text-xs text-zinc-500 dark:text-zinc-400 break-words mt-0.5">' + escapeHtml(wipAwayText(r, today)) + '</p>' +
         '</div>' +
         (awayNow ? '<span class="shrink-0 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + WIP_TONES.amber + '">Away now</span>' : '') +
       '</div>';
@@ -16643,21 +16982,79 @@
   // "Needs help" rows from the Monday updates, by project (projectKey), so WIP shows what the
   // Monday meeting was told without anyone repeating it. Each person's newest update counts: the
   // meeting week's, or last week's while the new one isn't in yet. Asked: "work together in sync".
-  function weeklyHelpByProject() {
-    if (typeof WEEKLY_ENABLED === 'undefined' || !WEEKLY_ENABLED) return {};
-    var key = weeklyCurrentKey(), prevKey = weeklyShiftKey(key, -1), out = {};
+  function weeklyHelpRequests() {
+    if (typeof WEEKLY_ENABLED === 'undefined' || !WEEKLY_ENABLED) return [];
+    var key = weeklyCurrentKey(), prevKey = weeklyShiftKey(key, -1), out = [];
     teamPeople.forEach(function (person) {
       var list = weeklyListOf(person);
       var e = list.find(function (x) { return x && x.week === key; }) || list.find(function (x) { return x && x.week === prevKey; });
       if (!e || e.leave) return;
       (e.rows || []).forEach(function (r) {
-        if (weeklyHelpOpen(r) && r.project) (out[projectKey(r.project)] = out[projectKey(r.project)] || []).push({ who: person.name, note: r.note || '' });
+        if (weeklyHelpOpen(r) && r.project) out.push({ who: person.name, project: r.project, note: r.note || '' });
       });
     });
     return out;
   }
+  function weeklyHelpByProject() {
+    var out = {};
+    weeklyHelpRequests().forEach(function (h) { (out[projectKey(h.project)] = out[projectKey(h.project)] || []).push({ who: h.who, note: h.note }); });
+    return out;
+  }
+  function weeklyHelpByPerson() {
+    var out = {};
+    weeklyHelpRequests().forEach(function (h) { (out[h.who] = out[h.who] || []).push(h); });
+    return out;
+  }
   function weeklyHelpLineText(help) {
     return help.map(function (h) { return h.who + (h.note ? ': ' + h.note : ''); }).join(' · ');
+  }
+
+  /* Project health, worked out, never typed (Asana's and Linear's On track / At risk / Off track).
+     Off track: overdue work, the project's own date passed, or a task dated after it. At risk: a
+     late step, a Monday help request, a review waiting REVIEW_STALE_DAYS, or a deadline landing on
+     its owner's leave. The reasons are written out beside it: a shared screen, nobody hovers. */
+  var WIP_HEALTH = {
+    off:  { label: 'Off track', tone: 'rose', rank: 0 },
+    risk: { label: 'At risk', tone: 'amber', rank: 1 },
+    on:   { label: 'On track', tone: 'emerald', rank: 2 }
+  };
+  function wipProjectHealth(name, list, today, help) {
+    if (!name || !list.length) return null;
+    var off = [], risk = [];
+    var overdue = list.filter(function (t) { return dueUrgency(t).overdue; }).length;
+    if (overdue) off.push(overdue + ' overdue');
+    var own = projectDeadlineFor(name);
+    if (own && own < today) off.push('project date passed');
+    else if (own) {
+      var after = list.filter(function (t) { return t.deadline && t.deadline > own; }).length;
+      if (after) off.push(after + ' dated after the project date');
+    }
+    var behind = list.filter(function (t) { return !dueUrgency(t).overdue && (t.checklist || []).some(function (it) { return stepIsLate(t, it); }); });
+    if (behind.length === 1) {
+      var step = (behind[0].checklist || []).filter(function (it) { return stepIsLate(behind[0], it); }).sort(function (a, b) { return a.due < b.due ? -1 : 1; })[0];
+      risk.push('"' + (step && step.text || 'a step') + '" late');
+    } else if (behind.length) risk.push(behind.length + ' tasks with late steps');
+    if (help && help.length) risk.push('needs help');
+    var stale = list.filter(function (t) {
+      return t.status === 'Review' && t.updatedAt && daysBetween(parseDate(localDateOf(t.updatedAt)), todayMidnight()) >= REVIEW_STALE_DAYS;
+    }).length;
+    if (stale) risk.push(stale + ' waiting on review');
+    var onLeave = list.filter(function (t) { return t.assignee && t.deadline && t.deadline >= today && isOnLeave(t.assignee, t.deadline); }).length;
+    if (onLeave) risk.push(onLeave + ' due while the owner is away');
+    if (off.length) return { key: 'off', why: off.concat(risk) };
+    if (risk.length) return { key: 'risk', why: risk };
+    return { key: 'on', why: [] };
+  }
+  function wipHealthChipHtml(h) {
+    if (!h) return '';
+    var m = WIP_HEALTH[h.key];
+    return '<span class="shrink-0 text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded ' + WIP_TONES[m.tone] + '">' + m.label + '</span>';
+  }
+  function wipAgoText(dateStr) {
+    var n = dateStr ? daysUntil(dateStr) : null;
+    if (n == null) return '';
+    n = -n;
+    return n <= 0 ? 'today' : n === 1 ? 'yesterday' : n + ' days ago';
   }
 
   function wipProjectsHtml(open, today) {
@@ -16681,8 +17078,13 @@
       var d = list.map(function (t) { return t.deadline; }).filter(Boolean).sort()[0];
       return d || '9999-99-99';
     }
-    // Within each category group (below), soonest open deadline first.
+    // Within each category group (below): off track first, then at risk, then on track (no
+    // health = a lead or closing report with no open tasks, last), then soonest open deadline.
+    var healthBy = {};
+    names.forEach(function (n) { healthBy[n] = wipProjectHealth(n, byProject[n], today, n ? (helpBy[projectKey(n)] || []) : []); });
     names.sort(function (a, b) {
+      var ra = healthBy[a] ? WIP_HEALTH[healthBy[a].key].rank : 3, rb = healthBy[b] ? WIP_HEALTH[healthBy[b].key].rank : 3;
+      if (ra !== rb) return ra - rb;
       var da = firstDeadline(byProject[a]), db = firstDeadline(byProject[b]);
       return da !== db ? (da < db ? -1 : 1) : a.localeCompare(b);
     });
@@ -16798,24 +17200,30 @@
       // Collapsed, a project must not look calmer than it is: its header says how many tasks are
       // overdue (red) or behind on a checklist step (amber, same rule as the Behind alert), and
       // flashes when a teammate edits a task inside it. Nothing extra while open -- the rows show it.
-      var riskHtml = '', hdrFlash = { cls: '', style: '' };
+      // The health chip shows open or folded; the reasons and the latest status line only while
+      // folded (open, the rows say it). This replaced separate "N overdue" / "N behind" counts.
+      var health = healthBy[name];
+      var riskHtml = wipHealthChipHtml(health), hdrFlash = { cls: '', style: '' };
+      var latestLine = '';
       if (folded) {
-        var foldToday = toDateInputValue(todayMidnight());
-        var overdueN = 0, behindN = 0;
-        list.forEach(function (t) {
-          if (dueUrgency(t).overdue) overdueN++;
-          else if ((t.checklist || []).some(function (it) { return stepIsLate(t, it); })) behindN++;
-          if (!hdrFlash.cls) hdrFlash = remoteFlashAttrs(t.id);
-        });
-        riskHtml = (overdueN ? '<span class="shrink-0 text-xs font-semibold text-rose-600 dark:text-rose-400">' + overdueN + ' overdue</span>' : '') +
-          (behindN ? '<span class="shrink-0 text-xs font-semibold text-amber-700 dark:text-amber-400">' + behindN + ' behind</span>' : '');
+        list.forEach(function (t) { if (!hdrFlash.cls) hdrFlash = remoteFlashAttrs(t.id); });
+        if (health && health.why.length) {
+          riskHtml += '<span class="min-w-0 text-xs font-semibold ' + (health.key === 'off' ? 'text-rose-600 dark:text-rose-400' : 'text-amber-700 dark:text-amber-400') + '">' + escapeHtml(health.why.join(' · ')) + '</span>';
+        }
+        var latest = name ? weeklyLatestStatus(name) : null;
+        if (latest) {
+          latestLine = '<div data-wip-fold="' + escapeHtml(name) + '" class="cursor-pointer pl-10 pr-4 pb-2 -mt-1 text-xs text-zinc-500 dark:text-zinc-400 bg-zinc-50 dark:bg-zinc-700/40 truncate">' +
+            '<span class="font-semibold text-zinc-600 dark:text-zinc-300">Latest:</span> ' + escapeHtml(latest.text) +
+            '<span class="text-zinc-400 dark:text-zinc-500"> · ' + escapeHtml(String(latest.author || '').split(' ')[0]) + (latest.date ? ', ' + escapeHtml(wipAgoText(latest.date)) : '') + '</span>' +
+          '</div>';
+        }
       }
 
       // Someone asked for help on this project in their Monday update: a chip on the header while
       // folded, and the who/what on its own line while open (never both: one signal, shown once) -- written out, since WIP is read
       // together on one screen where nobody can hover.
       var help = name ? (helpBy[projectKey(name)] || []) : [];
-      var helpChip = help.length && folded ? '<span class="shrink-0 text-xs font-bold px-2 py-0.5 rounded-full bg-brand-100 text-brand-800 dark:bg-brand-500/15 dark:text-brand-300">Needs help</span>' : '';
+      var helpChip = '';   // "needs help" is one of the health reasons now
       var helpLine = help.length && !folded ? '<div class="px-4 py-2 text-sm bg-brand-50 dark:bg-brand-500/10 text-brand-800 dark:text-brand-300 border-b border-zinc-100 dark:border-zinc-700/60 break-words"><span class="font-bold">Needs help</span> <span class="text-xs font-semibold opacity-80">(Monday update)</span> · ' + escapeHtml(weeklyHelpLineText(help)) + '</div>' : '';
       cardHtml[name] = '<div class="border-b border-zinc-100 dark:border-zinc-700 last:border-b-0">' +
         '<div class="group/hdr flex items-stretch bg-zinc-50 dark:bg-zinc-700/40' + hdrFlash.cls + '"' + hdrFlash.style + '>' +
@@ -16823,7 +17231,7 @@
             svgIcon('chevronDown', 'w-3.5 h-3.5 shrink-0 text-zinc-400 transition-transform' + (folded ? ' -rotate-90' : '')) +
             '<span class="min-w-0 flex-1 text-sm font-bold text-zinc-800 dark:text-zinc-100 break-words">' + (name ? projectNameHtml(name) : 'No project') + '</span>' +
             helpChip +
-            riskHtml +
+            '<span class="min-w-0 flex items-center gap-2 flex-wrap justify-end">' + riskHtml + '</span>' +
             '<span class="shrink-0 text-xs text-zinc-500 dark:text-zinc-400">' + countText +
               (due ? (countText ? ' · ' : '') + (own ? 'Project due ' : 'Due ') + escapeHtml(formatShortDate(due)) : '') + '</span>' +
           '</button>' +
@@ -16832,6 +17240,7 @@
           briefButtonHtml(name, true) +   // creative brief (see CREATIVE BRIEFS)
           detailsBtn +
         '</div>' +
+        latestLine +
         catPicker +
         helpLine +
         (folded ? '' : '<div class="' + openAnimClass('wipproj:' + name).trim() + '">' + (name ? wipProjectInfoHtml(name, list.length) + wipProjectDetailsHtml(name) : '') +
@@ -16956,6 +17365,13 @@
     else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); wipEdit = null; wipDraft = {}; renderWipView(); }
   });
 
+  document.getElementById('wip-load').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-wip-load-person]');
+    if (!b) return;
+    var n = b.getAttribute('data-wip-load-person');
+    if (wipLoadOpen[n]) delete wipLoadOpen[n]; else { wipLoadOpen[n] = true; markJustOpened('wipload:' + n); }
+    renderWipView();
+  });
   document.getElementById('wip-alerts').addEventListener('click', function (e) {
     if (!e.target.closest('[data-wip-alerts-toggle]')) return;
     wipAlertsOpen = !wipAlertsOpen;
@@ -17038,7 +17454,7 @@
     // interrupt the walkthrough. Everything else belongs to one mode or the other.
     var byProject = wipMode === 'projects';
     document.getElementById('wip-projects-wrap').classList.toggle('hidden', !byProject);
-    if (byProject) document.getElementById('wip-away-side').innerHTML = wipAwayHtml(today, horizon);
+    if (byProject) document.getElementById('wip-load').innerHTML = wipLoadHtml(open, today, horizon);
     document.getElementById('wip-agenda-body').classList.toggle('hidden', byProject);
     if (byProject) {
       // Keep focus in an open editor across the re-render, caret at the end.
@@ -17077,6 +17493,21 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-19a', date: '2026-10-19', items: [
+      { type: 'fixed', title: 'Search keeps your cursor', text: "On a wide screen, typing in the search box used to drop the cursor after one letter while results updated. You can now type straight through." },
+      { type: 'improved', title: 'Longer Monday notes, with new lines', text: "In your Monday update, the note boxes now grow as you type and take up to 2,000 characters. Shift+Enter starts a new line; Enter still sends. Line breaks show on the Monday cards." },
+      { type: 'improved', title: 'Hear back on your suggestions', text: "When a suggestion you posted moves to WIP, Fixed, Unable to Fix or back to Open, you get a notification saying so." }
+    ] },
+    { id: '2026-10-16a', date: '2026-10-16', items: [
+      { type: 'new', title: 'Tag any project in your Monday update', text: "In your Monday update, \"+ Add a project\" lets you search every open project and add it with a status and note, even if the board doesn't list you on it." },
+      { type: 'new', title: 'Admins can fill in for someone', text: "On Monday Meeting, an admin can click \"Fill in for\" on the card of anyone whose update isn't in yet. It saves to their update, and the card shows who entered it." }
+    ] },
+    { id: '2026-10-13a', date: '2026-10-13', items: [
+      { type: 'new', title: 'Team load on WIP Meeting', text: "WIP Meeting now shows one row per person and one box per working day: how many deadlines and steps land on them that day, and the days they're away. The busiest people are at the top and those with room at the bottom. Click a name to see what's behind the numbers." },
+      { type: 'new', title: 'Project health at a glance', text: "Each project on WIP Meeting says On track, At risk or Off track, with the reason written beside it and its latest status line underneath, so you can see where things stand without opening every project. Projects in trouble are listed first." },
+      { type: 'improved', title: 'Clashes and help requests need a decision', text: "Needs a decision now also lists anyone with three or more things due on the same day, steps due while their person is away, and every \"Needs help\" from the Monday updates." },
+      { type: 'improved', title: 'Meetings open on the agenda', text: "Focus of the Day no longer shows on Monday Meeting and WIP Meeting, so the meeting starts straight on what the room needs." }
+    ] },
     { id: '2026-10-12j', date: '2026-10-12', items: [
       { type: 'fixed', title: 'Tasks without dates are back on the Timeline', text: "A task with its deadline set to TBD used to be left off the Timeline, so whole projects could go missing. It now shows as a bar that fades out, marked \"Deadline TBD\". Tasks with no dates at all are listed at the bottom under \"No dates yet\", with an \"Add dates\" link. Same on the WIP Meeting timeline." }
     ] },
@@ -18324,6 +18755,9 @@
       btn.classList.toggle('active', btn.getAttribute('data-view-btn') === view);
     });
     document.getElementById('current-view-title').textContent = VIEW_LABELS[view] || view;
+    // Meeting pages open straight on the agenda: Focus of the Day is a personal "what's urgent"
+    // strip, and on a shared meeting screen it repeated the overdue items and pushed the agenda down.
+    document.getElementById('focus-section').classList.toggle('hidden', view === 'wip' || view === 'weekly');
     // Picking a view closes the mobile sidebar drawer -- it stays permanently open on desktop,
     // which never gets this class in the first place (see the hamburger/backdrop handlers below).
     // appRoot isn't assigned until the AUTH section further down, but that's fine: this function
@@ -18445,7 +18879,10 @@
      node (not CSS-positioned), so every id and listener comes along untouched.
      Content-aware: if it doesn't fit on one line (a long project name in the Project pill, many
      stats) it goes straight back to its own row. Called on resize, from setView, and whenever the
-     stats or the filter pills change width. */
+     stats or the filter pills change width.
+     Never while focus is inside the row: the fit check moves the row in, measures, and moves it
+     back, and moving a node takes focus out of it. Every search redraw did that, so typing lost
+     the cursor after one letter (reported). The row settles once focus leaves it (below). */
   var TOOLBAR_INLINE_MIN = 1600;
   function placeToolbar() {
     var row = document.getElementById('toolbar-row');
@@ -18453,6 +18890,7 @@
     var actions = document.getElementById('header-actions');
     var header = row && row.closest('header');
     if (!row || !inner || !actions || !header) return;
+    if (row.contains(document.activeElement)) return;
     var inline = window.innerWidth >= TOOLBAR_INLINE_MIN;
     if (inline && row.parentElement !== inner) {
       inner.insertBefore(row, actions);
@@ -18466,6 +18904,9 @@
     }
   }
   var placeToolbarTimer = null;
+  document.getElementById('toolbar-row').addEventListener('focusout', function () {
+    setTimeout(placeToolbar, 0);   // after focus has moved, so the check above sees where it went
+  });
   window.addEventListener('resize', function () {
     clearTimeout(placeToolbarTimer);
     placeToolbarTimer = setTimeout(placeToolbar, 100);
@@ -19993,7 +20434,7 @@
     if (!n.read) updateDoc(doc(notificationsCol, id), { read: true }).catch(function () {});
     if (n.chatProject) { mOpenChat(n.chatProject); return; }
     if (n.type === 'weekly_reminder') { openWeeklyEditor(); return; }
-    if (n.type === 'suggestion_fixed') { showToast('Open Suggestions on desktop to see it', 'info'); return; }
+    if (isSuggestionNotif(n)) { showToast('Open Suggestions on desktop to see it', 'info'); return; }
     var t = n.taskId ? tasks.find(function (x) { return x.id === n.taskId; }) : null;
     if (t) mOpenTask(t.id);
     else if (n.taskId) showToast('That task no longer exists', 'info');
@@ -20051,9 +20492,10 @@
     var pd = projectDeadlineDoc(name) || {};
     var note = latest ? latest.text : (pd.wipNote || '');
     var due = next ? mDue(next) : null;
+    var health = wipProjectHealth(name, list, mToday(), weeklyHelpByProject()[projectKey(name)] || []);
     return '<button type="button" class="m-row" data-m-project="' + escapeHtml(name) + '">' +
       '<span class="m-row-main"><span class="m-row-title">' + projectNameHtml(name) + '</span>' +
-        '<span class="m-row-sub">' + (list.length ? list.length + ' open' : 'No open tasks') + (late ? ' · <span class="m-due-late">' + late + ' overdue</span>' : '') +
+        '<span class="m-row-sub">' + (health ? wipHealthChipHtml(health) + (health.why.length ? ' ' + escapeHtml(health.why.join(' · ')) : '') + ' · ' : '') + (list.length ? list.length + ' open' : 'No open tasks') + (late ? ' · <span class="m-due-late">' + late + ' overdue</span>' : '') +
           (due ? ' · next <span class="' + due.cls + '">' + escapeHtml(due.text) + '</span>' : '') + '</span>' +
         (note ? '<span class="m-row-note">' + escapeHtml(note) + '</span>' : '') + '</span>' + mIcon('chev', 'm-chev') + '</button>';
   }
@@ -20793,8 +21235,8 @@
       : (n.type === 'mention' ? 'mentioned you on' : n.type === 'assigned' ? 'made you the owner of' : n.type === 'involved' ? 'added you to' : n.type === 'checklist_assigned' ? 'assigned you ' + checklistCountWords(n.count) + ' on' : n.type === 'checklist_done' ? 'finished ' + checklistCountWords(n.count) + ' on' : n.type === 'step_up' ? 'ticked off a step, so you\'re up on' : 'commented on');
     return systemHeadline
       ? escapeHtml(systemHeadline)
-      : n.type === 'suggestion_fixed'
-        ? '<span class="font-semibold">' + escapeHtml(n.author) + '</span> marked your suggestion as fixed'
+      : isSuggestionNotif(n)
+        ? escapeHtml(suggestionStatusWords(n))
         : '<span class="font-semibold">' + escapeHtml(n.author) + '</span> ' + verb + ' ' + subject;
   }
 
@@ -20880,7 +21322,8 @@
     notificationPanel.classList.add('hidden');
     var chatProject = item.getAttribute('data-notification-chat-project');
     if (chatProject) { setView('chat'); selectChatProject(chatProject); return; }
-    if (item.getAttribute('data-notification-type') === 'suggestion_fixed') { setView('suggestions'); return; }
+    var nType = item.getAttribute('data-notification-type');
+    if (nType === 'suggestion_status' || nType === 'suggestion_fixed') { setView('suggestions'); return; }
     if (item.getAttribute('data-notification-type') === 'weekly_reminder') { openWeeklyFromReminder(); return; }
     var taskId = item.getAttribute('data-notification-task');
     var t = taskId ? tasks.find(function (x) { return x.id === taskId; }) : null;
@@ -21000,7 +21443,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-12T09:44:34Z";
+  var CURRENT_BUILD_VERSION = "2026-10-19T02:07:28Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

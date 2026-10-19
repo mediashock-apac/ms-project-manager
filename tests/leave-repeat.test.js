@@ -76,7 +76,7 @@ async function skipTours(page) {
 
   // WIP Away: one row, dated by the next one
   await go('wip');
-  const away = await page.textContent('#wip-away-side');
+  const away = await page.textContent('#wip-load');
   check('WIP Away: one row with the next date', /Every Mon until Nov 30 · next Oct 12/.test(away) && (away.match(/Every Mon/g) || []).length === 1, away);
 
   // Monday Meeting card

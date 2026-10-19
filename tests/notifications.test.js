@@ -116,6 +116,32 @@ function extra() {
   await page.click('#btn-notifications'); await page.waitForTimeout(200);
   const bell = await page.textContent('#notification-list');
   check('bell shows the cleaned message too', /ending text white: Frame\.io link/.test(bell) && !/@Deane Cheng Added/.test(bell));
+  await page.click('#btn-notifications'); await page.waitForTimeout(150); await skipTours(page);
+
+  // Suggestions: every status change tells the author (it used to be Fixed only)
+  await page.evaluate(() => window.__fb.remote(function (d) {
+    d.suggestions.s1 = { text: 'Shift+Enter in the Monday note', author: 'Zenon Kwok Ze Yong', date: '2026-10-07T01:00:00Z', replies: [], status: 'open' };
+  }));
+  await skipTours(page);
+  await page.click('[data-view-btn="suggestions"]'); await page.waitForTimeout(500); await skipTours(page);
+  const sugNotifs = () => page.evaluate(() => Object.values(window.__fb.data.notifications).filter(n => n.suggestionId === 's1'));
+  for (const st of ['wip', 'unabletofix', 'fixed', 'open']) {
+    await page.selectOption('.suggestion-status-select', st);
+    await page.waitForTimeout(400);
+  }
+  const sn = await sugNotifs();
+  check('each status change notifies the author once', JSON.stringify(sn.map(n => n.status)) === JSON.stringify(['wip', 'unabletofix', 'fixed', 'open']) && sn.every(n => n.recipient === 'Zenon Kwok Ze Yong' && n.type === 'suggestion_status'), JSON.stringify(sn.map(n => n.status)));
+  await page.evaluate(() => window.__fb.remote(function (d) {
+    d.notifications.n4 = { recipient: 'Deane Cheng', type: 'suggestion_status', status: 'wip', suggestionId: 'x', taskId: null, taskName: '', chatProject: null, author: 'Arvind Kumaraguru', snippet: 'Dark mode for WIP', at: '2026-10-07T10:04:00Z', read: false };
+    d.notifications.n5 = { recipient: 'Deane Cheng', type: 'suggestion_fixed', suggestionId: 'y', taskId: null, taskName: '', chatProject: null, author: 'Arvind Kumaraguru', snippet: 'Old one', at: '2026-10-07T10:03:00Z', read: false };
+  }));
+  await page.waitForTimeout(300);
+  const shown2 = await page.evaluate(() => window.__shown);
+  check('desktop popup says what changed', shown2.some(s => s.title === 'Your suggestion is being worked on'), JSON.stringify(shown2.map(s => s.title)));
+  await skipTours(page);
+  await page.click('#btn-notifications'); await page.waitForTimeout(200);
+  const bell2 = await page.textContent('#notification-list');
+  check('bell: no name, and an older "fixed" one still reads right', /Your suggestion is being worked on/.test(bell2) && /Your suggestion has been fixed/.test(bell2) && !/Arvind/.test(bell2));
   console.log('errors', errors, wanted);
   console.log(results.join('\n'));
   await browser.close();
