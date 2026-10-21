@@ -2208,6 +2208,27 @@
   </div>
 </div>
 
+<!-- An archived task, read-only (openArchivedTask). "Restore to edit" puts it back on the board and
+     opens the normal task window. -->
+<div id="archived-task-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-2 sm:p-4 modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="archived-task-title">
+  <div class="bg-white dark:bg-zinc-800 w-full max-w-2xl rounded-2xl shadow-pop overflow-hidden max-h-[90vh] flex flex-col modal-pop-in">
+    <div class="flex items-start justify-between gap-3 px-5 py-4 border-b border-zinc-100 dark:border-zinc-700">
+      <div class="min-w-0">
+        <h3 id="archived-task-title" class="text-base font-bold text-zinc-900 dark:text-zinc-100 break-words"></h3>
+        <p id="archived-task-sub" class="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400 break-words"></p>
+      </div>
+      <button type="button" id="archived-task-close" aria-label="Close" class="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500">
+        <svg data-ic="x" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+      </button>
+    </div>
+    <div id="archived-task-body" class="overflow-y-auto px-5 py-4 flex flex-col gap-5"></div>
+    <div class="flex items-center gap-3 px-5 py-3 border-t border-zinc-100 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/40">
+      <p class="min-w-0 flex-1 text-xs text-zinc-500 dark:text-zinc-400">Archived tasks are read-only. Restore puts it back on the board so you can change it.</p>
+      <button type="button" id="archived-task-restore" class="shrink-0 text-sm font-semibold px-3.5 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white">Restore to edit</button>
+    </div>
+  </div>
+</div>
+
 <!-- Weekly update (Monday meeting): your own update, one tap per project. Body built by
      renderWeeklyEditor. See "Weekly update" in CLAUDE.md. -->
 <div id="weekly-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-2 sm:p-4 modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="weekly-modal-title">
@@ -2719,17 +2740,30 @@
       if (stillUsed || !oldDoc || projectDocs.some(function (p) { return p.name === newName; })) return;
       updateDoc(doc(projectsCol, oldDoc.id), { name: newName }).then(function () {
         logActivity('project_renamed', 'Renamed project ' + oldName + ' to ' + newName);
-        var me = myPersonDoc();
-        if (!me) return;
-        var patch = {};
-        if (Array.isArray(me.favoriteChats) && me.favoriteChats.indexOf(oldName) !== -1) patch.favoriteChats = me.favoriteChats.map(function (n) { return n === oldName ? newName : n; });
-        if (Array.isArray(me.mutedChats) && me.mutedChats.indexOf(oldName) !== -1) patch.mutedChats = me.mutedChats.map(function (n) { return n === oldName ? newName : n; });
-        if (Array.isArray(me.chatLastRead) && me.chatLastRead.some(function (r) { return r && r.project === oldName; })) {
-          patch.chatLastRead = me.chatLastRead.map(function (r) { return r && r.project === oldName ? Object.assign({}, r, { project: newName }) : r; });
-        }
-        if (Object.keys(patch).length) return setDoc(doc(peopleCol, me.id), patch, { merge: true });
+        return moveMyProjectMarks(oldName, newName);
       }).catch(function (e) { console.error('Could not carry the project over to its new name', e); });
     });
+  }
+
+  // Your own chat favourite/mute/read marks follow a project to its new name (rename or merge).
+  // If the new name already has a mark of its own, that one is kept and the old one dropped.
+  function moveMyProjectMarks(oldName, newName) {
+    var me = myPersonDoc();
+    if (!me) return Promise.resolve();
+    var patch = {};
+    function moveName(list) {
+      return list.filter(function (n) { return n !== oldName || list.indexOf(newName) === -1; })
+        .map(function (n) { return n === oldName ? newName : n; });
+    }
+    if (Array.isArray(me.favoriteChats) && me.favoriteChats.indexOf(oldName) !== -1) patch.favoriteChats = moveName(me.favoriteChats);
+    if (Array.isArray(me.mutedChats) && me.mutedChats.indexOf(oldName) !== -1) patch.mutedChats = moveName(me.mutedChats);
+    if (Array.isArray(me.chatLastRead) && me.chatLastRead.some(function (r) { return r && r.project === oldName; })) {
+      var hasNew = me.chatLastRead.some(function (r) { return r && r.project === newName; });
+      patch.chatLastRead = me.chatLastRead
+        .filter(function (r) { return !(hasNew && r && r.project === oldName); })
+        .map(function (r) { return r && r.project === oldName ? Object.assign({}, r, { project: newName }) : r; });
+    }
+    return Object.keys(patch).length ? setDoc(doc(peopleCol, me.id), patch, { merge: true }) : Promise.resolve();
   }
 
   // ISO date string, or '' when this project has no deadline of its own.
@@ -2867,6 +2901,38 @@
     var key = projectKey(name);
     var hadTasks = tasks.concat(archivedTasks).some(function (t) { return t.project && projectKey(t.project) === key; });
     return !hadTasks && !!String(pd.wipNote || '').trim();
+  }
+  // Finished this week (2026-10-19, asked after the rule above: the room never saw what wrapped,
+  // and a job needing a closing report vanished before anyone could move it). Projects whose work
+  // all finished in the last WIP_FINISHED_DAYS, not listed on WIP any more: Active jobs, Content
+  // marketing and uncategorised ones (leads and Closing reports are still listed). Finished = the
+  // latest completedAt / archivedAt among its tasks. Derived, so it empties itself after a week.
+  var WIP_FINISHED_DAYS = 7;
+  function wipFinishedProjects(listedNames) {
+    var listed = {};
+    (listedNames || []).forEach(function (n) { if (n) listed[projectKey(n)] = true; });
+    var by = {};
+    tasks.concat(archivedTasks).forEach(function (t) {
+      if (!t.project) return;
+      var k = projectKey(t.project);
+      (by[k] = by[k] || { name: t.project, list: [] }).list.push(t);
+    });
+    var cutoff = Date.now() - WIP_FINISHED_DAYS * 864e5;
+    var out = [];
+    Object.keys(by).forEach(function (k) {
+      var g = by[k];
+      if (listed[k]) return;
+      // Any task not Done, archived or not: a project archived unfinished (Archive project, e.g. a
+      // cancelled job) didn't finish, so it isn't listed here.
+      if (g.list.some(function (t) { return t.status !== 'Done'; })) return;
+      var cat = projectWipCategory(g.name);
+      if (cat && WIP_DONE_LEAVES.indexOf(cat) === -1) return;
+      var at = 0;
+      g.list.forEach(function (t) { var v = Date.parse(t.completedAt || t.archivedAt || '') || 0; if (v > at) at = v; });
+      if (!at || at < cutoff) return;
+      out.push({ name: g.name, at: at });
+    });
+    return out.sort(function (a, b) { return b.at - a.at; });
   }
   function setProjectWipCategory(name, key) {
     return ensureProjectDoc(name).then(function (id) {
@@ -7084,8 +7150,24 @@
     });
   }
 
+  // The step that makes a task due sooner than its own deadline (2026-10-19, asked "does focus of
+  // the day also include checklist due dates?", option A): its earliest open, dated step, if that
+  // comes before the task's deadline (or the task has none). Focus ranks by the nearer of the two
+  // and its card names the step. Ranking only: dueUrgency, the overdue badges, the digest and
+  // the alerts still go by the task's own deadline (step dates there were decided against).
+  function focusNextStep(t) {
+    var best = null;
+    (t.checklist || []).forEach(function (it) {
+      if (!it || it.done || !it.due || !parseDate(it.due)) return;
+      if (!best || it.due < best.due) best = it;
+    });
+    if (!best) return null;
+    if (t.deadline && parseDate(t.deadline) && best.due >= t.deadline) return null;
+    return best;
+  }
   function focusScore(t) {
-    var days = daysUntil(t.deadline);
+    var step = focusNextStep(t);
+    var days = daysUntil(step ? step.due : t.deadline);
     var pw = PRIORITY_WEIGHT[t.priority] || 1;
     var score = pw * 1000;
     // No urgency boost for a task sitting in Review, even past its original deadline -- same
@@ -7154,7 +7236,7 @@
 
   // Mirrors admins() in firestore.rules. This is UI gating only -- it decides which controls to
   // offer, NOT who may write; the rules are the boundary. Keep the two lists identical.
-  var ADMIN_EMAILS = ['aiuser@mediashock.com.sg', 'deane@mediashock.com.sg'];
+  var ADMIN_EMAILS = ['aiuser@mediashock.com.sg', 'deane@mediashock.com.sg', 'mychelle@mediashock.com.sg'];
 
   function isAdminUser() {
     var u = auth.currentUser;
@@ -9740,7 +9822,35 @@
   // snapshot, so anything bound directly to a card would be thrown away.
   var projectsGrid = document.getElementById('projects-grid');
 
+  // PROJECT ACTIONS: the merge search updates its own result list rather than redrawing the grid,
+  // which waits while someone is typing (see LIVE FORMS).
+  projectsGrid.addEventListener('input', function (e) {
+    var s = e.target.closest && e.target.closest('.project-merge-search');
+    if (!s) return;
+    projectMergeQuery = s.value;
+    var box = s.closest('div').parentNode.querySelector('.project-merge-results');
+    if (box) box.innerHTML = projectMergeResultsHtml(s.getAttribute('data-project'), s.value);
+  });
+  // Picking a result keeps focus in the search box, so a redraw held back while typing can't
+  // replace the list between mouse down and click.
+  projectsGrid.addEventListener('mousedown', function (e) {
+    if (e.target.closest && e.target.closest('.project-merge-pick')) e.preventDefault();
+  });
   projectsGrid.addEventListener('keydown', function (e) {
+    var ms = e.target.closest && e.target.closest('.project-merge-search');
+    if (ms) {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        var first = projectMergeTargets(ms.getAttribute('data-project'), ms.value)[0];
+        if (first) confirmMergeProject(ms.getAttribute('data-project'), first);
+      } else if (e.key === 'Escape') {
+        e.stopPropagation();
+        projectMergeFor = null;
+        ms.blur();
+        renderProjects();
+      }
+      return;
+    }
     var frm = e.target.closest && e.target.closest('.project-link-form');
     if (!frm) return;
     if (e.key === 'Enter') { e.preventDefault(); addProjectFileLink(frm.getAttribute('data-project'), frm); }
@@ -9754,6 +9864,32 @@
       projectsCompletedOpen = !completedSummary.parentNode.open;
       return;
     }
+    // PROJECT ACTIONS
+    var menuBtn = e.target.closest('.project-menu-toggle');
+    if (menuBtn) {
+      var mn = menuBtn.getAttribute('data-project');
+      projectMenuOpen = projectMenuOpen === mn ? null : mn;
+      projectMergeFor = null;
+      renderProjects();
+      return;
+    }
+    var archiveAllBtn = e.target.closest('.project-archive-all-btn');
+    if (archiveAllBtn) { confirmArchiveWholeProject(archiveAllBtn.getAttribute('data-project')); return; }
+    var restoreBtn = e.target.closest('.project-restore-btn');
+    if (restoreBtn) { restoreWholeProject(restoreBtn.getAttribute('data-project')); return; }
+    var mergeStart = e.target.closest('.project-merge-start');
+    if (mergeStart) {
+      projectMergeFor = mergeStart.getAttribute('data-project');
+      projectMergeQuery = '';
+      ensureArchivedTasksListener();
+      renderProjects();
+      var ms = projectsGrid.querySelector('.project-merge-search');
+      if (ms) ms.focus();
+      return;
+    }
+    if (e.target.closest('.project-merge-cancel')) { projectMergeFor = null; renderProjects(); return; }
+    var pick = e.target.closest('.project-merge-pick');
+    if (pick) { confirmMergeProject(pick.getAttribute('data-project'), pick.getAttribute('data-target')); return; }
     var convBtn = e.target.closest('.project-files-conv-toggle');
     if (convBtn) { var cn = convBtn.getAttribute('data-project'); projectFilesConvOpen[cn] = !projectFilesConvOpen[cn]; renderProjects(); return; }
     var addLinkBtn = e.target.closest('.project-link-add');
@@ -11217,8 +11353,9 @@
   // "mark project complete" deadline popup below. Re-filters to status === 'Done' at commit
   // time (not just trusting the caller's earlier check) in case someone added a new, not-done
   // task to this project in the few seconds the popup was open on screen.
-  function archiveProjectTasks(name) {
-    var toArchive = activeTasks().filter(function (t) { return t.project === name && t.status === 'Done'; });
+  // `includeOpen` archives every task, done or not ("Archive project" in the card's ⋯ row).
+  function archiveProjectTasks(name, includeOpen) {
+    var toArchive = activeTasks().filter(function (t) { return t.project === name && (includeOpen || t.status === 'Done'); });
     if (!toArchive.length) return Promise.resolve(0);
     var now = new Date().toISOString();
     var chunks = [];
@@ -11237,7 +11374,9 @@
       });
     });
     return chain.then(function () {
-      logActivity('board_archived', 'Archived ' + toArchive.length + ' task' + (toArchive.length === 1 ? '' : 's') + ' from "' + name + '" (marked complete)');
+      logActivity('board_archived', includeOpen
+        ? 'Archived project "' + name + '" (' + toArchive.length + ' task' + (toArchive.length === 1 ? '' : 's') + ')'
+        : 'Archived ' + toArchive.length + ' task' + (toArchive.length === 1 ? '' : 's') + ' from "' + name + '" (marked complete)');
       return toArchive.length;
     });
   }
@@ -11294,6 +11433,180 @@
     }).catch(function (err) {
       showToast('Could not archive project tasks: ' + err.message, 'error');
     });
+  }
+
+  /* PROJECT ACTIONS (2026-10-21, from Ming Song's suggestion: "Ability to archive projects and
+     unarchive projects. And if there are two projects that are already created by accident, how
+     can one become a child or piggyback under something else?"). One quiet "⋯" on each project
+     card opens a single row: Archive project (any time, not only once every task is Done) or
+     Restore project, and for admins "Merge into another project". Nothing shows at rest.
+     Merging rather than child projects: Asana and Linear handle accidental duplicates by merging,
+     and a project tree would add a layer to every list. Admins only, because it rewrites archived
+     tasks (which the rules only let an admin change) and isn't a one-click undo. */
+  var projectMenuOpen = null;   // project whose action row is open (session only)
+  var projectMergeFor = null;   // project whose "Merge into" search is open
+  var projectMergeQuery = '';
+
+  function confirmArchiveWholeProject(name) {
+    var list = activeTasks().filter(function (t) { return t.project === name; });
+    if (!list.length) return;
+    var open = list.filter(function (t) { return t.status !== 'Done'; }).length;
+    function go() {
+      var before = list.map(function (t) { return Object.assign({}, t); });
+      projectMenuOpen = null;
+      archiveProjectTasks(name, true).then(function () {
+        showToast('"' + name + '" moved to Completed', 'success', { action: { label: 'Undo', onClick: function () { restoreArchivedTasks(before, 'Project'); } } });
+      }).catch(function (err) { showToast('Could not archive project: ' + err.message, 'error'); });
+    }
+    if (!open) { go(); return; }
+    openConfirm('Archive "' + name + '"?',
+      open + ' of its ' + list.length + ' task' + (list.length === 1 ? '' : 's') + (open === 1 ? " isn't" : " aren't") + ' done yet. They come off everyone\'s board and the project moves to Completed. You can restore it any time.',
+      go, { tone: 'question', confirmText: 'Archive project', cancelText: 'Keep it' });
+  }
+
+  function restoreWholeProject(name) {
+    withArchivedTasksReady(function () {
+      var list = archivedTasks.filter(function (t) { return t.project === name; });
+      if (!list.length) return;
+      projectMenuOpen = null;
+      restoreArchivedTasks(list, 'Project', 'Restored project "' + name + '" (' + list.length + ' task' + (list.length === 1 ? '' : 's') + ')');
+    });
+  }
+
+  // Every other project, plus WIP-only entries (leads), filtered by the typed words.
+  function projectMergeTargets(fromName, q) {
+    var fk = projectKey(fromName), names = {};
+    allProjectNames().forEach(function (n) { names[n] = true; });
+    projectDocs.forEach(function (p) { if (p.name && p.wipCategory) names[p.name] = true; });
+    var words = String(q || '').toLowerCase().split(/\s+/).filter(Boolean);
+    return Object.keys(names).filter(function (n) {
+      var low = n.toLowerCase();
+      return projectKey(n) !== fk && words.every(function (w) { return low.indexOf(w) !== -1; });
+    }).sort(function (a, b) { return a.localeCompare(b); });
+  }
+  function projectMergeResultsHtml(fromName, q) {
+    var all = projectMergeTargets(fromName, q);
+    if (!all.length) return '<p class="text-xs text-zinc-400 dark:text-zinc-500 px-2 py-1.5">No other project matches.</p>';
+    // The first match is highlighted: it's the one Enter picks.
+    return all.slice(0, 8).map(function (n, i) {
+      return '<button type="button" class="project-merge-pick w-full text-left text-sm text-zinc-700 dark:text-zinc-200 px-2 py-1.5 rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-700 truncate' + (i === 0 ? ' bg-zinc-100 dark:bg-zinc-700' : '') + '" ' +
+        'data-project="' + escapeHtml(fromName) + '" data-target="' + escapeHtml(n) + '" title="' + escapeHtml(n) + '">' + projectNameHtml(n) + '</button>';
+    }).join('') +
+      (all.length > 8 ? '<p class="text-xs text-zinc-400 dark:text-zinc-500 px-2 pt-1">' + (all.length - 8) + ' more. Keep typing to narrow it down.</p>' : '');
+  }
+
+  function confirmMergeProject(from, to) {
+    withArchivedTasksReady(function () {
+      var n = tasks.concat(archivedTasks).filter(function (t) { return t.project === from; }).length;
+      openConfirm('Merge "' + from + '" into "' + to + '"?',
+        'Its ' + n + ' task' + (n === 1 ? '' : 's') + ', chat, links and notes move into "' + to + '", and "' + from + '" disappears from every list. ' +
+        'If both have a brief, deadline or WIP category, "' + to + '" keeps its own; the other is saved with the project and named in Activity. This can\'t be undone in one click.',
+        function () { mergeProjects(from, to); },
+        { tone: 'danger', confirmText: 'Merge projects', cancelText: 'Cancel' });
+    });
+  }
+
+  // Lists on a project doc that combine; anything else: the target's own value wins and the
+  // duplicate's is kept in `mergedFrom`, so nothing is lost. Notes are text, so they're joined.
+  var MERGE_JOIN_LISTS = ['chat', 'links', 'pinned', 'wipDeliverables', 'updates'];
+  var MERGE_FIELD_LABELS = { brief: 'brief', deadline: 'deadline', wipCategory: 'WIP category', wipOwner: 'WIP owner', clientContact: 'client contact' };
+  function isEmptyValue(v) { return v === null || v === undefined || v === '' || (Array.isArray(v) && !v.length); }
+  function mergeProjectDocData(fromDoc, toDoc, fromName) {
+    var patch = {}, saved = {}, notKept = [];
+    Object.keys(fromDoc).forEach(function (k) {
+      if (k === 'id' || k === 'name' || k === 'mergedFrom') return;
+      var a = toDoc[k], b = fromDoc[k];
+      if (isEmptyValue(b)) return;
+      if (MERGE_JOIN_LISTS.indexOf(k) !== -1 && Array.isArray(b)) {
+        var list = Array.isArray(a) ? a.slice() : [];
+        b.forEach(function (x) {
+          var dup = list.some(function (y) {
+            if (k === 'links' && x && y && x.url) return x.url === y.url;
+            if (x && y && x.id && y.id) return x.id === y.id;
+            return JSON.stringify(x) === JSON.stringify(y);
+          });
+          if (!dup) list.push(x);
+        });
+        if (k === 'chat') list.sort(function (x, y) { return String(x.date || '').localeCompare(String(y.date || '')); });
+        patch[k] = list;
+        return;
+      }
+      if (isEmptyValue(a)) { patch[k] = b; return; }
+      if (k === 'wipNote' && a !== b) { patch[k] = a + '\n\n' + b; return; }
+      if (JSON.stringify(a) !== JSON.stringify(b)) { saved[k] = b; notKept.push(MERGE_FIELD_LABELS[k] || k); }
+    });
+    if (Object.keys(saved).length) {
+      patch.mergedFrom = (Array.isArray(toDoc.mergedFrom) ? toDoc.mergedFrom : []).concat([{ name: fromName, at: new Date().toISOString(), by: myDisplayName(), fields: saved }]);
+    }
+    return { patch: patch, notKept: notKept };
+  }
+
+  function mergeProjects(from, to) {
+    if (!isAdminUser() || !from || !to || projectKey(from) === projectKey(to)) return;
+    withArchivedTasksReady(function () {
+      var live = tasks.filter(function (t) { return t.project === from; });
+      var arch = archivedTasks.filter(function (t) { return t.project === from; });
+      var ops = [];
+      live.forEach(function (t) { ops.push(function (b) { b.update(doc(tasksCol, t.id), { project: to }); }); });
+      arch.forEach(function (t) { ops.push(function (b) { b.update(doc(archivedTasksCol, t.id), { project: to }); }); });
+      // Project docs last, so a failure part-way leaves the duplicate's chat/brief in place and
+      // merging again finishes the job.
+      var fromDoc = projectDeadlineDoc(from), toDoc = projectDeadlineDoc(to), notKept = [];
+      if (fromDoc && toDoc && fromDoc.id !== toDoc.id) {
+        var m = mergeProjectDocData(fromDoc, toDoc, from);
+        notKept = m.notKept;
+        if (Object.keys(m.patch).length) ops.push(function (b) { b.update(doc(projectsCol, toDoc.id), m.patch); });
+        ops.push(function (b) { b.delete(doc(projectsCol, fromDoc.id)); });
+      } else if (fromDoc && !toDoc) {
+        ops.push(function (b) { b.update(doc(projectsCol, fromDoc.id), { name: to }); });
+      }
+      var chain = Promise.resolve();
+      for (var i = 0; i < ops.length; i += 400) {
+        (function (chunk) {
+          chain = chain.then(function () {
+            var batch = writeBatch(db);
+            chunk.forEach(function (op) { op(batch); });
+            return batch.commit();
+          });
+        })(ops.slice(i, i + 400));
+      }
+      chain.then(function () {
+        projectMenuOpen = null;
+        projectMergeFor = null;
+        if (projectExpanded[from]) projectExpanded[to] = true;
+        var n = live.length + arch.length;
+        logActivity('project_merged', 'Merged project ' + from + ' into ' + to + ' (' + n + ' task' + (n === 1 ? '' : 's') + ')' +
+          (notKept.length ? '. ' + to + ' kept its own ' + notKept.join(', ') + '; ' + from + "'s is saved with the project" : ''));
+        showToast('"' + from + '" merged into "' + to + '"', 'success');
+        renderProjects();
+        return moveMyProjectMarks(from, to);
+      }).catch(function (err) { showToast('Could not merge projects: ' + err.message, 'error'); });
+    });
+  }
+
+  function projectActionsRowHtml(p, isCompleted) {
+    var wrap = '<div class="px-4 py-2.5 bg-zinc-50/60 dark:bg-zinc-700/20 border-b border-zinc-100 dark:border-zinc-700/60">';
+    if (projectMergeFor === p.name) {
+      // A grid so the results sit in the search box's column, under the box they belong to.
+      return wrap +
+        '<div class="grid grid-cols-[auto_minmax(0,28rem)_auto] items-center gap-x-2">' +
+          '<span class="text-xs font-semibold text-zinc-500 dark:text-zinc-400">Merge into</span>' +
+          '<input type="text" class="project-merge-search w-full min-w-0 text-sm rounded-md border border-zinc-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 px-2 py-1 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400" ' +
+            'data-project="' + escapeHtml(p.name) + '" value="' + escapeHtml(projectMergeQuery) + '" placeholder="Search projects…" autocomplete="off">' +
+          '<button type="button" class="project-merge-cancel ' + WIP_ACT_BTN + ' justify-self-start">Cancel</button>' +
+          '<div class="project-merge-results col-start-2 mt-1.5 flex flex-col">' + projectMergeResultsHtml(p.name, projectMergeQuery) + '</div>' +
+        '</div>' +
+      '</div>';
+    }
+    return wrap + '<div class="flex items-center flex-wrap gap-y-1">' +
+      (isCompleted
+        ? '<button type="button" class="project-restore-btn ' + WIP_ACT_BTN + '" data-project="' + escapeHtml(p.name) + '" title="Put every task back on the board">Restore project</button>'
+        : '<button type="button" class="project-archive-all-btn ' + WIP_ACT_BTN + '" data-project="' + escapeHtml(p.name) + '" title="Archive every task, done or not, and move the project to Completed">Archive project</button>') +
+      (isAdminUser()
+        ? '<span class="w-px h-4 mx-3 bg-zinc-200 dark:bg-zinc-600"></span>' +
+          '<button type="button" class="project-merge-start ' + WIP_ACT_BTN + '" data-project="' + escapeHtml(p.name) + '" title="For a duplicate created by accident: move everything into another project">Merge into another project…</button>'
+        : '') +
+    '</div></div>';
   }
 
   function promptProjectDueToday(name, projectTasks, done) {
@@ -11750,7 +12063,8 @@
   // someone can see a Restore button to click.
   // Undo for an archive: puts the tasks back exactly as they were (`list` = the task objects from
   // before archiving), whoever archived them -- the rules allow the move back for anyone.
-  function restoreArchivedTasks(list, what) {
+  // `summary` replaces the "Undid archiving ..." Activity line (Restore project uses it).
+  function restoreArchivedTasks(list, what, summary) {
     if (!list || !list.length) return;
     var chain = Promise.resolve();
     for (var i = 0; i < list.length; i += 250) {
@@ -11770,8 +12084,8 @@
     }
     chain.then(function () {
       showToast(list.length === 1 ? what + ' back on the board' : list.length + ' tasks back on the board', 'success');
-      logActivity('task_unarchived', 'Undid archiving ' + (list.length === 1 ? '"' + list[0].name + '"' : list.length + ' tasks'), list.length === 1 ? { taskId: list[0].id } : null);
-    }).catch(function (err) { showToast('Could not undo: ' + err.message, 'error'); });
+      logActivity('task_unarchived', summary || ('Undid archiving ' + (list.length === 1 ? '"' + list[0].name + '"' : list.length + ' tasks')), list.length === 1 ? { taskId: list[0].id } : null);
+    }).catch(function (err) { showToast((summary ? 'Could not restore: ' : 'Could not undo: ') + err.message, 'error'); });
   }
 
   function unarchiveTask(id) {
@@ -11782,13 +12096,123 @@
     var batch = writeBatch(db);
     batch.set(doc(tasksCol, id), data);
     batch.delete(doc(archivedTasksCol, id));
-    batch.commit().then(function () {
+    return batch.commit().then(function () {
       showToast('Task restored', 'success');
       logActivity('task_unarchived', 'Restored "' + t.name + '" from the archive', { taskId: t.id });
+      return true;
     }).catch(function (err) {
       showToast('Could not restore task: ' + err.message, 'error');
+      return false;
     });
   }
+
+  /* ARCHIVED TASK, READ-ONLY (2026-10-19, asked: "can completed projects still be edited and
+     accessed?"). Archived rows on a Completed project's card looked clickable and did nothing.
+     Clicking one (there, on the Archived page or in Activity) now shows the task as it was left:
+     details, steps with their links, time and comments. Nothing is editable here, because
+     archived means put away; "Restore to edit" moves it back to the board (logged in Activity)
+     and opens the normal task window. Its own small window rather than the task window in a
+     read-only mode: the task window writes back on open (ids, threading) and follows the live
+     tasks list, neither of which an archived task is in. */
+  var archivedTaskModal = document.getElementById('archived-task-modal');
+  var archivedTaskOpenId = null;
+  function openArchivedTask(t) {
+    if (!t) return;
+    archivedTaskOpenId = t.id;
+    var label = function (txt) { return '<p class="text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500 mb-1.5">' + txt + '</p>'; };
+    var dates = (t.startDate ? formatShortDate(t.startDate) : '') + (t.startDate && t.deadline ? ' – ' : '') + (t.deadline ? formatShortDate(t.deadline) : '');
+    var facts = [
+      ['Owner', t.assignee ? avatarHtml(t.assignee, 'w-5 h-5 shrink-0', 'text-[9px]') + '<span>' + escapeHtml(t.assignee) + '</span>' : '–'],
+      ['Status', escapeHtml(STATUS_LABELS[t.status] || t.status || '–')],
+      ['Dates', escapeHtml(dates || 'No dates')],
+      ['Priority', escapeHtml(t.priority || '–')]
+    ];
+    if ((t.involved || []).length) facts.push(['Also involved', escapeHtml(t.involved.join(', '))]);
+    var html = '<div class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5">' + facts.map(function (f) {
+      return '<div class="min-w-0"><p class="text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">' + f[0] + '</p>' +
+        '<p class="mt-0.5 flex items-center gap-1.5 text-sm text-zinc-800 dark:text-zinc-100 break-words">' + f[1] + '</p></div>';
+    }).join('') + '</div>';
+    if (t.driveLink) html += '<div>' + label('Project folder') + linkChipHtml(t.driveLink) + '</div>';
+
+    var steps = t.checklist || [];
+    if (steps.length) {
+      html += '<div>' + label('Checklist · ' + steps.filter(function (it) { return it && it.done; }).length + ' of ' + steps.length + ' done') +
+        '<div class="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-700/60">' + steps.map(function (it) {
+          var meta = [];
+          if (stepPeople(it).length) meta.push(escapeHtml(stepPeopleLabel(it)));
+          if (it.due && parseDate(it.due)) meta.push(escapeHtml(formatShortDate(it.due)));
+          else if (it.dueTbd) meta.push('Due TBD');
+          return '<div class="py-1.5 flex items-start gap-2">' +
+            '<span class="mt-0.5 shrink-0 w-4 h-4 rounded border flex items-center justify-center ' + (it.done ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-zinc-300 dark:border-zinc-600') + '">' + (it.done ? svgIcon('checkTick', 'w-3 h-3') : '') + '</span>' +
+            '<div class="min-w-0 flex-1"><p class="text-sm ' + (it.done ? 'text-zinc-500 dark:text-zinc-400' : 'text-zinc-800 dark:text-zinc-100') + ' break-words">' + escapeHtml(it.text || '') + '</p>' +
+              (it.link ? linkChipHtml(it.link) : '') + '</div>' +
+            (meta.length ? '<span class="shrink-0 text-xs text-zinc-400 dark:text-zinc-500 text-right">' + meta.join(' · ') + '</span>' : '') +
+          '</div>';
+        }).join('') + '</div></div>';
+    }
+
+    var minutes = taskTimeMinutes(t);
+    if (minutes) {
+      var people = timeByPerson([t]).map(function (x) { return { name: String(x.name).split(' ')[0], minutes: x.minutes }; });
+      html += '<div>' + label('Time logged · ' + formatDuration(minutes)) +
+        '<p class="text-sm text-zinc-700 dark:text-zinc-200">' + escapeHtml(timeByPersonText(people)) + '</p></div>';
+    }
+
+    var comments = (t.comments || []).slice().sort(function (a, b) { return String(b.date || '') < String(a.date || '') ? -1 : 1; });
+    if (comments.length) {
+      html += '<div>' + label('Comments · ' + comments.length) + '<div class="flex flex-col gap-3">' + comments.map(function (c) {
+        return '<div class="flex items-start gap-2">' + avatarHtml(c.author || '', 'w-6 h-6 shrink-0', 'text-[10px]') +
+          '<div class="min-w-0 flex-1"><p class="text-xs text-zinc-500 dark:text-zinc-400"><span class="font-semibold text-zinc-700 dark:text-zinc-200">' + escapeHtml(c.author || '') + '</span>' +
+            (c.date ? ' · ' + escapeHtml(formatShortDate(localDateOf(c.date))) : '') + '</p>' +
+            '<p class="mt-0.5 text-sm text-zinc-800 dark:text-zinc-100 break-words whitespace-pre-line">' + enrichCommentText(c.text || '') + '</p></div></div>';
+      }).join('') + '</div></div>';
+    }
+
+    document.getElementById('archived-task-title').textContent = t.name || 'Untitled task';
+    document.getElementById('archived-task-sub').textContent = (t.project || 'No project') + (t.archivedAt ? ' · Archived ' + formatShortDate(localDateOf(t.archivedAt)) : '');
+    document.getElementById('archived-task-body').innerHTML = html;
+    var restore = document.getElementById('archived-task-restore');
+    restore.disabled = false;
+    restore.textContent = 'Restore to edit';
+    archivedTaskModal.classList.remove('hidden');
+    archivedTaskModal.classList.add('flex');
+    document.getElementById('archived-task-close').focus();
+  }
+  function closeArchivedTask() {
+    archivedTaskOpenId = null;
+    archivedTaskModal.classList.add('hidden');
+    archivedTaskModal.classList.remove('flex');
+  }
+  // Opens whichever exists: the live task in the task window, or the archived one read-only.
+  function openTaskOrArchived(id) {
+    var live = tasks.find(function (x) { return x.id === id; });
+    if (live) { openTaskModal(live); return; }
+    withArchivedTasksReady(function () {
+      var arch = archivedTasks.find(function (x) { return x.id === id; });
+      if (arch) openArchivedTask(arch);
+      else showToast('That task has since been deleted', 'info');
+    });
+  }
+  document.getElementById('archived-task-close').addEventListener('click', closeArchivedTask);
+  archivedTaskModal.addEventListener('click', function (e) { if (e.target === archivedTaskModal) closeArchivedTask(); });
+  document.getElementById('archived-task-restore').addEventListener('click', function () {
+    var id = archivedTaskOpenId;
+    if (!id) return;
+    var btn = this;
+    btn.disabled = true;
+    btn.textContent = 'Restoring…';
+    Promise.resolve(unarchiveTask(id)).then(function (ok) {
+      if (!ok) { btn.disabled = false; btn.textContent = 'Restore to edit'; return; }
+      closeArchivedTask();
+      // The restore shows in the tasks list straight away (local write); wait a moment if not.
+      var tries = 0;
+      (function openWhenBack() {
+        var t = tasks.find(function (x) { return x.id === id; });
+        if (t) { openTaskModal(t); return; }
+        if (++tries < 20) setTimeout(openWhenBack, 150);
+      })();
+    });
+  });
 
   function handleArchiveCompletedClick(btn) {
     var count = activeTasks().filter(function (t) { return t.status === 'Done'; }).length;
@@ -11933,6 +12357,10 @@
 
     container.innerHTML = top.map(function (t) {
       var days = dueUrgency(t).days;
+      // A step due before the deadline is what's due: the chip counts to it and the card names it.
+      var step = t.status === 'Review' ? null : focusNextStep(t);
+      if (step) days = daysUntil(step.due);
+      var stepWord = step ? 'Step ' : '';
       var pm = PRIORITY_META[t.priority] || PRIORITY_META.Medium;
       var urgencyLabel, urgencyClass;
       // Sent off for review (client or internal sign-off) means the clock isn't really the
@@ -11940,10 +12368,14 @@
       // sitting well past its original deadline, matching dueUrgency's exemption above.
       if (t.status === 'Review') { urgencyLabel = 'Under review'; urgencyClass = 'text-blue-600 bg-blue-50 dark:text-blue-300 dark:bg-blue-500/15'; }
       else if (days === null) { urgencyLabel = 'TBD'; urgencyClass = 'text-zinc-500 bg-zinc-100 dark:text-zinc-400 dark:bg-zinc-700'; }
-      else if (days < 0) { urgencyLabel = Math.abs(days) + 'd overdue'; urgencyClass = 'text-rose-600 bg-rose-50 dark:text-rose-300 dark:bg-rose-500/15'; }
-      else if (days === 0) { urgencyLabel = 'Due today'; urgencyClass = 'text-violet-600 bg-violet-50 dark:text-violet-300 dark:bg-violet-500/15'; }
-      else if (days === 1) { urgencyLabel = 'Due tomorrow'; urgencyClass = 'text-violet-600 bg-violet-50 dark:text-violet-300 dark:bg-violet-500/15'; }
-      else { urgencyLabel = 'Due in ' + days + 'd'; urgencyClass = 'text-zinc-500 bg-zinc-100 dark:text-zinc-400 dark:bg-zinc-700'; }
+      else if (days < 0) { urgencyLabel = stepWord + Math.abs(days) + 'd overdue'; urgencyClass = 'text-rose-600 bg-rose-50 dark:text-rose-300 dark:bg-rose-500/15'; }
+      else if (days === 0) { urgencyLabel = stepWord + (step ? 'due today' : 'Due today'); urgencyClass = 'text-violet-600 bg-violet-50 dark:text-violet-300 dark:bg-violet-500/15'; }
+      else if (days === 1) { urgencyLabel = stepWord + (step ? 'due tomorrow' : 'Due tomorrow'); urgencyClass = 'text-violet-600 bg-violet-50 dark:text-violet-300 dark:bg-violet-500/15'; }
+      else { urgencyLabel = stepWord + (step ? 'due in ' : 'Due in ') + days + 'd'; urgencyClass = 'text-zinc-500 bg-zinc-100 dark:text-zinc-400 dark:bg-zinc-700'; }
+      var stepLine = step
+        ? '<p data-tooltip="' + escapeHtml('Next step: ' + (step.text || '') + (stepPeople(step).length ? ' (' + stepPeopleLabel(step) + ')' : '')) + '" class="tooltip-top -mt-1 mb-2 text-xs text-zinc-600 dark:text-zinc-300 truncate">' +
+            '<span class="font-semibold">Step:</span> ' + escapeHtml(step.text || '') + (stepPeople(step).length ? '<span class="text-zinc-400 dark:text-zinc-500"> · ' + escapeHtml(stepPeopleLabel(step)) + '</span>' : '') + '</p>'
+        : '';
 
       return (
         '<button data-open-task="' + t.id + '" class="flex flex-col text-left group shrink-0 w-64 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 border-l-4 ' + pm.border + ' rounded-xl shadow-card px-3.5 py-3 hover:shadow-pop hover:-translate-y-0.5 transition">' +
@@ -11953,6 +12385,7 @@
           '</div>' +
           '<p data-tooltip="' + escapeHtml(t.name) + '" class="tooltip-top text-sm font-semibold text-zinc-800 dark:text-zinc-100 line-clamp-2 mb-1 group-hover:text-brand-700 dark:group-hover:text-brand-400">' + escapeHtml(t.name) + '</p>' +
           '<p data-tooltip="' + escapeHtml(t.project) + '" class="tooltip-top text-xs text-zinc-400 dark:text-zinc-500 truncate mb-2">' + escapeHtml(t.project) + '</p>' +
+          stepLine +
           '<div class="flex items-center gap-1.5 mt-auto pt-1">' +
             avatarHtml(t.assignee, 'w-5 h-5 shrink-0', 'text-[10px]') +
             '<span class="text-xs text-zinc-500 dark:text-zinc-400 truncate">' + escapeHtml(t.assignee) + '</span>' +
@@ -15069,9 +15502,10 @@
     // A Completed project (every task archived) gets the same emerald wash a Done row gets on the
     // Board (boardTaskRowHtml's rowBg), on its header -- one colour for "finished" everywhere.
     var isCompleted = p.activeCount === 0;
+    var menuOpen = projectMenuOpen === p.name;
     return (
       '<div class="bg-white dark:bg-zinc-800 border ' + (isCompleted ? 'border-emerald-200 dark:border-emerald-500/30' : 'border-zinc-200 dark:border-zinc-700') + ' rounded-xl shadow-card overflow-hidden flex flex-col">' +
-        '<div class="flex items-center gap-2.5 px-4 py-3' + (isCompleted ? ' bg-emerald-50 dark:bg-emerald-500/10' : '') + (expanded && !projectFilesOpen[p.name] ? ' border-b border-zinc-100 dark:border-zinc-700' : '') + (projectFilesOpen[p.name] ? ' border-b border-zinc-100 dark:border-zinc-700' : '') + '">' +
+        '<div class="flex items-center gap-2.5 px-4 py-3' + (isCompleted ? ' bg-emerald-50 dark:bg-emerald-500/10' : '') + (expanded || projectFilesOpen[p.name] || menuOpen ? ' border-b border-zinc-100 dark:border-zinc-700' : '') + '">' +
           '<div class="min-w-0 flex-1">' +
             // The name toggles too, as a shortcut; the labelled pill on the right is the obvious
             // control (a bare chevron beside the name was reported as too easy to miss).
@@ -15093,8 +15527,13 @@
               : '') +
           '</div>' +
           '<div class="flex flex-col items-end gap-2 shrink-0">' +
-            '<span class="' + (p.byPerson && p.byPerson.length ? 'tooltip-top cursor-default ' : '') + 'text-lg font-bold text-zinc-700 dark:text-zinc-200"' +
-              (p.byPerson && p.byPerson.length ? ' data-tooltip="' + escapeHtml(timeByPersonText(p.byPerson)) + '"' : '') + '>' + (p.totalMinutes ? formatDuration(p.totalMinutes) : '—') + '</span>' +
+            '<div class="flex items-center gap-1">' +
+              '<span class="' + (p.byPerson && p.byPerson.length ? 'tooltip-top cursor-default ' : '') + 'text-lg font-bold text-zinc-700 dark:text-zinc-200"' +
+                (p.byPerson && p.byPerson.length ? ' data-tooltip="' + escapeHtml(timeByPersonText(p.byPerson)) + '"' : '') + '>' + (p.totalMinutes ? formatDuration(p.totalMinutes) : '—') + '</span>' +
+              // See PROJECT ACTIONS: one quiet icon; the options only appear once it's clicked.
+              '<button type="button" class="project-menu-toggle p-1 -mr-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 ' + (menuOpen ? 'text-brand-600 dark:text-brand-400' : 'text-zinc-500 dark:text-zinc-400 hover:text-brand-600 dark:hover:text-brand-400') + '" ' +
+                'data-project="' + escapeHtml(p.name) + '" aria-expanded="' + menuOpen + '" title="Archive, restore or merge" aria-label="Project actions">' + svgIcon('moreHorizontal', 'w-4 h-4') + '</button>' +
+            '</div>' +
             '<button type="button" class="project-expand-toggle inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-md border transition ' +
               (expanded
                 ? 'border-brand-300 text-brand-700 bg-brand-50 hover:bg-brand-100 dark:border-brand-500/40 dark:text-brand-300 dark:bg-brand-500/10 dark:hover:bg-brand-500/20'
@@ -15105,6 +15544,7 @@
             '</button>' +
           '</div>' +
         '</div>' +
+        (menuOpen ? projectActionsRowHtml(p, isCompleted) : '') +
         (projectFilesOpen[p.name] ? projectFilesPanelHtml(p.name) : '') +
         (expanded ? '<div class="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-700 flex-1' + openAnimClass('proj:' + p.name) + '">' +
           (p.byPerson && p.byPerson.length
@@ -15260,7 +15700,8 @@
     task_moved: 'arrowRight', task_comment: 'message',
     board_imported: 'upload', board_seeded: 'download',
     board_archived: 'download', task_archived: 'download', task_unarchived: 'upload',
-    leave_changed: 'calendar', project_departments: 'dashboard', project_renamed: 'pencil'
+    leave_changed: 'calendar', project_departments: 'dashboard', project_renamed: 'pencil',
+    project_merged: 'arrowRight'
   };
   var ACTIVITY_ICON_CLASS = {
     task_created: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400',
@@ -15314,17 +15755,7 @@
     var chatName = row.getAttribute('data-activity-chat');
     if (chatName) { setView('chat'); selectChatProject(chatName); return; }
     if (!taskId) return;
-    var live = tasks.find(function (x) { return x.id === taskId; });
-    if (live) { openTaskModal(live); return; }
-    withArchivedTasksReady(function () {
-      var arch = archivedTasks.find(function (x) { return x.id === taskId; });
-      if (!arch) { showToast('That task has since been deleted', 'info'); return; }
-      filters.search = arch.name;
-      persistFilters();
-      var input = document.getElementById('filter-search');
-      if (input) input.value = arch.name;
-      setView('archived');
-    });
+    openTaskOrArchived(taskId);
   }
   document.getElementById('activity-feed').addEventListener('click', function (e) {
     var row = e.target.closest('[data-activity-task], [data-activity-chat]');
@@ -15595,11 +16026,15 @@
     var text = inputEl.value.trim();
     if (!text) return;
     var user = auth.currentUser;
+    // Cleared before the write, not in .then(): the write's own local snapshot re-renders the
+    // list first, and renderSuggestions carries any typed draft into the new box -- so clearing
+    // afterwards hit the old, detached input and the sent reply stayed in the field.
+    inputEl.value = '';
     updateDoc(doc(suggestionsCol, suggestionId), {
       replies: arrayUnion({ text: text, author: user ? (user.displayName || user.email) : null, date: new Date().toISOString() })
-    }).then(function () {
-      inputEl.value = '';
     }).catch(function (err) {
+      var box = document.querySelector('.suggestion-reply-input[data-suggestion-id="' + CSS.escape(suggestionId) + '"]');
+      if (box && !box.value) box.value = text;
       showToast('Could not post reply: ' + err.message, 'error');
     });
   }
@@ -15836,7 +16271,7 @@
       html += '<div class="flex items-center gap-3 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card px-3.5 py-2.5">' +
         avatarHtml(t.assignee, 'w-6 h-6 shrink-0', 'text-xs') +
         '<div class="min-w-0 flex-1">' +
-          '<p class="text-sm font-medium text-zinc-700 dark:text-zinc-200 truncate">' + escapeHtml(t.name) + '</p>' +
+          '<button type="button" data-open-task="' + t.id + '" class="block max-w-full text-left text-sm font-medium text-zinc-700 dark:text-zinc-200 truncate hover:text-brand-700 dark:hover:text-brand-400 hover:underline decoration-zinc-400 underline-offset-2">' + escapeHtml(t.name) + '</button>' +
           '<p class="text-xs text-zinc-400 dark:text-zinc-500 truncate">' + escapeHtml(t.project) + ' · Archived ' + formatShortDate(localDateOf(t.archivedAt)) + '</p>' +
         '</div>' +
         '<button type="button" data-unarchive-task="' + t.id + '" class="shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">Restore</button>' +
@@ -17094,10 +17529,11 @@
     });
     var names = Object.keys(byProject);
     wipProjectNamesShown = names;
+    var finishedHtml = wipFinishedHtml(wipFinishedProjects(names));
     var addEntry = wipAddEntryHtml();
     var addBtn = wipEdit && wipEdit.kind === 'entry' ? ''
       : '<button type="button" data-wip-act="add-entry" class="ml-auto ' + WIP_ACT_BTN + '">+ Add entry</button>';
-    if (!names.length) return wipSectionHtml('By project', 0, addEntry + wipEmptyHtml('No open work, and nothing added to WIP yet.'), addBtn);
+    if (!names.length) return wipSectionHtml('By project', 0, addEntry + wipEmptyHtml('No open work, and nothing added to WIP yet.') + finishedHtml, addBtn);
 
     function firstDeadline(list) {
       var d = list.map(function (t) { return t.deadline; }).filter(Boolean).sort()[0];
@@ -17289,7 +17725,28 @@
     var allFolded = names.every(function (n) { return !wipProjectOpen[n]; });
     var foldAllBtn = '<button type="button" data-wip-fold-all class="' + (addBtn ? 'ml-4' : 'ml-auto') + ' inline-flex items-center gap-1 text-xs font-semibold text-zinc-500 dark:text-zinc-400 hover:text-brand-600 dark:hover:text-brand-400">' +
       svgIcon('chevronDown', 'w-3.5 h-3.5' + (allFolded ? ' -rotate-90' : '')) + (allFolded ? 'Expand all' : 'Collapse all') + '</button>';
-    return wipSectionHtml('By project', names.length, addEntry + cards, addBtn + foldAllBtn);
+    return wipSectionHtml('By project', names.length, addEntry + cards + finishedHtml, addBtn + foldAllBtn);
+  }
+
+  // Folded to one line by default; each project can go to Closing reports in one click (it is
+  // then listed there as usual), and its name opens its card on Projects.
+  var wipFinishedOpen = false;
+  function wipFinishedHtml(list) {
+    if (!list.length) return '';
+    var head = '<button type="button" data-wip-act="toggle-finished" aria-expanded="' + wipFinishedOpen + '" class="w-full px-4 pt-3 pb-2.5 flex items-center gap-2 text-left border-t-4 border-t-zinc-100 dark:border-t-zinc-900/60 text-zinc-500 dark:text-zinc-400 hover:text-brand-600 dark:hover:text-brand-400">' +
+        svgIcon('chevronDown', 'w-3.5 h-3.5 shrink-0' + (wipFinishedOpen ? '' : ' -rotate-90')) +
+        '<span class="text-xs font-bold uppercase tracking-wide">Finished this week</span>' +
+        '<span class="text-xs font-semibold text-zinc-400 dark:text-zinc-500">' + list.length + '</span>' +
+        '<span class="ml-auto text-xs font-normal normal-case text-zinc-400 dark:text-zinc-500">Leaves WIP ' + WIP_FINISHED_DAYS + ' days after its last task</span>' +
+      '</button>';
+    if (!wipFinishedOpen) return head;
+    return head + '<div class="border-t border-zinc-100 dark:border-zinc-700 divide-y divide-zinc-100 dark:divide-zinc-700/50' + openAnimClass('wipfinished') + '">' + list.map(function (f) {
+      return '<div class="px-4 py-2.5 flex items-center gap-3 flex-wrap">' +
+        '<button type="button" data-wip-act="open-project" data-project="' + escapeHtml(f.name) + '" data-tooltip="Open the project" class="tooltip-top min-w-0 text-left text-sm font-semibold text-zinc-800 dark:text-zinc-100 hover:underline decoration-zinc-400 underline-offset-2 break-words">' + projectNameHtml(f.name) + '</button>' +
+        '<span class="text-xs text-zinc-500 dark:text-zinc-400 whitespace-nowrap">Finished ' + escapeHtml(formatShortDate(toDateInputValue(new Date(f.at)))) + '</span>' +
+        '<button type="button" data-wip-act="set-category" data-project="' + escapeHtml(f.name) + '" data-id="closing" class="ml-auto ' + WIP_ACT_BTN + '">Move to Closing reports</button>' +
+      '</div>';
+    }).join('') + '</div>';
   }
 
   document.getElementById('wip-projects').addEventListener('click', function (e) {
@@ -17305,6 +17762,8 @@
       if (kind === 'add-entry') { wipDraft = {}; wipEdit = { project: '', kind: 'entry' }; renderWipView(); return; }
       if (kind === 'edit-note') { wipDraft = {}; wipCategoryPicking = null; wipEdit = { project: proj, kind: 'note' }; renderWipView(); return; }
       if (kind === 'pick-category') { wipCategoryPicking = wipCategoryPicking === proj ? null : proj; renderWipView(); return; }
+      if (kind === 'toggle-finished') { wipFinishedOpen = !wipFinishedOpen; if (wipFinishedOpen) markJustOpened('wipfinished'); renderWipView(); return; }
+      if (kind === 'open-project') { cmdkOpenProject(proj); return; }
       if (kind === 'set-category') {
         wipCategoryPicking = null;
         if ((aid || '') !== projectWipCategory(proj)) setProjectWipCategory(proj, aid || '');
@@ -17518,6 +17977,16 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-21a', date: '2026-10-21', items: [
+      { type: 'new', title: 'Archive or restore a whole project', text: "On Projects, click the ⋯ beside a project's hours. \"Archive project\" moves it to Completed in one go, even if some tasks aren't done (handy for a cancelled job). On a completed project, \"Restore project\" puts every task back on the board." },
+      { type: 'new', title: 'Merge a duplicate project', text: "Created the same project twice by accident? Admins can click ⋯ > \"Merge into another project\" and pick the right one. Its tasks, chat, links and notes all move across, and the duplicate disappears." },
+      { type: 'fixed', title: 'Suggestion replies clear after sending', text: "On Suggestions, the reply box now empties once you press Reply or Enter, instead of keeping the text you'd just sent." }
+    ] },
+    { id: '2026-10-19c', date: '2026-10-19', items: [
+      { type: 'new', title: 'Finished this week, on WIP Meeting', text: "At the bottom of WIP Meeting, \"Finished this week\" lists the projects that wrapped up in the last 7 days. Open it to see when each finished, and move one to Closing reports with one click if it needs a report." },
+      { type: 'new', title: 'Open archived tasks', text: "Click an archived task on a completed project, on the Archived page or in Activity to see it as it was left: steps and their links, time and comments. \"Restore to edit\" puts it back on the board." },
+      { type: 'improved', title: 'Focus of the Day counts checklist dates', text: "A task whose next step is due soon now moves up Focus of the Day, and its card says which step: \"Step due today: Client review\"." }
+    ] },
     { id: '2026-10-19b', date: '2026-10-19', items: [
       { type: 'improved', title: 'Finished projects leave WIP on their own', text: "On WIP Meeting, a project in Active jobs or Content marketing with no open tasks left now drops off by itself, so the list only shows live work. Leads and Closing reports stay as before. To keep a finished job for its closing report, move it to Closing reports before its last task is done." }
     ] },
@@ -19067,8 +19536,9 @@
       return;
     }
     if (openBtn) {
-      var t4 = tasks.find(function (x) { return x.id === openBtn.getAttribute('data-open-task'); });
-      if (t4) openTaskModal(t4);
+      // Not on the board any more: an archived task (Completed project cards, the Archived page)
+      // opens read-only instead of doing nothing.
+      openTaskOrArchived(openBtn.getAttribute('data-open-task'));
       return;
     }
   });
@@ -19316,6 +19786,7 @@
       // Escape opened 'Discard changes?' and the very next line closed it again: the key did nothing.
       if (!confirmModal.classList.contains('hidden')) closeConfirm();
       else if (!taskModal.classList.contains('hidden')) requestCloseTaskModal();
+      else if (!archivedTaskModal.classList.contains('hidden')) closeArchivedTask();
       else if (!calendarDayModal.classList.contains('hidden')) closeCalendarDayModal();
       else if (!weeklyModal.classList.contains('hidden')) closeWeeklyEditor();
       else if (appRoot.classList.contains('sidebar-open')) closeMobileSidebar();
@@ -20555,6 +21026,13 @@
       });
       html += mSection(escapeHtml(c.label) + ' · ' + list.length, mGroup(list.map(function (n) { return mProjectRow(n, open); }).join('')));
     });
+    // Finished this week, as on desktop (moving to Closing reports stays a desktop edit).
+    ensureArchivedTasksListener();
+    var finished = wipFinishedProjects(Object.keys(names));
+    if (finished.length) html += mSection('Finished this week · ' + finished.length, mGroup(finished.map(function (f) {
+      return '<button type="button" class="m-row" data-m-project="' + escapeHtml(f.name) + '"><span class="m-row-main"><span class="m-row-title">' + projectNameHtml(f.name) + '</span>' +
+        '<span class="m-row-sub">Finished ' + escapeHtml(formatShortDate(toDateInputValue(new Date(f.at)))) + '</span></span>' + mIcon('chev', 'm-chev') + '</button>';
+    }).join('')));
     return html;
   }
   function mProjectsHtml() {
@@ -21472,7 +21950,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-19T04:52:16Z";
+  var CURRENT_BUILD_VERSION = "2026-10-21T04:01:59Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

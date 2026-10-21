@@ -79,7 +79,7 @@ function apply(cur, data){
 }
 export function setDoc(ref, data, opts){ var st = store(ref.col); st[ref.id] = apply(opts && opts.merge ? (st[ref.id] || {}) : {}, data); S.writes.push({ op: 'set', col: ref.col, id: ref.id, data: clone(data) }); schedule(); return Promise.resolve(); }
 export function addDoc(col, data){ var r = doc(col); return setDoc(r, data).then(function(){ return r; }); }
-export function updateDoc(ref, data){ var st = store(ref.col); if (!st[ref.id]) return Promise.reject(new Error('no doc')); apply(st[ref.id], data); S.writes.push({ op: 'update', col: ref.col, id: ref.id }); schedule(); return Promise.resolve(); }
+export function updateDoc(ref, data){ var st = store(ref.col); if (!st[ref.id]) return Promise.reject(new Error('no doc')); if (S.failWrites) return Promise.reject(new Error('offline')); apply(st[ref.id], data); S.writes.push({ op: 'update', col: ref.col, id: ref.id }); schedule(); return S.ackDelay ? new Promise(function(r){ setTimeout(r, S.ackDelay); }) : Promise.resolve(); }
 export function deleteDoc(ref){ delete store(ref.col)[ref.id]; schedule(); return Promise.resolve(); }
 export function getDoc(ref){ return Promise.resolve(snapDoc(ref.col, ref.id)); }
 export function writeBatch(){ var ops = []; return { set: function(r, d, o){ ops.push(function(){ return setDoc(r, d, o); }); }, update: function(r, d){ ops.push(function(){ return updateDoc(r, d); }); }, delete: function(r){ ops.push(function(){ return deleteDoc(r); }); }, commit: function(){ ops.forEach(function(f){ f(); }); return Promise.resolve(); } }; }

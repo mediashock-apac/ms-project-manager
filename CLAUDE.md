@@ -828,7 +828,13 @@ to bottom:
      opens the task. No extra rows (so the single scroll pane is untouched), skipped if outside
      the visible range, and a Done task never shows overdue items. A date after the task's own
      deadline is flagged amber in the editor and tooltip rather than blocked. Deliberately NOT fed
-     into `dueUrgency`, Focus, the digest or notifications (more overdue signals, more noise).
+     into `dueUrgency`, the digest or notifications (more overdue signals, more noise).
+     **Focus of the Day does use them for ranking (2026-10-19, asked "does focus of the day also
+     include checklist due dates?", option A):** `focusNextStep(t)` = the earliest open dated step
+     before the task's deadline (or any, with no deadline); `focusScore` counts to the nearer of the
+     two, so a step due today lifts its task (and Board "Sort: Focus" too). The card's chip counts to
+     the step ("Step due today", "Step 2d overdue") and a line names it ("Step: Client review ·
+     Kan"). Review tasks keep "Under review". No new badges or alerts. `tests/focus-steps.test.js`.
      - **Expandable checklist rows** (built later, asked for from a TeamGantt screenshot). A task
        with a checklist gets an arrow in its label (`ganttExpandToggleHtml`, `data-gantt-expand`);
        opening it adds one indented row per item (`GANTT_ITEM_ROW_HEIGHT` 34px) on both the
@@ -3272,6 +3278,45 @@ Note this was a *code* removal — it can't delete tasks that button already cre
 were ever loaded on the live board, those documents are still there and have to be deleted from the
 board itself.
 
+### Archived tasks open read-only (2026-10-19)
+
+Asked "can completed projects still be edited and accessed?". Archived task rows on a Completed
+project's card looked clickable and did nothing. Now any `data-open-task` click on a task that isn't
+on the board (`openTaskOrArchived`) opens `#archived-task-modal` (`openArchivedTask`): owner,
+status, dates, priority, involved, folder, checklist with links/people/dates, time by person,
+comments. Nothing to type into. **Restore to edit** runs `unarchiveTask` (now returns a promise of
+true/false) and opens the normal task window once the task is back. The Archived page's task names
+and Activity rows for archived tasks open it too (Activity used to jump to an Archived search).
+Its own window on purpose: the task window writes on open (step ids, comment threading) and follows
+the live `tasks` list. **Archived tasks stay uneditable in place** (recommended, agreed): editing
+would need a rules change and lets finished work change unnoticed; Restore leaves an Activity record.
+
+### Archive, restore and merge a whole project (2026-10-21)
+
+From Ming Song's suggestion ("archive and unarchive projects ... two projects created by accident,
+how can one become a child or piggyback under something else?"), owner picked: build both, merge
+admins only, target wins with nothing lost. PROJECT ACTIONS in index.html.
+- **One quiet ⋯ beside each project card's hours** (`projectMenuOpen`, session-only) opens one row:
+  **Archive project** (Ongoing; every task, done or not, `archiveProjectTasks(name, true)`; asks
+  first only when something isn't done; Undo on the toast) or **Restore project** (Completed; every
+  archived task back, `restoreWholeProject`), plus, for admins, **Merge into another project…**.
+  Nothing else shows at rest. "Ready to archive" is unchanged.
+- **Merge, not child projects**: Asana/Linear merge duplicates; a project tree would add a layer to
+  every list. The row becomes a search (`projectMergeFor`, results redrawn in place because the grid
+  waits while typing), then a confirm. `mergeProjects` moves active and archived tasks to the target
+  name, then the project docs: lists combine (`MERGE_JOIN_LISTS`: chat by date, links by URL,
+  pinned, WIP deliverables), WIP notes are joined, a field only the duplicate has comes across, and
+  where both differ the target keeps its own and the duplicate's value is saved in `mergedFrom`
+  [{name, at, by, fields}] on the target doc and named in Activity (`project_merged`). The
+  duplicate's doc is deleted. Your own chat favourite/mute/read marks follow
+  (`moveMyProjectMarks`, shared with rename). Not migrated: Monday update rows and old Activity text
+  keep the old name.
+- **Admins only** because archived tasks can only be updated by their creator or an admin in
+  `firestore.rules`, and a merge isn't a one-click undo. No rules change.
+- **WIP "Finished this week" now needs every task Done**, archived ones included, so a project
+  archived unfinished (a cancelled job) isn't listed as finished.
+- `tests/project-actions.test.js`.
+
 ### State model
 
 No framework/reactive layer — plain module-scoped `var`s (`tasks`, `currentView`,
@@ -4035,6 +4080,14 @@ Client contact / Key links columns).
   before its last task is done. "+ Add entry" refuses a bare Active/Content entry with nothing
   open and asks for a first deliverable, so it can't vanish on save. Not sorted still takes
   anything off by hand. `tests/wip-finished.test.js`.
+- **"Finished this week"** (`wipFinishedProjects`, `wipFinishedHtml`; same day, recommended and
+  picked): a folded line at the bottom of By project listing projects whose work all finished in
+  the last `WIP_FINISHED_DAYS` (7) and that WIP no longer lists (Active jobs, Content marketing,
+  uncategorised). Finished = latest `completedAt`/`archivedAt` of its tasks (tasks done before
+  `completedAt` existed have no date and aren't listed). Each row: name (opens the Projects card),
+  "Finished Oct 17", and **Move to Closing reports** (one click; it's then listed there). It
+  empties itself; nothing to tidy. The phone's WIP page lists them too (read-only). This removes the
+  closing-report trade-off above in practice: the room sees what wrapped at the next meeting.
 - **"+ Add entry"** (section header) adds a WIP-only entry: name, one-line note, category pills
   (`wipAddEntryHtml`, `addWipEntry`). It is just a `projects` doc with `wipCategory` + `wipNote`
   and no tasks; a name matching an existing project only categorises that project. **It never

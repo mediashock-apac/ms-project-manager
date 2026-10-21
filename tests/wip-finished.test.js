@@ -32,12 +32,12 @@ function seed() {
         u6: P({ name: 'Old Leaver', email: 'old@mediashock.com.sg', departments: ['suits'], lastSeen: '2025-01-01T00:00:00Z' })
       },
       tasks: {
-        t1: { name: 'Site visit', project: 'Mediashock Office Reno', priority: 'Medium', status: 'Done', startDate: '2026-10-01', deadline: '2026-10-20', assignee: 'Deane Cheng', createdBy: 'Deane Cheng', checklist: [], comments: [], timeEntries: [], createdAt: '2026-09-01T00:00:00Z' },
+        t1: { completedAt: '2026-10-17T03:00:00Z', name: 'Site visit', project: 'Mediashock Office Reno', priority: 'Medium', status: 'Done', startDate: '2026-10-01', deadline: '2026-10-20', assignee: 'Deane Cheng', createdBy: 'Deane Cheng', checklist: [], comments: [], timeEntries: [], createdAt: '2026-09-01T00:00:00Z' },
         t2: { name: 'Live edit', project: 'Live Job', priority: 'Medium', status: 'In Progress', startDate: '2026-10-01', deadline: '2026-10-20', assignee: 'Deane Cheng', createdBy: 'Deane Cheng', checklist: [], comments: [], timeEntries: [], createdAt: '2026-09-01T00:00:00Z' },
         t3: { name: 'Report', project: 'Closing Co', priority: 'Medium', status: 'Done', startDate: '2026-10-01', deadline: '2026-10-20', assignee: 'Deane Cheng', createdBy: 'Deane Cheng', checklist: [], comments: [], timeEntries: [], createdAt: '2026-09-01T00:00:00Z' },
       },
       archivedTasks: {
-        a1: { name: 'Workshop', project: 'Claude INT Onboarding', priority: 'Medium', status: 'Done', startDate: '2026-10-01', deadline: '2026-10-20', assignee: 'Deane Cheng', createdBy: 'Deane Cheng', checklist: [], comments: [], timeEntries: [], archivedAt: '2026-10-10T00:00:00Z', createdAt: '2026-09-01T00:00:00Z' },
+        a1: { name: 'Workshop', project: 'Claude INT Onboarding', priority: 'Medium', status: 'Done', startDate: '2026-10-01', deadline: '2026-10-20', assignee: 'Deane Cheng', createdBy: 'Deane Cheng', checklist: [{ id: 'k1', text: 'Final deck', done: true, link: 'https://docs.google.com/presentation/d/abc', due: '2026-10-08' }, { id: 'k2', text: 'Feedback form', done: false }], comments: [{ id: 'c1', text: 'Deck sent to all staff', author: 'Mychelle Chen', date: '2026-10-09T02:00:00Z' }], timeEntries: [{ minutes: 90, author: 'Deane Cheng', date: '2026-10-08T02:00:00Z', note: '' }], archivedAt: '2026-10-10T00:00:00Z', createdAt: '2026-09-01T00:00:00Z' },
       },
       __x: 0,
       projects: {
@@ -104,6 +104,20 @@ async function skipTours(page) {
   check('leads stay with nothing open', wip.includes('Cold Lead Ltd'));
   check('a typed-in entry with a note stays', wip.includes('Typed Entry'));
   check('an entry with a typed deliverable stays', wip.includes('Deliverable Entry'));
+  // Finished this week: folded to one line, opens to a list with "Move to Closing reports"
+  check('Finished this week shows, folded, with a count', /Finished this week\s*1/.test(wip) && !(await page.$('#view-wip [data-wip-act="set-category"][data-id="closing"]')));
+  check('a project archived 9 days ago is not in it', !wip.includes('Claude INT Onboarding'));
+  await page.click('#view-wip [data-wip-act="toggle-finished"]'); await page.waitForTimeout(200);
+  const fin = await page.textContent('#view-wip');
+  check('opened: lists the project and when it finished', /Mediashock Office Reno\s*Finished Oct 17/.test(fin), fin.slice(fin.indexOf('Finished this week'), fin.indexOf('Finished this week') + 120));
+  await page.screenshot({ path: path.join(OUT, 'wip-finished.png'), fullPage: true });
+  await page.click('#view-wip [data-wip-act="set-category"][data-id="closing"][data-project="Mediashock Office Reno"]'); await page.waitForTimeout(500);
+  const afterMove = await page.textContent('#view-wip');
+  check('Move to Closing reports saves the category', await page.evaluate(() => window.__fb.data.projects.p1.wipCategory === 'closing'));
+  check('and it is listed under Closing reports, not Finished', afterMove.includes('Mediashock Office Reno') && !/Finished this week/.test(afterMove));
+  await page.evaluate(() => window.__fb.remote(function (d) { d.projects.p1.wipCategory = 'active'; }));
+  await page.waitForTimeout(300);
+
   // A new task on a finished project brings it back
   await page.evaluate(() => window.__fb.remote(function (d) { d.tasks.t9 = { name: 'Snag list', project: 'Mediashock Office Reno', priority: 'Medium', status: 'In Progress', startDate: '2026-10-19', deadline: '2026-10-24', assignee: 'Deane Cheng', checklist: [], comments: [], timeEntries: [], createdAt: '2026-10-19T00:00:00Z' }; }));
   await page.waitForTimeout(400);
@@ -118,6 +132,29 @@ async function skipTours(page) {
   await page.fill('#view-wip [data-wip-field="entryNote"]', 'Launch film');
   await page.click('#view-wip [data-wip-act="save"]'); await page.waitForTimeout(500);
   check('with a deliverable it is added and shown', (await page.textContent('#view-wip')).includes('Brand New Job'));
+  // Archived tasks open read-only, from the Archived page and from a Completed project's card
+  await page.click('[data-view-btn="archived"]'); await page.waitForTimeout(800); await skipTours(page);
+  await page.click('#archived-list [data-open-task="a1"]'); await page.waitForTimeout(300);
+  const view = await page.textContent('#archived-task-modal');
+  check('archived task opens read-only', await page.$eval('#archived-task-modal', e => !e.classList.contains('hidden')) && await page.$eval('#task-modal', e => e.classList.contains('hidden')));
+  check('shows steps, the link, time and comments', /Checklist · 1 of 2 done/.test(view) && /Final deck/.test(view) && /Google Slides/.test(view) && /Time logged · 1h 30m/.test(view) && /Deck sent to all staff/.test(view), view.slice(0, 400));
+  check('nothing to type into', (await page.$$('#archived-task-modal input, #archived-task-modal textarea, #archived-task-modal select')).length === 0);
+  await page.screenshot({ path: path.join(OUT, 'archived-task-view.png') });
+  await page.evaluate(() => document.documentElement.classList.add('dark')); await page.waitForTimeout(150);
+  await page.screenshot({ path: path.join(OUT, 'archived-task-view-dark.png') });
+  await page.evaluate(() => document.documentElement.classList.remove('dark'));
+  await page.keyboard.press('Escape'); await page.waitForTimeout(150);
+  check('Escape closes it', await page.$eval('#archived-task-modal', e => e.classList.contains('hidden')));
+  await page.click('[data-view-btn="projects"]'); await page.waitForTimeout(800); await skipTours(page);
+  { const sum = await page.$('#projects-grid details > summary'); if (sum && !(await page.$eval('#projects-grid details', d => d.open))) { await sum.click(); await page.waitForTimeout(300); } }
+  await page.click('#projects-grid .project-expand-toggle[data-project="Claude INT Onboarding"] >> nth=0'); await page.waitForTimeout(300);
+  const row = await page.$('#projects-grid [data-open-task="a1"]');
+  check('Completed project card lists the archived task', !!row);
+  if (row) { await row.click(); await page.waitForTimeout(300); }
+  check('clicking it on the card opens the read-only view', await page.$eval('#archived-task-modal', e => !e.classList.contains('hidden')));
+  if (await page.$eval('#archived-task-modal', e => !e.classList.contains('hidden'))) { await page.click('#archived-task-restore'); await page.waitForTimeout(900); }
+  check('Restore to edit puts it back on the board', await page.evaluate(() => !!window.__fb.data.tasks.a1 && !(window.__fb.data.archivedTasks || {}).a1));
+  check('and opens the normal task window', await page.$eval('#task-modal', e => !e.classList.contains('hidden')) && await page.$eval('#archived-task-modal', e => e.classList.contains('hidden')));
   check('no page errors', errors.length === 0, errors.join(' | '));
   await browser.close();
   console.log(results.join('\n'));

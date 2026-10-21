@@ -34,7 +34,7 @@ service cloud.firestore {
     // do not case-fold, and a token carrying a differently-cased email would silently fail
     // every admin check while looking correct to a human reading it.
     function admins() {
-      return ['aiuser@mediashock.com.sg', 'deane@mediashock.com.sg'];
+      return ['aiuser@mediashock.com.sg', 'deane@mediashock.com.sg', 'mychelle@mediashock.com.sg'];
     }
 
     function isAdmin() {
