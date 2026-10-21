@@ -169,7 +169,7 @@ here (dependencies, Gantt grouping, the progress column) stay out even when a re
 
 ## Commands
 
-**Browser tests: `node tests/run.mjs`** (see `tests/README.md`). 28 suites, ~545 checks, each loading
+**Browser tests: `node tests/run.mjs`** (see `tests/README.md`). 35 suites, each loading
 the real `index.html` in Chromium with Firebase replaced by `tests/fbstub.js`. They run on every push to
 `main` and every weekday at 7am Singapore (`.github/workflows/tests.yml`); a failure is a red X plus
 GitHub's email. Asked for directly: "Constantly run checks as I did today to make sure everything is
@@ -3228,6 +3228,13 @@ version 1 first but I want to be able to revert cleanly if it is not for me."
 - **Copy for partners** puts the brief on the clipboard as plain text, never including the budget.
 - **After saving, the card shows the just-saved copy until the snapshot arrives** (`briefOpen.lastSaved`,
   newest by `updatedAt` wins), so it never falls back to an empty form.
+- **Cancel, X and Escape ask "Are you sure you want to cancel?" before losing a brief being written**
+  (2026-10-21, from a Suggestion; `requestBriefCancel`). Only when something would be lost: the draft
+  is compared with how it looked when editing began (`briefOpen.baseline`, `briefDraftSig`), so an
+  untouched brief, or only switching template, closes straight away, like the task window's "Discard
+  changes?". Discard drops back to the saved brief (or closes a new one); Keep editing / Escape stays.
+  The confirm is raised to z-60 while it's over the brief (both are z-50 and the brief is added later in
+  the page); `closeConfirm` resets it. `tests/brief-cancel.test.js`.
 - **Opened from:** "+ Brief" / "Brief" on the Projects card, the task window (Project field's helper
   line), and the WIP project header (only when a brief exists).
 - **No AI, no cost, no setup:** no Google OAuth, no API key, no rules change (`projects` update only

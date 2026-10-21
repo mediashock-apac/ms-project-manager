@@ -7474,6 +7474,7 @@
   }
 
   function closeConfirm() {
+    confirmModal.style.zIndex = '';
     confirmModal.classList.add('hidden');
     confirmModal.classList.remove('flex');
     confirmCallback = null;
@@ -10108,6 +10109,7 @@
   function briefStartDraft(template, keepJob) {
     var t = BRIEF_TEMPLATES[template] || BRIEF_TEMPLATES.quick;
     var job = keepJob && briefOpen.draft ? briefOpen.draft.job : '';
+    briefOpen.baseline = null;
     briefOpen.draft = {
       template: template, job: job,
       sections: t.open.map(function (type) { return { id: 'n' + (briefNextId++), type: type, rows: briefDefaultRows(type, template), f: {} }; }),
@@ -10119,7 +10121,33 @@
     var copy = JSON.parse(JSON.stringify(b));
     briefOpen.draft = { template: copy.template || 'blank', job: copy.job || '', sections: copy.sections || [], stepsTask: briefOpen.fromTaskId || '', addSteps: false };
     briefOpen.mode = 'edit';
+    briefOpen.baseline = null;
     renderBriefModal();
+  }
+
+  // What the person has written, minus ids and the template, so "changed?" is a plain comparison.
+  // A new brief counts its job as unwritten even when a template switch carried it over.
+  function briefDraftSig(d, job) {
+    return JSON.stringify({ job: job != null ? job : d.job, s: d.sections.map(function (s) { return [s.type, s.title || '', s.text || '', s.f || {}, s.rows || null]; }) });
+  }
+  function briefHasChanges() {
+    if (!briefOpen || briefOpen.mode !== 'edit' || !briefOpen.draft || briefOpen.baseline == null) return false;
+    briefCollect();
+    return briefDraftSig(briefOpen.draft) !== briefOpen.baseline;
+  }
+  function briefLeaveEdit() {
+    if (!briefOpen) return;
+    if (briefOpen.mode === 'edit' && projectBrief(briefOpen.name)) { briefOpen.mode = 'view'; briefOpen.draft = null; briefOpen.baseline = null; renderBriefModal(); }
+    else closeBrief();
+  }
+  // Cancel, X and Escape while writing: ask first if anything would be lost.
+  function requestBriefCancel() {
+    if (!briefHasChanges()) { briefLeaveEdit(); return; }
+    var isNew = !projectBrief(briefOpen.name);
+    confirmModal.style.zIndex = '60'; // the brief window is also z-50 and sits later in the page
+    openConfirm('Are you sure you want to cancel?',
+      isNew ? 'This brief hasn\'t been saved, so what you\'ve written will be lost.' : 'Your changes to this brief haven\'t been saved and will be lost.',
+      briefLeaveEdit, { tone: 'question', confirmText: 'Discard changes', cancelText: 'Keep editing' });
   }
 
   function renderBriefModal() {
@@ -10127,6 +10155,7 @@
     if (!card || !briefOpen) return;
     card.innerHTML = briefOpen.mode === 'view' ? briefViewHtml() : briefEditHtml();
     if (briefOpen.mode === 'edit') {
+      if (briefOpen.baseline == null) { briefCollect(); briefOpen.baseline = briefDraftSig(briefOpen.draft, projectBrief(briefOpen.name) ? null : ''); }
       var first = card.querySelector('#brief-job');
       if (first && !first.value) first.focus();
     }
@@ -10445,9 +10474,9 @@
     var act = actEl.getAttribute('data-brief-act');
     var secEl = actEl.closest('[data-brief-sec]');
     var idx = secEl ? d.sections.findIndex(function (x) { return x.id === secEl.getAttribute('data-brief-sec'); }) : -1;
-    if (act === 'close') { closeBrief(); return; }
+    if (act === 'close') { if (briefOpen.mode === 'edit') requestBriefCancel(); else closeBrief(); return; }
     if (act === 'edit') { briefEditExisting(); return; }
-    if (act === 'cancel-edit') { briefOpen.mode = 'view'; briefOpen.draft = null; renderBriefModal(); return; }
+    if (act === 'cancel-edit') { requestBriefCancel(); return; }
     if (act === 'copy') { briefCopyForPartners(); return; }
     if (act === 'add-update') { var form = document.getElementById('brief-update-form'); form.classList.remove('hidden'); form.classList.add('flex'); document.getElementById('brief-update-text').focus(); return; }
     if (act === 'cancel-update') { var form2 = document.getElementById('brief-update-form'); form2.classList.add('hidden'); form2.classList.remove('flex'); return; }
@@ -10609,7 +10638,8 @@
   document.addEventListener('keydown', function (e) {
     if (e.key !== 'Escape' || !briefOpen) return;
     e.stopPropagation();
-    if (briefOpen.mode === 'edit' && projectBrief(briefOpen.name)) { briefOpen.mode = 'view'; briefOpen.draft = null; renderBriefModal(); }
+    if (!confirmModal.classList.contains('hidden')) { closeConfirm(); return; } // Escape answers the "cancel?" question first
+    if (briefOpen.mode === 'edit') requestBriefCancel();
     else closeBrief();
   }, true);
   if (document.getElementById('task-project')) document.getElementById('task-project').addEventListener('input', syncTaskBriefLink);
@@ -17977,6 +18007,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-21b', date: '2026-10-21', items: [
+      { type: 'improved', title: 'Briefs ask before you lose your writing', text: "Pressing Cancel, the X or Escape on a brief you're writing now asks \"Are you sure you want to cancel?\" first, so a stray click doesn't throw away what you typed. If you haven't changed anything, it just closes." }
+    ] },
     { id: '2026-10-21a', date: '2026-10-21', items: [
       { type: 'new', title: 'Archive or restore a whole project', text: "On Projects, click the ⋯ beside a project's hours. \"Archive project\" moves it to Completed in one go, even if some tasks aren't done (handy for a cancelled job). On a completed project, \"Restore project\" puts every task back on the board." },
       { type: 'new', title: 'Merge a duplicate project', text: "Created the same project twice by accident? Admins can click ⋯ > \"Merge into another project\" and pick the right one. Its tasks, chat, links and notes all move across, and the duplicate disappears." },
@@ -21950,7 +21983,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-21T04:01:59Z";
+  var CURRENT_BUILD_VERSION = "2026-10-21T04:21:15Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
