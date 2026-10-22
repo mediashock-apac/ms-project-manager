@@ -81,6 +81,7 @@ async function nextCheck(page) { await wiggle(page); await page.clock.runFor(610
   check('no popup banner', await a.page.$eval('#update-banner', e => e.classList.contains('hidden')));
   check('New Updates shows the new version cue', /New version · refresh/.test(await a.page.textContent('#updates-nav-btn')) && !!(await a.page.$('#updates-nav-btn [data-ic="refresh"]')));
   await a.page.click('[data-view-btn="board"]').catch(() => {});
+  check('the new version cue has the unread bar', /linear-gradient/.test(await a.page.$eval('#updates-nav-btn', e => getComputedStyle(e).backgroundImage)));
   await a.page.click('#updates-nav-btn');
   await a.page.waitForSelector('#app:not(.hidden)'); await a.page.waitForTimeout(1500); await skipTours(a.page);
   check('clicking the cue reloads', !(await marked(a.page)));

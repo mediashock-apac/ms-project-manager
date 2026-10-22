@@ -363,8 +363,13 @@
   /* Motion, asked for ("I prefer motion though"): the gradient drifts back and forth and a light
      streak sweeps across every few seconds. Both are background layers, not a pseudo-element, so
      the button needs no overflow:hidden (which would clip the corner count on the collapsed rail). */
+  /* A waiting new version (.update-ready, renderUpdateReadyCue) gets the same bar: it is the same
+     news, only not loaded yet (reported: "New version · refresh" sat plain, so the row looked like
+     it had stopped highlighting). */
   #updates-nav-btn.updates-unread:not(.active),
-  #updates-nav-btn.updates-unread:not(.active):hover {
+  #updates-nav-btn.updates-unread:not(.active):hover,
+  #updates-nav-btn.update-ready:not(.active),
+  #updates-nav-btn.update-ready:not(.active):hover {
     background-image: linear-gradient(110deg, transparent 42%, rgba(255,255,255,0.38) 50%, transparent 58%),
                       linear-gradient(90deg, #ff4e20, #6366f1, #ff4e20);
     background-size: 250% 100%, 200% 100%;
@@ -377,14 +382,14 @@
   @property --uf { syntax: '<percentage>'; initial-value: 0%; inherits: false; }
   /* The shared reduced-motion block below can't beat this id selector, so it gets its own. */
   @media (prefers-reduced-motion: reduce) {
-    #updates-nav-btn.updates-unread:not(.active) { animation: none; background-position: 150% 0, 0% 0; }
+    #updates-nav-btn.updates-unread:not(.active), #updates-nav-btn.update-ready:not(.active) { animation: none; background-position: 150% 0, 0% 0; }
   }
-  #updates-nav-btn.updates-unread:not(.active):hover { filter: brightness(1.06); }
+  #updates-nav-btn.updates-unread:not(.active):hover, #updates-nav-btn.update-ready:not(.active):hover { filter: brightness(1.06); }
   /* Same dot texture as the team switcher (asked: "should New Updates have that same design
      treatment?"), only while there's something unread; a read item stays a plain nav row. A
      pseudo-element, not another background layer, so the shine/flow animation positions above
      don't apply to it. */
-  #updates-nav-btn.updates-unread:not(.active)::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  #updates-nav-btn.updates-unread:not(.active)::after, #updates-nav-btn.update-ready:not(.active)::after { content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
     background-image: radial-gradient(rgb(255 255 255 / .28) 1px, transparent 1.4px); background-size: 7px 7px;
     -webkit-mask-image: linear-gradient(90deg, transparent 35%, #000 100%); mask-image: linear-gradient(90deg, transparent 35%, #000 100%); }
   /* Team tiles (teamspaceTileHtml): each department's colour plus its own icon. Still at rest; a
@@ -447,7 +452,7 @@
     #sidebar.collapsed #updates-nav-btn.updates-unread #updates-nav-badge { top: -5px; right: -5px; }
   }
 
-  .updates-unread:not(.active) > svg { animation: updates-ring 3.2s ease-in-out infinite; transform-origin: 30% 70%; }
+  .updates-unread:not(.active) > svg, .update-ready:not(.active) > svg { animation: updates-ring 3.2s ease-in-out infinite; transform-origin: 30% 70%; }
   @keyframes updates-ring { 0%, 55%, 100% { transform: rotate(0); } 60% { transform: rotate(-16deg); } 66% { transform: rotate(14deg); } 72% { transform: rotate(-10deg); } 78% { transform: rotate(8deg); } 84% { transform: rotate(0); } }
 
   /* ICON HOVER MOTION. Every clickable icon acts out what it means when you point at it (asked:
@@ -699,7 +704,7 @@
   @media (prefers-reduced-motion: reduce) {
     .update-banner, .update-banner-icon svg,
     .remote-change-flash, .saved-tick, .expand-in, .expand-fade,
-    .updates-pulse, .updates-unread:not(.active), .updates-unread:not(.active) > svg,
+    .updates-pulse, .updates-unread:not(.active), .updates-unread:not(.active) > svg, .update-ready:not(.active) > svg,
     .task-just-completed, .done-today-bounce, .modal-backdrop, .modal-pop-in, .panel-pop-in,
     .checklist-just-checked, .bell-nudge > svg, .badge-pop, .badge-pop::after, .chat-message-enter, .chat-receipt-flip,
     .chat-star-pop, .chat-typing-dots span, .field-shake, .chat-message-jump-flash { animation: none; }
@@ -22167,7 +22172,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-22T02:51:12Z";
+  var CURRENT_BUILD_VERSION = "2026-10-22T02:56:36Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
