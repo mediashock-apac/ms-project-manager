@@ -7043,20 +7043,24 @@
   // Logged time per person across some tasks, most first (asked: "this does not breakdown the time
   // tracked for each person attached?"). Each entry's author is who the time is for (an entry
   // logged for someone else still counts for them, see loggedBy). Old entries with no author: "Unknown".
+  // `ot` is the part of `minutes` tagged overtime (asked: "Does this show OT time?"), shown beside it.
   function timeByPerson(taskList) {
-    var by = {};
+    var by = {}, ot = {};
     (taskList || []).forEach(function (t) {
       (t.timeEntries || []).forEach(function (e) {
         if (!e.minutes) return;
         var n = e.author || 'Unknown';
         by[n] = (by[n] || 0) + e.minutes;
+        if (e.overtime) ot[n] = (ot[n] || 0) + e.minutes;
       });
     });
-    return Object.keys(by).map(function (n) { return { name: n, minutes: by[n] }; })
+    return Object.keys(by).map(function (n) { return { name: n, minutes: by[n], ot: ot[n] || 0 }; })
       .sort(function (a, b) { return b.minutes - a.minutes || a.name.localeCompare(b.name); });
   }
   function timeByPersonText(list) {
-    return list.map(function (x) { return x.name + ' ' + formatDuration(x.minutes); }).join(' · ');
+    return list.map(function (x) {
+      return x.name + ' ' + formatDuration(x.minutes) + (x.ot ? ' (' + formatDuration(x.ot) + ' OT)' : '');
+    }).join(' · ');
   }
 
   function taskBillableMinutes(task) {
@@ -12545,7 +12549,7 @@
 
     var minutes = taskTimeMinutes(t);
     if (minutes) {
-      var people = timeByPerson([t]).map(function (x) { return { name: String(x.name).split(' ')[0], minutes: x.minutes }; });
+      var people = timeByPerson([t]).map(function (x) { return { name: String(x.name).split(' ')[0], minutes: x.minutes, ot: x.ot }; });
       html += '<div>' + label('Time logged · ' + formatDuration(minutes)) +
         '<p class="text-sm text-zinc-700 dark:text-zinc-200">' + escapeHtml(timeByPersonText(people)) + '</p></div>';
     }
@@ -16157,7 +16161,9 @@
                 p.byPerson.map(function (x) {
                   return '<span class="inline-flex items-center gap-1.5 text-xs text-zinc-600 dark:text-zinc-300" title="' + escapeHtml(x.name) + '">' +
                     avatarHtml(x.name, 'w-5 h-5 shrink-0', 'text-[9px]') + escapeHtml(x.name === 'Unknown' ? 'Unknown' : x.name.split(' ')[0]) +
-                    '<span class="font-semibold text-zinc-800 dark:text-zinc-100 tabular-nums">' + escapeHtml(formatDuration(x.minutes)) + '</span></span>';
+                    '<span class="font-semibold text-zinc-800 dark:text-zinc-100 tabular-nums">' + escapeHtml(formatDuration(x.minutes)) + '</span>' +
+                    (x.ot ? '<span class="text-zinc-400 dark:text-zinc-500">·</span><span class="text-[11px] font-bold text-amber-700 dark:text-amber-400 tabular-nums" data-person-ot>' + escapeHtml(formatDuration(x.ot)) + ' OT</span>' : '') +
+                    '</span>';
                 }).join('') +
               '</div>'
             : '') +
@@ -18678,6 +18684,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-22m', date: '2026-10-22', items: [
+      { type: 'improved', title: 'Overtime in Time by person', text: "On a project card, Time by person now shows how much of each person's hours was overtime, for example \"Deane 11h · 1h OT\". It's part of their hours, not extra on top, and only shows for people who logged overtime. Hovering a total shows it too." }
+    ] },
     { id: '2026-10-22l', date: '2026-10-22', items: [
       { type: 'new', title: 'Monday update: status for single tasks', text: "In your Monday update, a project with several tasks now has \"+ Status for a task\". Pick a task and give it its own status and note, for example one post in Mediashock LinkedIn. The project's own status becomes optional, and task lines show under the project on your card." },
       { type: 'new', title: 'Copy link on briefs, projects and chats', text: "Briefs, project cards (under ⋯), project chats and archived tasks now have Copy link, like tasks already did. Paste it into WhatsApp, email or anywhere else and it opens that exact thing in Project Manager. On a brief it replaces \"Copy for partners\"." },
@@ -22693,7 +22702,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-22T07:14:00Z";
+  var CURRENT_BUILD_VERSION = "2026-10-22T07:49:12Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

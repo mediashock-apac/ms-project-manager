@@ -1102,6 +1102,10 @@ to bottom:
      list (avatar, first name, hours, most first) and (2) the same split as a hover on the total and
      on any task's hours that two or more people logged. By each entry's `author` (who the time is
      for), active and archived tasks, so it always adds up to the total. Nothing new at rest.
+     **Overtime per person** (2026-10-22, asked "Does this show OT time?"): each person's hours already
+     include their overtime; `timeByPerson` also returns `ot`, shown as an amber "· 1h OT" beside the
+     hours only when above zero (`data-person-ot`), and as "(1h OT)" in the hover text and the
+     archived-task window. `tests/project-files.test.js`.
    - `renderProjects`: splits into **Ongoing** (sorted by `nextDeadline` ascending) and **Completed**
      (sorted by `lastArchivedAt` descending, collapsible) stacked sections (formerly side by side), not one flat list —
      each task/project row also has a separate amber "OT" badge (`taskOvertimeMinutes`) next to its

@@ -94,7 +94,7 @@ async function skipTours(page) {
     await page.evaluate(() => window.__fb.remote(function (d) {
       const t1 = d.tasks.t1;
       t1.driveLink = 'https://drive.google.com/drive/folders/gws';
-      t1.timeEntries = [{ minutes: 600, author: 'Deane Cheng', date: '2026-10-05T02:00:00Z', note: 'Edit' }, { minutes: 135, author: 'Mychelle Chen', date: '2026-10-05T03:00:00Z', note: 'Review' }, { minutes: 60, author: 'Deane Cheng', date: '2026-10-06T03:00:00Z', note: 'Fixes' }];
+      t1.timeEntries = [{ minutes: 600, author: 'Deane Cheng', date: '2026-10-05T02:00:00Z', note: 'Edit' }, { minutes: 135, author: 'Mychelle Chen', date: '2026-10-05T03:00:00Z', note: 'Review' }, { minutes: 60, author: 'Deane Cheng', date: '2026-10-06T03:00:00Z', note: 'Fixes', overtime: true }];
       t1.checklist = [
         { id: 'c1', text: 'Final deck', due: '2026-10-08', done: false, link: 'https://docs.google.com/presentation/d/deck1/edit' },
         { id: 'c2', text: 'Cut v2', due: '2026-10-09', done: false, link: 'https://next.frame.io/project/cut2' },
@@ -146,8 +146,10 @@ async function skipTours(page) {
       const byp = await page.$eval(card, b => { const e = b.closest('.rounded-xl').querySelector('.project-time-by-person'); return e ? e.innerText : ''; });
       check('opening the tasks shows time by person, most first', /Deane\s*11h[\s\S]*Mychelle\s*2h 15m/.test(byp), byp);
       check('total still shown with the breakdown open', /13h 15m/.test(await cardEl()));
+      check('overtime shows beside the person who logged it (11h includes 1h OT)', /Deane\s*11h\s*·\s*1h OT/.test(byp), byp);
+      check('no OT label for someone with no overtime', (await page.$$eval('#projects-grid .project-time-by-person [data-person-ot]', e => e.length)) === 1);
       const tip = await page.$eval(card, b => b.closest('.rounded-xl').querySelector('.text-lg[data-tooltip]').getAttribute('data-tooltip'));
-      check('hovering the total names each person', tip === 'Deane Cheng 11h · Mychelle Chen 2h 15m', tip);
+      check('hovering the total names each person, with their overtime', tip === 'Deane Cheng 11h (1h OT) · Mychelle Chen 2h 15m', tip);
     }
     const box = await page.$eval(card, b => { const r = b.closest('.rounded-xl').getBoundingClientRect(); return { x: r.x - 8, y: r.y - 8, width: r.width + 16, height: Math.min(r.height + 16, 900) }; });
     await page.screenshot({ path: path.join(OUT, 'project-files' + (dark ? '-dark' : '') + '.png'), clip: box });
