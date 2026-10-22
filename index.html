@@ -1899,9 +1899,9 @@
             <button type="button" id="ai-suggestions-paste-import-btn" class="self-start shrink-0 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-indigo-300 dark:border-indigo-500/40 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10">Import pasted JSON</button>
           </div>
         </div>
-        <!-- Two independent columns from lg (renderSuggestions), not a row grid: reply threads make
+        <!-- One section per status (renderSuggestions), each two independent columns from lg, not a row grid: reply threads make
              cards very uneven, and a grid would leave gaps beside every short card. -->
-        <div id="suggestions-list" class="flex flex-col lg:flex-row lg:items-start gap-3"></div>
+        <div id="suggestions-list" class="flex flex-col gap-6"></div>
       </div>
     </section>
 
@@ -16224,6 +16224,8 @@
   // entirely when nothing this view shows has changed, and when it does rebuild, carry the
   // open panels, reply drafts, focus and scroll position across it.
   var lastSuggestionsRenderKey = null;
+  var SUGGESTION_FOLDED = { fixed: true, unabletofix: true };
+  var suggestionsFoldOpen = {};
   function renderSuggestions() {
     var container = document.getElementById('suggestions-list');
     var list = suggestions.slice().sort(function (a, b) { return new Date(b.date) - new Date(a.date); });
@@ -16252,15 +16254,34 @@
     // one flex column again -- and the inline `order` puts them back in true newest-first
     // sequence there. (CSS `columns` was the obvious alternative and was rejected: it fills the
     // whole left column first, so the second-newest post could land halfway down the page.)
-    function suggestionColumn(parity) {
+    function suggestionColumn(items, parity) {
       return '<div class="contents lg:flex lg:flex-col lg:flex-1 lg:min-w-0 lg:gap-3">' +
-        list.map(function (sg, k) {
+        items.map(function (sg, k) {
           return k % 2 === parity ? '<div style="order:' + k + '">' + suggestionCardHtml(sg) + '</div>' : '';
         }).join('') +
       '</div>';
     }
+    // Grouped by status (asked: "Can suggestions be categorised based on their status? ... make it
+    // visually and functionally consistent as what has been done in other areas"): the Projects
+    // page's pattern. Open and WIP are headed sections, newest first; Fixed and Unable to Fix are
+    // the ones that keep growing, so they fold behind a chevron like Projects' Completed, and a
+    // person's own open/close is remembered across live redraws (suggestionsFoldOpen). Empty
+    // sections are left out.
+    var byStatus = {};
+    list.forEach(function (sg) { var st = SUGGESTION_STATUS_META[sg.status] ? sg.status : 'open'; (byStatus[st] = byStatus[st] || []).push(sg); });
+    var cols = function (items) { return '<div class="flex flex-col lg:flex-row lg:items-start gap-3">' + suggestionColumn(items, 0) + suggestionColumn(items, 1) + '</div>'; };
     container.innerHTML = list.length
-      ? suggestionColumn(0) + suggestionColumn(1)
+      ? SUGGESTION_STATUS_ORDER.filter(function (st) { return byStatus[st]; }).map(function (st) {
+          var items = byStatus[st], label = SUGGESTION_STATUS_META[st].label;
+          if (!SUGGESTION_FOLDED[st]) {
+            return '<section data-suggestion-section="' + st + '"><h3 class="flex items-center gap-2 text-lg font-bold text-zinc-800 dark:text-zinc-100 mb-3">' + label + projectSectionCount(items.length) + '</h3>' + cols(items) + '</section>';
+          }
+          return '<details data-suggestion-section="' + st + '"' + (suggestionsFoldOpen[st] ? ' open' : '') + '>' +
+            '<summary class="flex items-center gap-2 cursor-pointer select-none text-lg font-bold text-zinc-800 dark:text-zinc-100 hover:text-brand-600 dark:hover:text-brand-400 mb-3">' +
+              '<svg data-ic="chevronRight" class="disclosure-chevron w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"></polyline></svg>' +
+              label + projectSectionCount(items.length) +
+            '</summary>' + cols(items) + '</details>';
+        }).join('')
       : '<p class="w-full text-sm text-zinc-400 dark:text-zinc-500 text-center py-10">No suggestions yet — be the first to share an idea.</p>';
 
     Object.keys(openDetails).forEach(function (id) {
@@ -16336,6 +16357,9 @@
   }
 
   document.getElementById('suggestions-list').addEventListener('click', function (e) {
+    // A click, not the 'toggle' event, for the same reason as Projects' Completed.
+    var foldSummary = e.target.closest('details[data-suggestion-section] > summary');
+    if (foldSummary) { var fd = foldSummary.parentNode; suggestionsFoldOpen[fd.getAttribute('data-suggestion-section')] = !fd.open; return; }
     var aiDetailsToggle = e.target.closest('.suggestion-ai-details-toggle');
     if (aiDetailsToggle) {
       var panel = document.getElementById('ai-details-' + aiDetailsToggle.getAttribute('data-suggestion-id'));
@@ -16404,6 +16428,8 @@
     var oldStatus = (before && before.status) || 'open';
     updateDoc(doc(suggestionsCol, suggestionId), { status: newStatus }).then(function () {
       if (newStatus !== oldStatus) notifySuggestionStatus(before, newStatus);
+      // The card now moves to its status's section, which may be folded: say where it went.
+      if (newStatus !== oldStatus && SUGGESTION_STATUS_META[newStatus]) showToast('Moved to ' + SUGGESTION_STATUS_META[newStatus].label, 'success');
     }).catch(function (err) {
       showToast('Could not update status: ' + err.message, 'error');
       lastSuggestionsRenderKey = null; // force a real rebuild: the data didn't change, the dropdown did
@@ -18312,6 +18338,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-22i', date: '2026-10-22', items: [
+      { type: 'improved', title: 'Suggestions grouped by status', text: "Suggestions are now sorted into Open, WIP, Fixed and Unable to Fix, each with a count, newest first. Fixed and Unable to Fix fold away like Completed on Projects: click one to open it." }
+    ] },
     { id: '2026-10-22h', date: '2026-10-22', items: [
       { type: 'improved', title: 'Billable and Overtime explained', text: "In a task's Time Tracking, hover Billable, Overtime or the Time Tracking heading to see what each one means." }
     ] },
@@ -22314,7 +22343,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-22T04:01:20Z";
+  var CURRENT_BUILD_VERSION = "2026-10-22T04:04:46Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

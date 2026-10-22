@@ -169,7 +169,7 @@ here (dependencies, Gantt grouping, the progress column) stay out even when a re
 
 ## Commands
 
-**Browser tests: `node tests/run.mjs`** (see `tests/README.md`). 40 suites, each loading
+**Browser tests: `node tests/run.mjs`** (see `tests/README.md`). 42 suites, each loading
 the real `index.html` in Chromium with Firebase replaced by `tests/fbstub.js`. They run on every push to
 `main` and every weekday at 7am Singapore (`.github/workflows/tests.yml`); a failure is a red X plus
 GitHub's email. Asked for directly: "Constantly run checks as I did today to make sure everything is
@@ -409,6 +409,7 @@ sidebar so users will know whenever new updates are in."
     first. The newest year is open, older years fold to one line (`data-archived-year`, fold state
     in `archivedYearOpen` until reload), and a search opens every year with a match.
     `tests/archived-years.test.js`.
+  - **Suggestions** are grouped by status (2026-10-22, asked: "categorised based on their status... visually and functionally consistent as what has been done in other areas"), the Projects page's pattern: Open and WIP as `text-lg` headings with `projectSectionCount`, newest first; Fixed and Unable to Fix fold like Completed (`SUGGESTION_FOLDED`, open state in `suggestionsFoldOpen`, recorded from the summary click); empty sections are left out; a status change says "Moved to <status>". `tests/suggestion-status.test.js`.
   - **Suggestions**: `max-w-6xl`, cards in **two independent columns** from `lg`, alternating
     (newest top-left, next top-right). Reply threads make cards very uneven, so a row grid would
     leave gaps. Below `lg` the columns are `display: contents` and each card carries an inline
