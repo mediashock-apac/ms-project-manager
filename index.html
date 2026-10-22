@@ -7220,7 +7220,9 @@
       if (!taskInTeamspace(t)) return false;
       if (filters.priority && t.priority !== filters.priority) return false;
       if (filters.project && t.project !== filters.project) return false;
-      if (filters.assignees.length && filters.assignees.indexOf(t.assignee) === -1) return false;
+      // The owner or anyone Also involved (reported: "Not appearing if you're listed as 'also
+      // involved'"). Not checklist-step people: a whole task per one-step assignment is too busy.
+      if (filters.assignees.length && [t.assignee].concat(Array.isArray(t.involved) ? t.involved : []).every(function (n) { return filters.assignees.indexOf(n) === -1; })) return false;
       if (filters.overdueOnly && !dueUrgency(t).overdue) return false;
       if (q && !taskMatchesSearch(t, q)) return false;
       return true;
@@ -18144,6 +18146,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-22c', date: '2026-10-22', items: [
+      { type: 'fixed', title: 'Filtering by person includes Also involved', text: 'Picking someone in the people filter now shows the tasks they\'re also involved in, not just the ones they own. Thanks Arvind for flagging it.' }
+    ] },
     { id: '2026-10-22b', date: '2026-10-22', items: [
       { type: 'new', title: 'Singapore public holidays', text: "The Calendar now shows Singapore's public holidays, including the Monday off when one falls on a weekend. On the Timeline they're shaded like weekends (hover the day for its name), with a note if a deadline lands on one. They also count as days off: Team load skips them, due-soon warnings and deadline reminders look past them, copied or moved checklist dates step back to the working day before, leave shows its working days, and the Monday Meeting reminders move to the working day before or after." }
     ] },
@@ -22127,7 +22132,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-22T02:31:59Z";
+  var CURRENT_BUILD_VERSION = "2026-10-22T02:42:43Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
