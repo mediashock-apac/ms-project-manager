@@ -126,6 +126,9 @@ function extra() {
   await page.click('[data-view-btn="suggestions"]'); await page.waitForTimeout(500); await skipTours(page);
   const sugNotifs = () => page.evaluate(() => Object.values(window.__fb.data.notifications).filter(n => n.suggestionId === 's1'));
   for (const st of ['wip', 'unabletofix', 'fixed', 'open']) {
+    // Fixed and Unable to Fix are folded sections since 2026-10-22, so open the one the card moved
+    // into, as a person would, before changing it again.
+    await page.evaluate(() => document.querySelectorAll('#suggestions-list details').forEach(d => { d.open = true; }));
     await page.selectOption('.suggestion-status-select', st);
     await page.waitForTimeout(400);
   }
