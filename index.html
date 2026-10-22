@@ -2589,6 +2589,7 @@
       : type === 'weekly_reminder' ? 'Your Monday update is due'
       : type === 'time_nudge' ? 'Log this week\'s time'
       : type === 'dates_missing' ? 'Some of your work has no dates'
+      : type === 'clash_heads_up' ? 'Several things are due the same day'
       : null;
   }
 
@@ -6273,10 +6274,7 @@
       out += '<span data-open-task="' + t.id + '" title="' + escapeHtml('Overdue: was due ' + formatShortDate(t.deadline) + ', ' + late + ' day' + (late === 1 ? '' : 's') + ' ago') + '" ' +
         'class="gantt-late-tag ' + GANTT_TAG_CLS + 'bg-rose-100 text-rose-700 ring-rose-300 dark:bg-rose-500/20 dark:text-rose-300 dark:ring-rose-500/40">' + svgIcon('clock', 'w-3 h-3') + late + 'd late</span>';
     }
-    if (stacked && stacked.length) {
-      out += '<span data-open-task="' + t.id + '" title="' + escapeHtml(t.assignee + ' has ' + (stacked.length + 1) + ' things due ' + formatShortDate(t.deadline) + ': ' + [t.name].concat(stacked.map(function (o) { return o.name; })).join(', ')) + '" ' +
-        'class="gantt-stack-tag ' + GANTT_TAG_CLS + 'bg-amber-100 text-amber-800 ring-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:ring-amber-500/40">' + svgIcon('layers', 'w-3 h-3') + (stacked.length + 1) + '</span>';
-    }
+    if (stacked && stacked.length) out += ganttClashTagHtml(t, stacked);
     return out;
   }
 
@@ -6961,32 +6959,51 @@
   // its deadline, not just a boolean, so the bar's tooltip can name exactly what's stacked on top
   // of it instead of a bare warning.
   //
+  // (The deadline-only stack function this described was replaced by sameDayClashes below, which
+  // counts steps too.)
   // Since 2026-10-22 a stack is SAME_DAY_CLASH_COUNT (3) or more, not 2 (asked: "only have it when
   // there are more than 2"): two things due one day is normal, and flagging it lit up nearly every
   // bar. The WIP meeting's Clash uses the same constant, so the two never disagree about what a
   // pile-up is.
   var SAME_DAY_CLASH_COUNT = 3;
-  function computeGanttDeadlineStacks(rows) {
-    var byAssignee = {};
-    rows.forEach(function (t) {
-      if (t.status === 'Done' || !t.assignee) return;
-      (byAssignee[t.assignee] = byAssignee[t.assignee] || []).push(t);
-    });
-    var stacks = {};
-    Object.keys(byAssignee).forEach(function (name) {
-      var byDeadline = {};
-      byAssignee[name].forEach(function (t) {
-        (byDeadline[t.deadline] = byDeadline[t.deadline] || []).push(t);
-      });
-      Object.keys(byDeadline).forEach(function (deadline) {
-        var group = byDeadline[deadline];
-        if (group.length < SAME_DAY_CLASH_COUNT) return;
-        group.forEach(function (t) {
-          stacks[t.id] = group.filter(function (other) { return other.id !== t.id; });
-        });
+  // ONE same-day rule for the Timeline tag, WIP's Clash, Team load and the heads-up (2026-10-22,
+  // asked: "checklist items deadlines when stacked are cause for concern too", option A).
+  // Counted per person per day: deadlines they own plus open steps assigned to them, where one
+  // task's steps (and its own deadline) on the same day are ONE batch -- six ad sizes due Thursday
+  // are one thing to deliver. Counted over everyone's open work, not just what filters leave on
+  // screen, so every view agrees. wipLoadItems does the counting.
+  function sameDayClashes() {
+    var today = toDateInputValue(todayMidnight());
+    var by = wipLoadItems(activeTasks().filter(function (t) { return t.status !== 'Done'; }), today, '9999-12-31');
+    var out = [];
+    Object.keys(by).forEach(function (who) {
+      Object.keys(by[who].days).forEach(function (date) {
+        var items = by[who].days[date];
+        if (items.length >= SAME_DAY_CLASH_COUNT) out.push({ who: who, date: date, items: items });
       });
     });
-    return stacks;
+    return out;
+  }
+  // taskId -> date -> [clashes that task is part of on that date]
+  function clashesByTask(clashes) {
+    var map = {};
+    clashes.forEach(function (c) {
+      c.items.forEach(function (it) {
+        var byDate = map[it.taskId] = map[it.taskId] || {};
+        (byDate[c.date] = byDate[c.date] || []).push(c);
+      });
+    });
+    return map;
+  }
+  function clashTitle(list) {
+    return list.map(function (c) {
+      return c.who + ' has ' + c.items.length + ' things due ' + formatShortDate(c.date) + ': ' + c.items.map(function (it) { return it.text; }).join(', ');
+    }).join('\n');
+  }
+  function ganttClashTagHtml(t, list, style) {
+    var n = Math.max.apply(null, list.map(function (c) { return c.items.length; }));
+    return '<span data-open-task="' + t.id + '" title="' + escapeHtml(clashTitle(list)) + '" ' + (style ? 'style="' + style + '" ' : '') +
+      'class="gantt-stack-tag ' + GANTT_TAG_CLS + 'bg-amber-100 text-amber-800 ring-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:ring-amber-500/40' + (style ? ' absolute' : '') + '">' + svgIcon('layers', 'w-3 h-3') + n + '</span>';
   }
 
   function formatDuration(totalMinutes) {
@@ -12190,6 +12207,46 @@
      first snapshot lands, so whichever listener finishes second runs the checks with both halves
      of the data present.
   --------------------------------------------------------- */
+  // Heads-up on your own same-day pile-up (2026-10-22, option A): once per day piled up, from two
+  // working days before it, so you can ask for help or move something before the day rather than
+  // the room spotting it at WIP. Same count as everywhere else (sameDayClashes). Skipped when the
+  // High-priority workload alert already covers that day, so one day never sends two alerts.
+  // Recorded in your own people doc's helpersSent, like the Friday nudge.
+  function checkClashHeadsUp() {
+    if (!HELPERS.clash) return;
+    var me = myPersonDoc();
+    var name = weeklyMe();
+    if (!me || !name || !tasks.length) return;
+    var today = toDateInputValue(todayMidnight());
+    var mine = sameDayClashes().filter(function (c) {
+      return c.who === name && c.date >= today && workingDaysBetween(today, c.date) <= 1;
+    });
+    if (!mine.length) return;
+    var sent = (Array.isArray(me.helpersSent) ? me.helpersSent : []).concat(Object.keys(helperSession))
+      .filter(function (t, i, a) { return a.indexOf(t) === i; });
+    mine.forEach(function (c) {
+      var tag = 'clash|' + c.date;
+      if (sent.indexOf(tag) !== -1 || helperSession[tag]) return;
+      var high = activeTasks().filter(function (t) { return t.assignee === name && t.status !== 'Done' && t.priority === 'High' && t.deadline === c.date; }).length;
+      if (high >= 2) return;
+      helperSession[tag] = true;
+      sent = sent.concat([tag]).slice(-24);
+      var first = c.items[0];
+      setDoc(doc(peopleCol, me.id), { helpersSent: sent }, { merge: true }).then(function () {
+        return setDoc(doc(notificationsCol), {
+          recipient: name,
+          type: 'clash_heads_up',
+          taskId: first.taskId,
+          taskName: first.taskName || '',
+          chatProject: null,
+          author: 'Project Manager',
+          snippet: c.items.length + ' things due ' + wipDayLabel(c.date) + ': ' + c.items.map(function (it) { return it.text; }).join(', '),
+          at: new Date().toISOString(),
+          read: false
+        });
+      }).catch(function (e) { console.error('clash heads-up failed', e); });
+    });
+  }
   function runTaskAutomations() {
     if (!notificationDedupReady) return;
     checkWorkloadSpikes();
@@ -12198,6 +12255,7 @@
     checkLeaveClashes();
     checkMissingDates();
     checkFridayHelpers();
+    checkClashHeadsUp();
   }
 
   /* =========================================================
@@ -12218,7 +12276,7 @@
      there's nothing to say. The Friday one (3pm, an hour before the Monday update reminder) is
      recorded on your own people doc (helpersSent) so a reload or a second tab doesn't resend. Switch any of them off here.
   ========================================================= */
-  var HELPERS = { handoff: true, time: true, dates: true };
+  var HELPERS = { handoff: true, time: true, dates: true, clash: true };
   var HELPER_DATES_GRACE_DAYS = 3;   // a task this new isn't nagged about dates yet
   var missingDatesWarned = {};
   function helperListSnippet(list, one, many) {
@@ -12276,7 +12334,7 @@
       var tag = weekKey + '|' + kind;
       if (!list.length || sent.indexOf(tag) !== -1 || helperSession[tag]) return;
       helperSession[tag] = true;
-      sent = sent.concat([tag]).slice(-12);
+      sent = sent.concat([tag]).slice(-24);
       setDoc(doc(peopleCol, me.id), { helpersSent: sent }, { merge: true }).then(function () {
         return setDoc(doc(notificationsCol), {
           recipient: name,
@@ -13034,11 +13092,11 @@
 
     // Only tasks with a deadline: grouping by an absent deadline would call every TBD task one
     // person holds a "stack".
-    var deadlineStacks = computeGanttDeadlineStacks(withDeadline);
-    var stackCount = Object.keys(deadlineStacks).length;
+    var clashMap = clashesByTask(sameDayClashes());
+    var stackCount = list.filter(function (t) { return !!clashMap[t.id]; }).length;
     var stackNote = document.getElementById('gantt-stack-note');
     if (stackCount > 0) {
-      stackNote.textContent = stackCount + ' task' + (stackCount === 1 ? '' : 's') + ' sharing a stacked deadline';
+      stackNote.textContent = stackCount + ' task' + (stackCount === 1 ? '' : 's') + ' on a day with 3+ due';
       stackNote.classList.remove('hidden');
     } else {
       stackNote.classList.add('hidden');
@@ -13228,7 +13286,10 @@
       var rowIdx = rowCursor++;
       var expanded = !!ganttExpanded[t.id];
       var overdue = dueUrgency(t).overdue;
-      var rowStacked = deadlineStacks[t.id] || [];
+      // Clashes this task is part of: on its deadline day the tag sits after the bar; on a step's
+      // day it sits on that day of the bar.
+      var rowClash = clashMap[t.id] || {};
+      var rowStacked = rowClash[t.deadline] || [];
 
       // z-20: above the "today" line (15) and the unpositioned bars (auto/0), below the frozen
       // top row (25) and the corner (26). See the full tier list at the corner cell above.
@@ -13271,9 +13332,7 @@
       // chart now the Progress column is gone (see the note where it used to render).
       var checklistTotal = (t.checklist || []).length;
       var checklistDoneCount = (t.checklist || []).filter(function (i) { return i.done; }).length;
-      var stackTitle = rowStacked.length
-        ? ' · Deadline stack: ' + t.assignee + ' also has ' + rowStacked.map(function (o) { return o.name; }).join(', ') + ' due the same day'
-        : '';
+      var stackTitle = rowStacked.length ? ' · ' + clashTitle(rowStacked).replace(/\n/g, ' · ') : '';
 
       // One band per leave period that overlaps the visible range, clamped to it -- not one div
       // per day, which on a long range would be hundreds of elements saying the same thing.
@@ -13333,6 +13392,14 @@
       // Deadline warnings are tags just past the bar's end, where the deadline is (ganttEndTagsHtml).
       var endTags = ganttEndTagsHtml(t, overdue, rowStacked);
       if (endTags) html += '<span class="absolute inline-flex items-center gap-1" style="left:' + (Math.max(barLeft, 0) + Math.max(barWidth, 18) + 4) + 'px;top:' + (rowHeight / 2 - 8) + 'px;">' + endTags + '</span>';
+      // A pile-up on a step's day (not the task's deadline): the same tag, just after that day's
+      // diamond, so it shows where the crowded day is.
+      if (kind !== 'none') Object.keys(rowClash).forEach(function (day) {
+        if (day === t.deadline) return;
+        var dd = parseDate(day);
+        if (!dd || dd < rangeStart || dd > rangeEnd) return;
+        html += ganttClashTagHtml(t, rowClash[day], 'left:' + (daysBetween(rangeStart, dd) * dayWidth + dayWidth / 2 + 7) + 'px;top:' + (rowHeight / 2 - 8) + 'px;z-index:1;');
+      });
       // Over the faded tail, right-aligned to where the bar ends, so it says why the bar has no
       // end and never runs off the chart's right edge.
       if (kind === 'tbd') html += ganttTbdTagHtml(t, 'right:' + (totalDays * dayWidth - Math.max(barLeft, 0) - Math.max(barWidth, 18) + 6) + 'px;top:' + (rowHeight / 2 - 8) + 'px;line-height:16px;');
@@ -17145,10 +17212,28 @@
   var WIP_CLASH_COUNT = SAME_DAY_CLASH_COUNT;   // things due one person on one day that make a Clash (shared with the Timeline)
   var wipLoadOpen = {};      // person -> their list is open (session only)
 
+  function wipBatchText(item) {
+    var n = item.steps.length;
+    if (item.kind === 'task') return item.taskName + (n ? ' (+' + n + ' step' + (n === 1 ? '' : 's') + ')' : '');
+    return item.steps[0] + (n > 1 ? ' +' + (n - 1) + ' more' : '');
+  }
   function wipLoadItems(open, today, horizon) {
     var by = {};
+    var batch = {};
     function add(name, item) {
       var p = by[name] = by[name] || { days: {}, overdue: [], due: 0 };
+      // One task's steps (and its own deadline) for one person on one day are ONE thing: six ad
+      // sizes due Thursday don't make a clash on their own (2026-10-22). Deadlines are added
+      // before steps, so a step joins its task's deadline.
+      var key = name + '|' + item.taskId + '|' + item.date + '|' + (item.late ? 'late' : '');
+      var prev = batch[key];
+      if (prev) {
+        prev.steps = prev.steps.concat(item.steps);
+        prev.text = wipBatchText(prev);
+        return;
+      }
+      batch[key] = item;
+      item.text = wipBatchText(item);
       if (item.late) { p.overdue.push(item); return; }
       if (item.date < today || item.date > horizon) return;
       (p.days[item.date] = p.days[item.date] || []).push(item);
@@ -17156,7 +17241,7 @@
     }
     open.forEach(function (t) {
       if (t.assignee && t.deadline && parseDate(t.deadline)) {
-        add(t.assignee, { kind: 'task', date: t.deadline, text: t.name, project: t.project, taskId: t.id, late: dueUrgency(t).overdue });
+        add(t.assignee, { kind: 'task', date: t.deadline, taskName: t.name, steps: [], project: t.project, taskId: t.id, late: dueUrgency(t).overdue });
       }
       (t.checklist || []).forEach(function (it) {
         if (!it || it.done || !it.due || !parseDate(it.due)) return;
@@ -17167,7 +17252,7 @@
           // A step that is just the task again (same name and date, for its owner) counts once, as
           // on Monday Meeting.
           if (n === t.assignee && it.due === t.deadline && String(it.text || '').trim().toLowerCase() === String(t.name || '').trim().toLowerCase()) return;
-          add(n, { kind: 'step', date: it.due, text: it.text || 'Step', task: t.name, project: t.project, taskId: t.id, late: late });
+          add(n, { kind: 'step', date: it.due, steps: [it.text || 'Step'], task: t.name, taskName: t.name, project: t.project, taskId: t.id, late: late });
         });
       });
     });
@@ -18356,6 +18441,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-22j', date: '2026-10-22', items: [
+      { type: 'improved', title: 'Pile-ups count checklist steps', text: "When three or more things are due from one person on the same day, steps now count too: on the Timeline (an amber tag on that day), in WIP Meeting's Clash and in Team load. Steps from one task due the same day count as one batch. Two working days before, that person gets one heads-up so they can ask for help or move something." }
+    ] },
     { id: '2026-10-22i', date: '2026-10-22', items: [
       { type: 'improved', title: 'Suggestions grouped by status', text: "Suggestions are now sorted into Open, WIP, Fixed and Unable to Fix, each with a count, newest first. Fixed and Unable to Fix fold away like Completed on Projects: click one to open it." }
     ] },
@@ -22361,7 +22449,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-22T05:38:58Z";
+  var CURRENT_BUILD_VERSION = "2026-10-22T06:04:31Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

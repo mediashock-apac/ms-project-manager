@@ -4347,6 +4347,26 @@ recommendation". Four changes, all derived from data already entered (no new fie
   repeated the overdue items on a shared screen and pushed the agenda down.
 - `tests/wip-load.test.js` (27 checks).
 
+### Same-day pile-ups, steps included (2026-10-22)
+
+Asked: "checklist items deadlines when stacked are cause for concern too", option A of two. One rule
+everywhere: **3 or more things due one person on one day** (`SAME_DAY_CLASH_COUNT`), counting the
+deadlines they own plus open steps assigned to them (a step with no people counts for the task owner).
+**One task's steps, and its own deadline, on the same day for the same person are ONE batch**
+(`wipLoadItems` merges them, text via `wipBatchText`: "Social ads (+2 steps)", "Ad size 1 +5 more"),
+so six ad sizes due Thursday never make a clash on their own. `sameDayClashes()` counts over
+everyone's open work (not the toolbar filters), so every view agrees:
+- **WIP:** Clash in Needs a decision and Team load (both were already step-aware; now batched).
+- **Timeline:** `computeGanttDeadlineStacks` (deadlines only) is gone. `clashesByTask` puts the amber
+  layers tag after the bar when the pile-up is on the task's deadline, or just after the step's
+  diamond on that day (`ganttClashTagHtml`); the title names whose day it is and what's due. Legend
+  note: "N tasks on a day with 3+ due". The WIP timeline still has no tag (WIP shows Clash and Team load).
+- **Heads-up** (`checkClashHeadsUp`, `HELPERS.clash`, type `clash_heads_up`, headline "Several things
+  are due the same day"): to that person only, once per day piled up (`clash|<date>` in their own
+  `helpersSent`), from two working days before (`workingDaysBetween(today, day) <= 1`) or on the day.
+  Skipped when the High-priority workload alert already covers that day. Opens the first task.
+- `tests/clash-steps.test.js`.
+
 ### Monday Meeting (weekly updates)
 
 Replaces the "MMM Pulse-board" Google Sheet's monthly person x week tabs, where everyone typed
