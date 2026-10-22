@@ -2128,7 +2128,7 @@
 
       <div id="task-time-section" class="pt-1 border-t border-zinc-100 dark:border-zinc-700">
         <div class="flex items-center justify-between mt-3 mb-1.5">
-          <label class="block text-xs font-semibold text-zinc-600 dark:text-zinc-400">Time Tracking</label>
+          <label class="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 underline decoration-dotted decoration-zinc-300 dark:decoration-zinc-600 underline-offset-2 cursor-help tooltip-top" data-tooltip="Log the hours you spend on this task. They add up per task and per project.">Time Tracking</label>
           <span id="task-time-total" class="text-xs font-medium text-zinc-400 dark:text-zinc-500"></span>
         </div>
         <div id="task-time-log" class="flex flex-col max-h-48 overflow-y-auto mb-2"></div>
@@ -2145,8 +2145,11 @@
           <span class="text-xs text-zinc-400 dark:text-zinc-500 shrink-0">hrs</span>
           <input type="text" id="task-time-note" list="task-time-checklist-suggestions" maxlength="140" placeholder="What did you work on? (optional — pick a checklist item or type a note)" class="flex-1 min-w-[140px] text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
           <datalist id="task-time-checklist-suggestions"></datalist>
-          <button type="button" id="task-time-billable" data-active="true" class="shrink-0 text-xs font-semibold px-2.5 py-2 rounded-lg border transition border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">Billable</button>
-          <button type="button" id="task-time-overtime" data-active="false" class="shrink-0 text-xs font-semibold px-2.5 py-2 rounded-lg border transition border-zinc-200 dark:border-zinc-700 text-zinc-400 dark:text-zinc-500">Overtime</button>
+          <button type="button" id="task-time-billable" data-active="true" data-tooltip="Time charged to the client. Turn it off for internal work that isn't billed." aria-describedby="task-time-billable-tip" class="tooltip-top shrink-0 text-xs font-semibold px-2.5 py-2 rounded-lg border transition border-emerald-200 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400">Billable</button>
+          <button type="button" id="task-time-overtime" data-active="false" data-tooltip="Time worked beyond normal hours" aria-describedby="task-time-overtime-tip" class="tooltip-top shrink-0 text-xs font-semibold px-2.5 py-2 rounded-lg border transition border-zinc-200 dark:border-zinc-700 text-zinc-400 dark:text-zinc-500">Overtime</button>
+          <!-- Screen-reader copies of the two tooltips above (data-tooltip is visual only). Wording: the AD's, 2026-10-22. -->
+          <span id="task-time-billable-tip" class="sr-only">Time charged to the client. Turn it off for internal work that isn't billed.</span>
+          <span id="task-time-overtime-tip" class="sr-only">Time worked beyond normal hours</span>
           <button type="button" id="task-time-cancel-edit-btn" class="hidden shrink-0 text-sm font-medium px-3 py-2 rounded-lg text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">Cancel</button>
           <button type="button" id="task-time-add-btn" class="shrink-0 text-sm font-semibold px-3 py-2 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">Log</button>
         </div>
@@ -18309,6 +18312,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-22h', date: '2026-10-22', items: [
+      { type: 'improved', title: 'Billable and Overtime explained', text: "In a task's Time Tracking, hover Billable, Overtime or the Time Tracking heading to see what each one means." }
+    ] },
     { id: '2026-10-22g', date: '2026-10-22', items: [
       { type: 'improved', title: 'Easier to move the Timeline sideways', text: "Drag any empty part of the Timeline left or right to move along the dates, or use the arrows and Today next to its title to jump a week at a time. Scrolling up or down over the dates also moves it sideways, handy on a laptop trackpad." }
     ] },
@@ -22308,7 +22314,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-22T03:54:53Z";
+  var CURRENT_BUILD_VERSION = "2026-10-22T04:01:20Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
