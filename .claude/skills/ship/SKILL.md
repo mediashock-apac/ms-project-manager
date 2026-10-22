@@ -10,7 +10,11 @@ skipping it has broken the live board before. Do them in order and don't skip an
 
 ## 1. See what is going out
 
-Run `git status` and `git diff --stat`. If nothing has changed, say so and stop. If the change
+Run `git status` and `git diff --stat`. If nothing has changed, say so and stop. Then read the full
+`git diff` for anything this session didn't write: more than one session edits this Shared Drive folder,
+and on 2026-10-22 another session's unfinished work was nearly shipped inside someone else's commit. If
+you find foreign changes, ask the user whether to ship them too; otherwise stage only your own hunks and
+leave the rest on disk (see "More than one session edits this folder" in `CLAUDE.md`). If the change
 touches `firestore.rules` or `storage.rules`, warn the user that rules do NOT deploy with the site:
 they need `firebase deploy --only firestore:rules` (or `--only storage`) or pasting into the
 Firebase console. Otherwise the new feature fails with "Missing or insufficient permissions".

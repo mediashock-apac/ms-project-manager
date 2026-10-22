@@ -178,6 +178,15 @@ when a New Updates item gets a `tourTarget`, add its `cl-<id>` to every suite's 
 Locally, don't `npm install` into this Shared Drive folder; point `NODE_PATH` at a `node_modules` with
 Playwright 1.63.
 
+**More than one session edits this folder at once** (learned 2026-10-22: another Claude session's
+unfinished CSS and test were swept into a commit by `git add index.html`). Before every commit, read
+`git diff` for changes you didn't make; if there are any, stage only your own hunks
+(`git apply --cached` with the foreign hunks dropped) and leave theirs on disk. Prefer one session per
+repo at a time.
+**Full runs take ~10 minutes; run them on a copy** so the working tree stays free: commit, then
+`git worktree add --detach <scratch dir> HEAD` and run `node tests/run.mjs` there; push only when it passes,
+then `git worktree remove`. To find the GitHub run for a commit, `gh run list -c` needs the **full** SHA.
+
 There is no build or lint tooling; it's static HTML/JS served as-is. Local development uses the
 Firebase Local Emulator Suite (Auth + Firestore + Storage):
 
