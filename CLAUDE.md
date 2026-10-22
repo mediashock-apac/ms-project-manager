@@ -169,7 +169,7 @@ here (dependencies, Gantt grouping, the progress column) stay out even when a re
 
 ## Commands
 
-**Browser tests: `node tests/run.mjs`** (see `tests/README.md`). 36 suites, each loading
+**Browser tests: `node tests/run.mjs`** (see `tests/README.md`). 37 suites, each loading
 the real `index.html` in Chromium with Firebase replaced by `tests/fbstub.js`. They run on every push to
 `main` and every weekday at 7am Singapore (`.github/workflows/tests.yml`); a failure is a red X plus
 GitHub's email. Asked for directly: "Constantly run checks as I did today to make sure everything is
@@ -3870,6 +3870,43 @@ rule, and it is the *second* rule this feature had.
   different task lists across four teamspaces, archived work counts toward a project's derived
   chips, unknown department keys contribute nothing, and a no-department assignee lands in
   Unassigned.
+
+### Singapore public holidays (2026-10-22)
+
+Asked for: "Can calendar reflect public holidays in Singapore", "Timeline too", and, choosing between
+shown-only and counted as days off, "Also days off". Then: weekends count the same way ("yes"), a
+Saturday holiday gives the Monday off ("Monday off"), and the Monday Meeting reminders move ("Shift them").
+
+- **Data:** `SG_HOLIDAYS` (date → name) and `SG_HOLIDAY_NOTES` (why an in-lieu day exists) in
+  `index.html`, next to `daysUntil`. Kept in the page, not fetched from data.gov.sg (chosen: no outside
+  dependency to break). From MOM's list, checked 2026-10-22. A Sunday holiday's Monday off is MOM's rule;
+  a Saturday holiday's Monday off is Mediashock's own, and when that Monday is already off it's the
+  Tuesday (2027-02-09, the one case so far; an assumption, not asked). **`SG_HOLIDAYS_UNTIL` is the
+  last date covered (2027-12-31): add the next year from MOM before then.** `tests/holidays.test.js`
+  fails from 90 days before, so the daily Tests run emails a reminder in early October 2027.
+- **Helpers:** `isWorkingDay` (weekday, not a holiday), `workingDayOnOrBefore/After`,
+  `workingDaysBetween`, `weekWorkDone` (no working day left this week), `firstWorkdayOfWeek`,
+  `leaveDayCount`. Use these, never a bare `getDay() === 0 || 6`, for anything about working days.
+- **Shown:** Calendar (desktop week and month, phone) lists a holiday first on its day as kind
+  `holiday` (teal), for everyone including Mine; a holiday weekday column gets the weekend tint.
+  Timeline and the WIP timeline give it the weekend header tint with the name on hover;
+  `#gantt-holiday-note` shows in the legend only while one is in view, and `#gantt-holiday-clash-note`
+  counts deadlines that land on one.
+- **Counted as days off:**
+  - `dueUrgency`: due soon also covers the next working day across days off. The card badge says
+    "DUE MON" etc. when that's not tomorrow.
+  - `checkDeadlineReminders`: within 2 days, or 2 working days across days off. Both only ever flag
+    earlier, never later.
+  - `copiedStepDue` / `shiftedStepDue`: a date on a day off steps back to the working day before (a step
+    already on a day off stays put).
+  - Team load: no column for a holiday; work due on one counts on the working day before; the week
+    divider goes before each week's first column (`newWeek`).
+  - Leave "N days" (`wipAwayText`, Monday cards) counts working days (calendar days if it covers none).
+  - `weeklyAwayDuring`: away all week = on leave every working day.
+  - `weeklyCurrentKey`: from the week's last working day, updates are for the next meeting.
+  - Monday Meeting reminders: "fri" from 4pm on the last working day, "mon" on the first working day,
+    and the text names the meeting's real day.
+  - Friday "log your time" nudge (`checkFridayHelpers`): from 3pm on the week's last working day.
 
 ### Personal leave (time off)
 

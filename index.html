@@ -1508,6 +1508,9 @@
             <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-amber-500 flex items-center justify-center text-white text-[8px] font-black leading-none">!</span>Deadline stack</span>
             <span id="gantt-stack-note" class="hidden text-rose-600 dark:text-rose-400 font-semibold" title="These tasks share an owner and a deadline -- more than one thing is due from the same person on the same day."></span>
             <span id="gantt-leave-note" class="hidden text-amber-700 dark:text-amber-400 font-semibold" title="The deadline falls on a day the owner is away. The shaded stripes on a row are that person's leave -- set it in the People tab."></span>
+            <!-- Only while a holiday is in view; its title names them. The tint is the weekend one. -->
+            <span id="gantt-holiday-note" class="hidden"><span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600"></span>Weekend or public holiday</span></span>
+            <span id="gantt-holiday-clash-note" class="hidden text-teal-700 dark:text-teal-400 font-semibold" title="These deadlines fall on a Singapore public holiday. Hover a shaded day in the header to see which."></span>
           </div>
         </div>
         <div id="gantt-wrap"></div>
@@ -6705,19 +6708,93 @@
     return daysBetween(todayMidnight(), d);
   }
 
+  /* SINGAPORE PUBLIC HOLIDAYS -- asked for: "Can calendar reflect public holidays in Singapore",
+     "Timeline too", and that they count as days off. From MOM's list
+     (https://www.mom.gov.sg/employment-practices/public-holidays), checked 2026-10-22 against the
+     page last updated 19 June 2026. When a holiday falls on a Sunday the Monday after is a day off
+     too (MOM's rule); those Mondays are listed "(in lieu)". A Saturday holiday gives the Monday
+     after off too: Mediashock's own call ("Monday off", 2026-10-22), not MOM's list; when that Monday
+     is already off, the Tuesday. SG_HOLIDAY_NOTES says which rule each in-lieu day comes from.
+     ADD NEXT YEAR BEFORE SG_HOLIDAYS_UNTIL RUNS OUT (MOM publishes it around June).
+     tests/holidays.test.js fails from 90 days before, so the daily Tests run emails a reminder. */
+  var SG_HOLIDAYS_UNTIL = '2027-12-31';
+  var SG_HOLIDAYS = {
+    '2026-01-01': "New Year's Day", '2026-02-17': 'Chinese New Year', '2026-02-18': 'Chinese New Year',
+    '2026-03-21': 'Hari Raya Puasa', '2026-03-23': 'Hari Raya Puasa (in lieu)', '2026-04-03': 'Good Friday', '2026-05-01': 'Labour Day',
+    '2026-05-27': 'Hari Raya Haji', '2026-05-31': 'Vesak Day', '2026-06-01': 'Vesak Day (in lieu)',
+    '2026-08-09': 'National Day', '2026-08-10': 'National Day (in lieu)',
+    '2026-11-08': 'Deepavali', '2026-11-09': 'Deepavali (in lieu)', '2026-12-25': 'Christmas Day',
+    '2027-01-01': "New Year's Day", '2027-02-06': 'Chinese New Year', '2027-02-07': 'Chinese New Year',
+    '2027-02-08': 'Chinese New Year (in lieu)', '2027-02-09': 'Chinese New Year (in lieu)',
+    '2027-03-10': 'Hari Raya Puasa', '2027-03-26': 'Good Friday',
+    '2027-05-01': 'Labour Day', '2027-05-03': 'Labour Day (in lieu)', '2027-05-17': 'Hari Raya Haji', '2027-05-20': 'Vesak Day',
+    '2027-08-09': 'National Day', '2027-10-28': 'Deepavali', '2027-12-25': 'Christmas Day', '2027-12-27': 'Christmas Day (in lieu)'
+  };
+  var SG_LIEU_SUN = 'Day off, as the holiday fell on a Sunday';
+  var SG_LIEU_SAT = 'Mediashock day off, as the holiday fell on a Saturday';
+  var SG_HOLIDAY_NOTES = {
+    '2026-03-23': SG_LIEU_SAT, '2026-06-01': SG_LIEU_SUN, '2026-08-10': SG_LIEU_SUN, '2026-11-09': SG_LIEU_SUN,
+    '2027-02-08': SG_LIEU_SUN, '2027-02-09': SG_LIEU_SAT, '2027-05-03': SG_LIEU_SAT, '2027-12-27': SG_LIEU_SAT
+  };
+  function holidayName(ds) { return SG_HOLIDAYS[ds] || ''; }
+  // A weekday that isn't a public holiday. Takes 'YYYY-MM-DD' or a Date.
+  function isWorkingDay(d) {
+    var dt = typeof d === 'string' ? parseDate(d) : d;
+    if (!dt) return false;
+    var w = dt.getDay();
+    return w !== 0 && w !== 6 && !SG_HOLIDAYS[toDateInputValue(dt)];
+  }
+  // No working day left this week after `date`: Friday, or Thursday when Friday is a holiday.
+  function weekWorkDone(date) {
+    for (var k = 1; addDays(date, k).getDay() !== 1; k++) if (isWorkingDay(addDays(date, k))) return false;
+    return true;
+  }
+  // `date` is the week's first working day: Monday, or Tuesday when Monday is a holiday.
+  function firstWorkdayOfWeek(date) {
+    if (!isWorkingDay(date)) return false;
+    for (var d = addDays(date, -1); d.getDay() !== 0; d = addDays(d, -1)) if (isWorkingDay(d)) return false;
+    return true;
+  }
+  // The date itself if it's a working day, else the nearest working day before it.
+  function workingDayOnOrBefore(date) {
+    var d = new Date(date);
+    for (var i = 0; i < 10 && !isWorkingDay(d); i++) d = addDays(d, -1);
+    return d;
+  }
+  function workingDayOnOrAfter(date) {
+    var d = new Date(date);
+    for (var i = 0; i < 10 && !isWorkingDay(d); i++) d = addDays(d, 1);
+    return d;
+  }
+  // Working days strictly between two 'YYYY-MM-DD' dates.
+  function workingDaysBetween(a, b) {
+    var n = 0, d = parseDate(a), end = parseDate(b);
+    if (!d || !end) return 0;
+    for (d = addDays(d, 1); d < end; d = addDays(d, 1)) if (isWorkingDay(d)) n++;
+    return n;
+  }
+  // "3 days" on a leave: the working days it covers, or its calendar days if it covers none.
+  function leaveDayCount(start, end) {
+    var n = workingDaysBetween(toDateInputValue(addDays(parseDate(start), -1)), toDateInputValue(addDays(parseDate(end), 1)));
+    return n || daysBetween(parseDate(start), parseDate(end)) + 1;
+  }
+
   // Single source of truth for "overdue" / "due soon" (due today or tomorrow) so the
   // board, focus strip, gantt, and people view can't drift out of sync on the thresholds.
   // Excludes Review as well as Done: once a task is sent off for review (client or internal
   // sign-off), it's no longer the assignee's clock running -- flagging it OVERDUE the day
   // after its deadline is a false alarm about someone else's response time, not a sign the
   // assignee is behind. See also renderFocus's "Under Review" label for the same status.
+  // Due soon also covers the next working day across a weekend or public holiday (Friday sees
+  // Monday's deadlines), so it only ever flags earlier, never later.
   function dueUrgency(t) {
     var days = daysUntil(t.deadline);
     var exempt = t.status === 'Done' || t.status === 'Review';
+    var soon = days !== null && days >= 0 && (days <= 1 || (days <= 6 && workingDaysBetween(toDateInputValue(todayMidnight()), t.deadline) === 0));
     return {
       days: days,
       overdue: days !== null && days < 0 && !exempt,
-      dueSoon: days !== null && days >= 0 && days <= 1 && !exempt
+      dueSoon: soon && !exempt
     };
   }
 
@@ -8515,7 +8592,7 @@
      date. Here any earlier task is the template, so there is nothing to set up or keep current
      (the "no added work" rule): pick a similar job and its steps come across, each the same number
      of days from this task's deadline as it was from that one's (from the start date while there's
-     no deadline yet). A date landing on a weekend moves to the Friday before. People come too (the
+     no deadline yet). A date landing on a weekend or public holiday moves to the working day before. People come too (the
      same team usually does the same steps; they're notified on Save as for any step); links don't,
      since they point at the old job's files. Offered only while a task has no steps. */
   function checklistCopySources() {
@@ -8583,13 +8660,11 @@
     var btn = document.getElementById('checklist-copy-btn');
     if (btn) btn.setAttribute('aria-expanded', 'false');
   }
-  // Same distance from the anchor date; a weekend date moves back to the Friday before.
+  // Same distance from the anchor date; a weekend or public holiday moves back to the working day before.
   function copiedStepDue(srcDue, srcAnchor, dstAnchor) {
     var s = parseDate(srcDue), a = parseDate(srcAnchor), b = parseDate(dstAnchor);
     if (!s || !a || !b) return '';
-    var d = addDays(b, daysBetween(a, s));
-    if (d.getDay() === 6) d = addDays(d, -1); else if (d.getDay() === 0) d = addDays(d, -2);
-    return toDateInputValue(d);
+    return toDateInputValue(workingDayOnOrBefore(addDays(b, daysBetween(a, s))));
   }
   function copyChecklistStepsFrom(src) {
     var steps = (src.checklist || []).filter(function (it) { return it && String(it.text || '').trim(); });
@@ -8665,8 +8740,8 @@
      pushes the deadline every step used to be re-dated by hand. Moving the deadline in the task
      window now OFFERS to move the open dated steps by the same number of days: a toast with
      "Move steps", so nothing changes unless asked, then Undo. Done, TBD and undated steps stay.
-     A step that lands on a weekend moves back to the Friday before (same rule as Copy steps),
-     unless it was on a weekend already. The task window is the one place a task's deadline is
+     A step that lands on a weekend or public holiday moves back to the working day before (as Copy steps),
+     unless it was on a day off already. The task window is the one place a task's deadline is
      edited (phone quick add only sets it on a new task, which has no steps). */
   var deadlineShiftBase = '';
   var deadlineShiftTimer = null;
@@ -8680,8 +8755,7 @@
     var d0 = parseDate(due);
     if (!d0) return due;
     var d = addDays(d0, days);
-    var wasWeekend = d0.getDay() === 0 || d0.getDay() === 6;
-    if (!wasWeekend) { if (d.getDay() === 6) d = addDays(d, -1); else if (d.getDay() === 0) d = addDays(d, -2); }
+    if (isWorkingDay(d0)) d = workingDayOnOrBefore(d);   // a step already on a day off stays put
     return toDateInputValue(d);
   }
   function shiftableStep(it) { return !!(it && !it.done && it.due && !it.dueTbd && parseDate(it.due)); }
@@ -11840,7 +11914,9 @@
       if (!t.assignee || t.status === 'Done' || t.status === 'Review' || !t.deadline) return;
       if (!isOwnNotification(t.assignee)) return;
       var days = daysUntil(t.deadline);
-      if (days === null || days < 0 || days > DEADLINE_REMINDER_DAYS) return;
+      if (days === null || days < 0) return;
+      // Within DEADLINE_REMINDER_DAYS, or as many working days when a weekend or holiday is in the way.
+      if (days > DEADLINE_REMINDER_DAYS && (days > 10 || workingDaysBetween(toDateInputValue(todayMidnight()), t.deadline) > DEADLINE_REMINDER_DAYS - 1)) return;
       var key = t.id + '|' + t.deadline;
       if (deadlineReminderWarned[key]) return;
       if ((notificationDedupByTaskId[t.id] || {}).deadlineReminderFor === t.deadline) { deadlineReminderWarned[key] = true; return; }
@@ -12043,7 +12119,9 @@
     if (!me || !name || !tasks.length) return;
     var now = new Date();
     var day = now.getDay(), hr = now.getHours();
-    var weekend = day === 6 || day === 0;
+    // From 3pm on the week's last working day (Thursday when Friday is a public holiday), and
+    // on the days off after it.
+    var weekDone = weekWorkDone(now) && (!isWorkingDay(now) || hr >= 15);
     var monday = weeklyMondayOf(now);
     var weekKey = toDateInputValue(monday);
     var mondayIso = monday.toISOString();
@@ -12072,7 +12150,7 @@
       }).catch(function (e) { console.error('helper nudge failed', e); });
     }
     var since = function (iso) { return !!iso && String(iso) >= mondayIso; };
-    if (HELPERS.time && (weekend || (day === 5 && hr >= 15))) {
+    if (HELPERS.time && weekDone) {
       var touched = {};
       // Edits, moves and step ticks (Activity) and your own status lines count as work; creating,
       // archiving or only commenting doesn't. And only on tasks you're on, so an admin tidying
@@ -12618,7 +12696,7 @@
             (REPEAT_OPTIONS[t.repeat] ? '<span class="flex items-center text-zinc-500 dark:text-zinc-400" title="Repeats ' + repeatLabel(t.repeat) + '" aria-label="Repeats ' + repeatLabel(t.repeat) + '">' + svgIcon('repeat', 'w-3 h-3') + '</span>' : '') +
             (timeMinutes ? '<span class="flex items-center gap-1 text-xs text-zinc-500 dark:text-zinc-400" title="' + formatDuration(timeMinutes) + ' logged">' + svgIcon('clock', 'w-3 h-3') + formatDuration(timeMinutes) + '</span>' : '') +
             (overdue ? '<span class="text-[10px] font-bold text-rose-600 dark:text-rose-300 bg-rose-50 dark:bg-rose-500/15 px-1.5 py-0.5 rounded">OVERDUE</span>' : '') +
-            (dueSoon ? '<span class="text-[10px] font-bold text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-500/15 px-1.5 py-0.5 rounded">' + (days === 0 ? 'DUE TODAY' : 'DUE TOMORROW') + '</span>' : '') +
+            (dueSoon ? '<span class="text-[10px] font-bold text-violet-600 dark:text-violet-300 bg-violet-50 dark:bg-violet-500/15 px-1.5 py-0.5 rounded">' + (days === 0 ? 'DUE TODAY' : days === 1 ? 'DUE TOMORROW' : 'DUE ' + parseDate(t.deadline).toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase()) + '</span>' : '') +
             // Last in the row, pushed to the far right by ml-auto (see reviewAudienceBadgeHtml) --
             // reported directly that sitting right next to Priority crowded the row's left side
             // while the rest of it sat empty; this uses that space instead.
@@ -12850,6 +12928,20 @@
     var days = [];
     for (var i = 0; i < totalDays; i++) days.push(addDays(rangeStart, i));
 
+    // Public holidays: a legend entry only when one is in view, and a note when deadlines land on one.
+    var holsInView = days.map(function (d) { return holidayName(toDateInputValue(d)); }).filter(Boolean);
+    var holNote = document.getElementById('gantt-holiday-note');
+    if (holNote) {
+      holNote.classList.toggle('hidden', !holsInView.length);
+      holNote.title = holsInView.filter(function (h, i, a) { return a.indexOf(h) === i; }).join(', ');
+    }
+    var holClashes = withDeadline.filter(function (t) { return !!holidayName(t.deadline); });
+    var holClashNote = document.getElementById('gantt-holiday-clash-note');
+    if (holClashNote) {
+      holClashNote.textContent = holClashes.length + ' deadline' + (holClashes.length === 1 ? '' : 's') + ' on a public holiday';
+      holClashNote.classList.toggle('hidden', !holClashes.length);
+    }
+
     var monthSpans = [];
     days.forEach(function (d) {
       var label = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
@@ -12969,14 +13061,15 @@
 
     // day header row
     days.forEach(function (d, i) {
-      var isWeekend = d.getDay() === 0 || d.getDay() === 6;
+      var isWeekend = !isWorkingDay(d);   // a public holiday gets the weekend tint, named on hover
+      var hol = holidayName(toDateInputValue(d));
       var isToday = i === todayIndex;
       // Solid tints for the same reason as the month row above -- the weekend and today tints
       // were the most transparent cells of the lot (/70, /40, /10) and let the most through.
       // The three still read as three distinct days, just without the see-through.
       html += '<div class="sticky top-8 z-[25] border-b border-zinc-200 dark:border-zinc-700 flex flex-col items-center justify-center text-xs leading-tight ' +
         (isToday ? 'bg-rose-50 dark:bg-rose-950 text-rose-600 dark:text-rose-400 font-bold' : (isWeekend ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500' : 'bg-zinc-50 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400')) +
-        '" style="grid-column:' + (i + 2) + ';grid-row:2;">' +
+        '"' + (hol ? ' title="' + escapeHtml(hol) + ' (public holiday)"' : '') + ' style="grid-column:' + (i + 2) + ';grid-row:2;">' +
         '<span>' + d.toLocaleDateString('en-US', { weekday: 'narrow' }) + '</span><span class="font-semibold">' + d.getDate() + '</span>' +
       '</div>';
     });
@@ -13436,9 +13529,10 @@
     project:  { label: 'Project deadline', bar: 'border-l-violet-500', fill: 'bg-violet-50 dark:bg-violet-500/10', text: 'text-violet-700 dark:text-violet-300', dot: 'bg-violet-500' },
     deadline: { label: 'Deadline', bar: 'border-l-brand-500', fill: 'bg-brand-50 dark:bg-brand-500/10', text: 'text-brand-700 dark:text-brand-300', dot: 'bg-brand-500' },
     step:     { label: 'Step', bar: 'border-l-indigo-500', fill: 'bg-indigo-50 dark:bg-indigo-500/10', text: 'text-indigo-700 dark:text-indigo-300', dot: 'bg-indigo-500' },
-    away:     { label: 'Away', bar: 'border-l-amber-500', fill: 'bg-amber-100 dark:bg-amber-500/15', text: 'text-amber-800 dark:text-amber-300', dot: 'bg-amber-500' }
+    away:     { label: 'Away', bar: 'border-l-amber-500', fill: 'bg-amber-100 dark:bg-amber-500/15', text: 'text-amber-800 dark:text-amber-300', dot: 'bg-amber-500' },
+    holiday:  { label: 'Public holiday', bar: 'border-l-teal-500', fill: 'bg-teal-50 dark:bg-teal-500/10', text: 'text-teal-700 dark:text-teal-300', dot: 'bg-teal-500' }
   };
-  var CAL2_ORDER = { brief: 0, project: 1, deadline: 2, step: 3, away: 4 };
+  var CAL2_ORDER = { holiday: -1, brief: 0, project: 1, deadline: 2, step: 3, away: 4 };
 
   // Everything dated between `from` and `to` (YYYY-MM-DD, inclusive), grouped by day.
   // carryLate: unfinished deadlines and steps due before `from` are listed on `from` (today), marked
@@ -13495,6 +13589,8 @@
     var people = mine ? teamPeople.filter(function (p) { return p.name === me; }) : teamPeople;
     for (var d = parseDate(from); toDateInputValue(d) <= to; d = addDays(d, 1)) {
       var ds = toDateInputValue(d);
+      var hn = holidayName(ds);   // for everyone, in Mine too
+      if (hn) push(ds, { kind: 'holiday', title: hn, note: SG_HOLIDAY_NOTES[ds] || '' });
       people.forEach(function (p) {
         var lp = leavePeriodOn(p.name, ds);
         if (lp) push(ds, { kind: 'away', title: p.name + ' away', who: p.name, note: (lp.ruleId ? leaveRepeatLabel(lp) : formatShortDate(lp.start) + ' to ' + formatShortDate(lp.end)) + (lp.note ? ' · ' + lp.note : '') });
@@ -13515,7 +13611,9 @@
       '<span class="text-[10px] font-bold uppercase tracking-wide ' + k.text + '">' + k.label + (it.done ? ' · done' : '') + '</span>' +
       '<span class="text-xs font-semibold text-zinc-800 dark:text-zinc-100 break-words' + (it.done ? ' line-through' : '') + '">' + escapeHtml(it.title) +
         (it.late ? ' <span class="ml-1 inline-block whitespace-nowrap align-middle text-[9px] font-extrabold px-1 rounded bg-rose-500 text-white">LATE' + (it.lateFrom ? ' · was due ' + escapeHtml(formatShortDate(it.lateFrom)) : '') + '</span>' : '') + '</span>' +
-      (it.kind === 'away'
+      (it.kind === 'holiday'
+        ? (it.note ? '<span class="text-[11px] text-zinc-500 dark:text-zinc-400">' + escapeHtml(it.note) + '</span>' : '')
+        : it.kind === 'away'
         ? '<span class="text-[11px] text-zinc-500 dark:text-zinc-400">' + escapeHtml(it.note || '') + '</span>'
         : '<span class="text-[11px] text-zinc-500 dark:text-zinc-400 break-words">' + projectNameHtml(it.project || '') + (it.who ? ' <span class="whitespace-nowrap">· ' + escapeHtml(it.who) + '</span>' : '') + '</span>') +
     '</' + close + '>';
@@ -13540,7 +13638,7 @@
 
   function cal2Legend() {
     return '<div class="flex flex-wrap gap-x-4 gap-y-1 mb-3 text-xs text-zinc-500 dark:text-zinc-400">' +
-      ['deadline', 'step', 'brief', 'project', 'away'].map(function (k) {
+      ['deadline', 'step', 'brief', 'project', 'away', 'holiday'].map(function (k) {
         return '<span class="inline-flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm ' + CAL2_KIND[k].dot + '"></span>' + (k === 'brief' ? 'Date from a brief' : k === 'deadline' ? 'Task deadline' : k === 'step' ? 'Checklist step' : CAL2_KIND[k].label) + '</span>';
       }).join('') + '</div>';
   }
@@ -13568,7 +13666,7 @@
       for (var i = 0; i < 7; i++) {
         var day = addDays(start, i), ds = toDateInputValue(day), list = cal2DayCache[ds] || [];
         var isToday = ds === todayStr, weekend = day.getDay() === 0 || day.getDay() === 6;
-        cols += '<div class="flex flex-col min-w-0 border-b md:border-b-0 md:border-r last:border-r-0 border-zinc-100 dark:border-zinc-700 ' + (weekend ? 'bg-zinc-50/70 dark:bg-zinc-900/30' : '') + (weekend && !list.length ? ' hidden md:flex' : '') + '">' +
+        cols += '<div class="flex flex-col min-w-0 border-b md:border-b-0 md:border-r last:border-r-0 border-zinc-100 dark:border-zinc-700 ' + (!isWorkingDay(day) ? 'bg-zinc-50/70 dark:bg-zinc-900/30' : '') + (weekend && !list.length ? ' hidden md:flex' : '') + '">' +
           '<button type="button" data-cal2-day="' + ds + '" class="flex items-baseline gap-1.5 px-2.5 pt-2.5 pb-2 border-b border-zinc-100 dark:border-zinc-700 text-left hover:bg-zinc-50 dark:hover:bg-zinc-700/40">' +
             '<span class="text-[11px] font-bold uppercase tracking-wide ' + (isToday ? 'text-brand-600 dark:text-brand-400' : 'text-zinc-400 dark:text-zinc-500') + '">' + CAL2_DOW[day.getDay()] + '</span>' +
             '<span class="' + (isToday ? 'inline-flex items-center justify-center min-w-[1.6rem] h-[1.6rem] rounded-full bg-brand-600 text-white text-sm' : 'text-base text-zinc-700 dark:text-zinc-200') + ' font-bold tabular-nums">' + day.getDate() + '</span>' +
@@ -13692,8 +13790,9 @@
   function weeklyCurrentKey(now) {
     now = now || new Date();
     var mon = weeklyMondayOf(now);
-    var day = now.getDay();
-    if (day === 5 || day === 6 || day === 0) mon = addDays(mon, 7);
+    // From the week's last working day (Thursday when Friday is a public holiday), updates are
+    // for the next meeting.
+    if (weekWorkDone(now)) mon = addDays(mon, 7);
     return toDateInputValue(mon);
   }
   function weeklyShownKey() { return weeklyViewKey || weeklyCurrentKey(); }
@@ -13789,11 +13888,16 @@
     var k = projectKey(project);
     return activeTasks().filter(function (t) { return t.status !== 'Done' && projectKey(t.project) === k; }).length;
   }
+  // On leave every working day of that week; a public holiday counts as away.
   function weeklyAwayDuring(name, key) {
+    var any = false;
     for (var i = 0; i < 5; i++) {
-      if (!isOnLeave(name, toDateInputValue(addDays(parseDate(key), i)))) return false;
+      var ds = toDateInputValue(addDays(parseDate(key), i));
+      if (!isWorkingDay(ds)) continue;
+      if (!isOnLeave(name, ds)) return false;
+      any = true;
     }
-    return true;
+    return any;
   }
   var WEEKLY_LEAVE_NOTE = 'From Monday update';
   // A project from last week's update is carried into this week's only while it's still live:
@@ -14229,7 +14333,7 @@
     return '<div class="grid grid-cols-1 sm:grid-cols-[8.5rem_minmax(0,1fr)] gap-x-3 gap-y-0.5 items-baseline px-4 py-2.5">' +
       '<span class="flex items-center gap-1.5 text-xs font-bold text-amber-700 dark:text-amber-400">' + weeklyIcon('away') + 'Away</span>' +
       '<span class="flex flex-col gap-0.5 text-sm text-zinc-700 dark:text-zinc-200 min-w-0">' + rows.map(function (r) {
-        var span = daysBetween(parseDate(r.start), parseDate(r.end)) + 1;
+        var span = leaveDayCount(r.start, r.end);
         var thisWeek = tagThisWeek && r.start <= weekEnd && r.end >= key;
         if (r.repeatLabel) return '<span class="break-words">' + escapeHtml(r.repeatLabel) +
           ' <span class="text-zinc-500 dark:text-zinc-400">' + (r.start >= toDateInputValue(todayMidnight()) ? '· next ' + escapeHtml(formatShortDate(r.start)) : '') + (r.note ? ' · ' + escapeHtml(r.note) : '') + '</span>' +
@@ -14796,12 +14900,15 @@
     var name = weeklyMe();
     if (!me || !name) return;
     var now = new Date();
-    var day = now.getDay(), hr = now.getHours();
+    var hr = now.getHours();
     var slot = null;
-    if ((day === 5 && hr >= 16) || day === 6 || day === 0) slot = 'fri';
-    else if (day === 1 && hr >= 9 && hr < 18) slot = 'mon';
+    // Shifted by public holidays (asked for: "Shift them"): the "fri" reminder comes from 4pm on
+    // the week's last working day, the "mon" one on the meeting week's first working day.
+    if (weekWorkDone(now) && (!isWorkingDay(now) || hr >= 16)) slot = 'fri';
+    else if (firstWorkdayOfWeek(now) && hr >= 9 && hr < 18) slot = 'mon';
     if (!slot) return;
     var key = weeklyCurrentKey(now);
+    var meetDay = workingDayOnOrAfter(parseDate(key)).toLocaleDateString('en-US', { weekday: 'long' });
     if (weeklyEntryFor(name, key)) return;
     if (weeklyAwayDuring(name, key)) return;
     var tag = key + '|' + slot;
@@ -14829,7 +14936,7 @@
         chatProject: null,
         author: 'Project Manager',
         snippet: slot === 'fri'
-          ? 'Fill in your update for Monday\'s meeting. Your projects are listed, so it\'s one tap each.'
+          ? 'Fill in your update for ' + meetDay + '\'s meeting. Your projects are listed, so it\'s one tap each.'
           : 'Your update for today\'s meeting isn\'t in yet. It takes a minute.',
         at: now.toISOString(),
         read: false
@@ -15121,7 +15228,8 @@
       var rowsHtml = (p.active.length || p.steps.length)
         ? p.active.map(personTaskRowHtml).join('') +
           (p.steps.length
-            ? '<p class="px-4 pt-2.5 pb-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Checklist items on others\' tasks</p>' +
+            // A tinted band, so it reads as a divider between the two lists rather than one more row.
+            ? '<p class="px-4 pt-2 pb-1.5 bg-zinc-100 dark:bg-zinc-900/70 text-[11px] font-bold uppercase tracking-wide text-zinc-600 dark:text-zinc-300">Checklist items on others\' tasks</p>' +
               p.steps.map(personChecklistRowHtml).join('')
             : '')
         : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-6">All caught up — no active tasks.</p>';
@@ -16805,7 +16913,7 @@
 
   // "Oct 14 – Oct 16 · 3 days · Hospital", or "Every Mon until Nov 30 · next Oct 19" for a repeat.
   function wipAwayText(r, today) {
-    var span = daysBetween(parseDate(r.start), parseDate(r.end)) + 1;
+    var span = leaveDayCount(r.start, r.end);
     return r.repeatLabel
       ? r.repeatLabel + (r.start >= today ? ' · next ' + formatShortDate(r.start) : ' · today') + (r.note ? ' · ' + r.note : '')
       : formatShortDate(r.start) + ' – ' + formatShortDate(r.end) + ' · ' + span + ' day' + (span === 1 ? '' : 's') + (r.note ? ' · ' + r.note : '');
@@ -16819,8 +16927,8 @@
      From TeamGantt Workloads, Monday's workload view and Asana Workload, but WITHOUT their hour
      estimates (that would be new work for everyone): it counts what is already dated, deadlines a
      person owns plus steps assigned to them (a step with no people counts for the task's owner, as
-     on Calendar v2). Overdue work is counted beside the name, not on a day. A weekend date counts
-     on the Friday before. Leave sits in the row, so it replaced the Away column in By project
+     on Calendar v2). Overdue work is counted beside the name, not on a day. A date on a weekend or
+     public holiday counts on the working day before. Leave sits in the row, so it replaced the Away column in By project
      (Agenda keeps its Away card). Click a person, or any of their days, to list what's behind the
      numbers: it's a shared screen, so nothing is hover-only.
   --------------------------------------------------------- */
@@ -16858,7 +16966,7 @@
   function wipWorkDays(today, horizon) {
     var out = [], d = parseDate(today), end = parseDate(horizon);
     while (d && d <= end) {
-      if (d.getDay() !== 0 && d.getDay() !== 6) out.push(toDateInputValue(d));
+      if (isWorkingDay(d)) out.push(toDateInputValue(d));
       d = addDays(d, 1);
     }
     return out;
@@ -16884,14 +16992,23 @@
     if (!days.length) return '';
     var col = {};
     days.forEach(function (d) { col[d] = true; });
-    // A weekend date counts on the Friday before, or the Monday after when that Friday has passed.
+    // A date on a weekend or public holiday counts on the working day before, or the one after
+    // when that day has passed.
     function columnOf(date) {
       if (col[date]) return date;
-      var d = parseDate(date), w = d.getDay();
-      var fri = toDateInputValue(addDays(d, w === 6 ? -1 : -2));
-      if (col[fri]) return fri;
-      var mon = toDateInputValue(addDays(d, w === 6 ? 2 : 1));
-      return col[mon] ? mon : null;
+      var d = parseDate(date);
+      if (!d || isWorkingDay(d)) return null;
+      var before = toDateInputValue(workingDayOnOrBefore(d));
+      if (col[before]) return before;
+      var after = d;
+      for (var i = 0; i < 10 && !isWorkingDay(after); i++) after = addDays(after, 1);
+      after = toDateInputValue(after);
+      return col[after] ? after : null;
+    }
+    // The week divider goes before each week's first column, which isn't always a Monday.
+    function newWeek(d) {
+      var i = days.indexOf(d);
+      return i > 0 && parseDate(d).getDay() <= parseDate(days[i - 1]).getDay();
     }
     var helpBy = weeklyHelpByPerson();
     var names = {};
@@ -16916,7 +17033,7 @@
         var mon = dt.toLocaleDateString('en-US', { month: 'short' });
         var showMonth = mon !== monthShown; monthShown = mon;
         var isToday = d === today;
-        return '<span class="text-center leading-tight' + (dt.getDay() === 1 && d !== days[0] ? ' border-l-2 border-zinc-200 dark:border-zinc-600' : '') + (isToday ? ' text-brand-700 dark:text-brand-300' : '') + '">' +
+        return '<span class="text-center leading-tight' + (newWeek(d) ? ' border-l-2 border-zinc-200 dark:border-zinc-600' : '') + (isToday ? ' text-brand-700 dark:text-brand-300' : '') + '">' +
           '<span class="block">' + (showMonth ? mon : '&nbsp;') + '</span>' +
           '<span class="block">' + dt.toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 2) + ' ' + dt.getDate() + '</span>' +
         '</span>';
@@ -16944,7 +17061,7 @@
         var label = items.length ? String(items.length) : (away ? 'Away' : '');
         var tip = wipDayLabel(d) + ': ' + (items.length ? items.map(function (it) { return it.text; }).join(', ') : 'nothing due') + (away ? ' (away)' : '');
         return '<button type="button" data-wip-load-person="' + escapeHtml(r.name) + '" title="' + escapeHtml(first + ', ' + tip) + '" aria-label="' + escapeHtml(r.name + ', ' + tip) + '" class="h-9 rounded-md flex items-center justify-center ' + (away && !items.length ? 'text-[9px] uppercase tracking-wide' : 'text-xs') + ' font-bold ' +
-          wipLoadCellCls(items.length, away) + (parseDate(d).getDay() === 1 && d !== days[0] ? ' ml-1' : '') + '">' + label + '</button>';
+          wipLoadCellCls(items.length, away) + (newWeek(d) ? ' ml-1' : '') + '">' + label + '</button>';
       }).join('');
       var list = '';
       if (openList) {
@@ -17072,8 +17189,8 @@
       '<div class="flex-1 min-w-0 grid" style="grid-template-columns:' + cols + ';">';
     for (var i = 0; i < n; i++) {
       var d = addDays(rangeStart, i);
-      var weekend = d.getDay() === 0 || d.getDay() === 6;
-      head += '<div class="flex flex-col items-center py-1 text-[10px] leading-tight ' +
+      var weekend = !isWorkingDay(d), hol = holidayName(toDateInputValue(d));   // a public holiday looks like a weekend
+      head += '<div' + (hol ? ' title="' + escapeHtml(hol) + ' (public holiday)"' : '') + ' class="flex flex-col items-center py-1 text-[10px] leading-tight ' +
         (i === 0 ? 'text-rose-600 dark:text-rose-400 font-bold' : (weekend ? 'text-zinc-300 dark:text-zinc-600' : 'text-zinc-400 dark:text-zinc-500')) + '">' +
         // 28 columns cannot fit a weekday letter AND a number each; the number alone is enough there.
         (n <= 14 ? '<span>' + d.toLocaleDateString('en-US', { weekday: 'narrow' }) + '</span>' : '') +
@@ -18027,6 +18144,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-22b', date: '2026-10-22', items: [
+      { type: 'new', title: 'Singapore public holidays', text: "The Calendar now shows Singapore's public holidays, including the Monday off when one falls on a weekend. On the Timeline they're shaded like weekends (hover the day for its name), with a note if a deadline lands on one. They also count as days off: Team load skips them, due-soon warnings and deadline reminders look past them, copied or moved checklist dates step back to the working day before, leave shows its working days, and the Monday Meeting reminders move to the working day before or after." }
+    ] },
     { id: '2026-10-22a', date: '2026-10-22', items: [
       { type: 'improved', title: 'Briefs can be deleted', text: 'Open a brief, click Edit, then Delete brief at the bottom left. It asks first, and the project goes back to "+ Brief". Checklist steps the brief added stay on their tasks.' }
     ] },
@@ -20541,7 +20661,7 @@
   }
 
   /* ---------- Calendar ---------- */
-  var M_KIND_COLOR = { deadline: '#ff4e20', step: '#6366f1', brief: '#0891b2', project: '#8b5cf6', away: '#f59e0b' };
+  var M_KIND_COLOR = { deadline: '#ff4e20', step: '#6366f1', brief: '#0891b2', project: '#8b5cf6', away: '#f59e0b', holiday: '#14b8a6' };
   function mCalendarHtml() {
     var today = mToday();
     if (!mCalStart) mCalStart = today;
@@ -20576,7 +20696,8 @@
     var kind = CAL2_KIND[it.kind] || { label: it.kind };
     var attr = it.taskId ? ' data-m-task="' + it.taskId + '"' : (it.project && it.kind !== 'away') ? ' data-m-project="' + escapeHtml(it.project) + '"' : it.who ? ' data-m-person="' + escapeHtml(it.who) + '"' : '';
     var title = it.kind === 'project' ? 'Project deadline' : it.title;
-    var sub = it.kind === 'away' ? escapeHtml(it.note || '')
+    var sub = it.kind === 'holiday' ? escapeHtml(it.note || kind.label)
+      : it.kind === 'away' ? escapeHtml(it.note || '')
       : escapeHtml(kind.label) + ' · ' + projectNameHtml(it.project || '') + (it.who ? ' · ' + escapeHtml(mFirst(it.who)) : '');
     return '<button type="button" class="m-row"' + attr + (it.done ? ' style="opacity:.55"' : '') + '>' +
       '<span class="m-kind" style="background:' + (M_KIND_COLOR[it.kind] || '#a1a1aa') + '"></span>' +
@@ -22006,7 +22127,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-22T02:04:09Z";
+  var CURRENT_BUILD_VERSION = "2026-10-22T02:31:59Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
