@@ -3515,7 +3515,7 @@ client-side domain check in `isAllowedEmail` is UX only, not enforcement):
         `overflow-hidden` clipped it, and a text glyph broke the SVG-icons rule. It is now
         `.gantt-stack-tag`, a small amber tag just past the bar's right end (where the shared
         deadline is) with the `layers` icon and how many things are due that day; its title names
-        them and it opens the task. Legend entry: "Same-day deadlines". **The overdue dot went the
+        them and it opens the task. Legend entry: "3+ due the same day"; since 2026-10-22 only 3 or more count ("only have it when there are more than 2"), `SAME_DAY_CLASH_COUNT`, shared with the WIP Clash. **The overdue dot went the
         same way** (also clipped; asked: "visually consistent and easy to understand"): a rose
         "3d late" tag with a clock icon, beside the amber one. Both come from `ganttEndTagsHtml`,
         used by the Timeline and the WIP timeline; "Overdue" shows in the legend only while one is

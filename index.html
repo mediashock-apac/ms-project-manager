@@ -1515,7 +1515,7 @@
             <span class="flex items-center gap-1"><span class="w-0.5 h-3 bg-rose-500"></span>Today</span>
             <!-- Only while an overdue task is on the chart (renderGantt). Legend samples are icon-only: a number here read as real data. -->
             <span id="gantt-overdue-note" class="hidden"><span class="flex items-center gap-1"><span class="inline-flex items-center gap-0.5 h-4 px-1 rounded text-[10px] font-bold leading-none bg-rose-100 text-rose-700 ring-1 ring-inset ring-rose-300 dark:bg-rose-500/20 dark:text-rose-300 dark:ring-rose-500/40"><svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></span>Overdue</span></span>
-            <span class="flex items-center gap-1"><span class="inline-flex items-center gap-0.5 h-4 px-1 rounded text-[10px] font-bold leading-none bg-amber-100 text-amber-800 ring-1 ring-inset ring-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:ring-amber-500/40"><svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 2 10 5-10 5L2 7z"></path><path d="m2 17 10 5 10-5"></path><path d="m2 12 10 5 10-5"></path></svg></span>Same-day deadlines</span>
+            <span class="flex items-center gap-1"><span class="inline-flex items-center gap-0.5 h-4 px-1 rounded text-[10px] font-bold leading-none bg-amber-100 text-amber-800 ring-1 ring-inset ring-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:ring-amber-500/40"><svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 2 10 5-10 5L2 7z"></path><path d="m2 17 10 5 10-5"></path><path d="m2 12 10 5 10-5"></path></svg></span>3+ due the same day</span>
             <span id="gantt-stack-note" class="hidden text-rose-600 dark:text-rose-400 font-semibold" title="These tasks share an owner and a deadline -- more than one thing is due from the same person on the same day."></span>
             <span id="gantt-leave-note" class="hidden text-amber-700 dark:text-amber-400 font-semibold" title="The deadline falls on a day the owner is away. The shaded stripes on a row are that person's leave -- set it in the People tab."></span>
             <!-- Only while a holiday is in view; its title names them. Teal, as on the Calendar. -->
@@ -6241,7 +6241,7 @@
   // Fades the right ~45% of an open-ended bar to nothing.
   var GANTT_TBD_MASK = '-webkit-mask-image:linear-gradient(to right,#000 55%,transparent);mask-image:linear-gradient(to right,#000 55%,transparent);';
   /* Deadline warnings on both timelines, as small tags just past the bar's end, where the deadline
-     is: rose "3d late" (overdue) and amber "2" with a layers icon (things due the same day). One
+     is: rose "3d late" (overdue) and amber count with a layers icon (3+ things due the same day, SAME_DAY_CLASH_COUNT). One
      system, told apart by colour (asked: "visually consistent and easy to understand"). They
      replaced a red dot and a "!" circle on the bar's corners, which the bar's overflow-hidden
      clipped ("This looks unpolished"); outside the bar nothing clips them. */
@@ -6869,7 +6869,7 @@
   // Deadline-stacking detection for the Gantt. NOT date-range overlap -- one person working on
   // several projects' tasks across the same stretch of days is completely normal, just a matter
   // of them prioritizing what ships first, and flagging that as a "conflict" was reported back
-  // as not actually useful. What's worth a warning is two or more of one person's tasks having
+  // as not actually useful. What's worth a warning is several of one person's tasks having
   // the exact same DEADLINE -- that's a real pile-up, everything landing on their desk due the
   // same day with no slack to sequence it. Scoped to whatever's already plotted (rows passed in
   // already have both dates and passed the active filters), not the whole board, so this only
@@ -6877,6 +6877,12 @@
   // a pile-up anyone still needs to resolve. Returns taskId -> array of the other task(s) sharing
   // its deadline, not just a boolean, so the bar's tooltip can name exactly what's stacked on top
   // of it instead of a bare warning.
+  //
+  // Since 2026-10-22 a stack is SAME_DAY_CLASH_COUNT (3) or more, not 2 (asked: "only have it when
+  // there are more than 2"): two things due one day is normal, and flagging it lit up nearly every
+  // bar. The WIP meeting's Clash uses the same constant, so the two never disagree about what a
+  // pile-up is.
+  var SAME_DAY_CLASH_COUNT = 3;
   function computeGanttDeadlineStacks(rows) {
     var byAssignee = {};
     rows.forEach(function (t) {
@@ -6891,7 +6897,7 @@
       });
       Object.keys(byDeadline).forEach(function (deadline) {
         var group = byDeadline[deadline];
-        if (group.length < 2) return;
+        if (group.length < SAME_DAY_CLASH_COUNT) return;
         group.forEach(function (t) {
           stacks[t.id] = group.filter(function (other) { return other.id !== t.id; });
         });
@@ -17013,7 +17019,7 @@
      (Agenda keeps its Away card). Click a person, or any of their days, to list what's behind the
      numbers: it's a shared screen, so nothing is hover-only.
   --------------------------------------------------------- */
-  var WIP_CLASH_COUNT = 3;   // things due one person on one day that make a Clash
+  var WIP_CLASH_COUNT = SAME_DAY_CLASH_COUNT;   // things due one person on one day that make a Clash (shared with the Timeline)
   var wipLoadOpen = {};      // person -> their list is open (session only)
 
   function wipLoadItems(open, today, horizon) {
@@ -18227,6 +18233,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-22f', date: '2026-10-22', items: [
+      { type: 'improved', title: 'Same-day deadline tag only for 3 or more', text: "The amber tag on the Timeline now shows only when someone has three or more things due on the same day, the same rule the WIP meeting uses for a clash. Two on one day is normal, so it no longer flags." }
+    ] },
     { id: '2026-10-22e', date: '2026-10-22', items: [
       { type: 'improved', title: 'Timeline: clearer late tasks, holidays and a header that stays put', text: 'A late task now shows how late it is, like "3d late", in a small tag after its bar, next to the same-day deadline tag. Public holidays are teal, so they no longer look like weekends. And the legend, months and dates stay at the top of the screen as you scroll down.' }
     ] },
@@ -22220,7 +22229,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-22T03:35:58Z";
+  var CURRENT_BUILD_VERSION = "2026-10-22T03:45:13Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

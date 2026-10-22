@@ -25,7 +25,10 @@ function seed() {
       tasks: Object.assign({
         late: T({ name: 'Late one', startDate: '2026-10-05', deadline: '2026-10-19' }),
         s1: T({ name: 'Stack A', startDate: '2026-10-20', deadline: '2026-11-03' }),
-        s2: T({ name: 'Stack B', startDate: '2026-10-26', deadline: '2026-11-03' })
+        s2: T({ name: 'Stack B', startDate: '2026-10-26', deadline: '2026-11-03' }),
+        s3: T({ name: 'Stack C', startDate: '2026-10-27', deadline: '2026-11-03' }),
+        p1: T({ name: 'Pair A', startDate: '2026-10-21', deadline: '2026-11-04' }),
+        p2: T({ name: 'Pair B', startDate: '2026-10-23', deadline: '2026-11-04' })
       }, (function () { const o = {}; for (let i = 0; i < 24; i++) o['f' + i] = T({ name: 'Filler ' + i, startDate: '2026-10-20', deadline: '2026-11-1' + (i % 10) }); return o; })()),
       projects: {}, activity: {}, notifications: {}, suggestions: {}, notificationDedup: {}
     }
@@ -68,15 +71,17 @@ async function newPage(browser, when, opts) {
     const tag = sel => [...document.querySelectorAll('#gantt-grid ' + sel)];
     const late = tag('.gantt-late-tag').filter(e => e.getAttribute('data-open-task') === 'late')[0];
     const stack = tag('.gantt-stack-tag').filter(e => e.getAttribute('data-open-task') === 's1')[0];
+    const pair = tag('.gantt-stack-tag').filter(e => /^p/.test(e.getAttribute('data-open-task'))).length;
     const bar = document.querySelector('#gantt-grid .gantt-bar[data-open-task="late"]');
     const hol = document.querySelector('#gantt-grid [title="Deepavali (in lieu) (public holiday)"]');
     const sat = [...document.querySelectorAll('#gantt-grid .gantt-head-cell')].find(e => /grid-row: ?2;/.test(e.getAttribute('style')) && /^S/.test(e.innerText.trim()) && !e.title);
     return { late: late && late.textContent, lateTitle: late && late.title, lateAfterBar: !!late && !!bar && late.getBoundingClientRect().left >= bar.getBoundingClientRect().right,
-      stack: stack && stack.textContent, oldDot: !!document.querySelector('#gantt-grid .gantt-bar .rounded-full'), overdueLegend: !document.getElementById('gantt-overdue-note').classList.contains('hidden'),
+      stack: stack && stack.textContent, pair, oldDot: !!document.querySelector('#gantt-grid .gantt-bar .rounded-full'), overdueLegend: !document.getElementById('gantt-overdue-note').classList.contains('hidden'),
       holCls: hol ? hol.className : '', satCls: sat ? sat.className : '', holLegend: document.getElementById('gantt-holiday-note').innerText };
   });
   check('an overdue task gets a "3d late" tag after its bar', g.late === '3d late' && g.lateAfterBar && /was due Oct 19/.test(g.lateTitle || ''), g.late + ' / ' + g.lateTitle);
-  check('same-day deadlines get the amber count tag', g.stack === '2', g.stack);
+  check('three things due one day get the amber count tag', g.stack === '3', g.stack);
+  check('two due one day is normal: no tag', g.pair === 0, String(g.pair));
   check('no corner dot or badge inside the bar any more', !g.oldDot);
   check('the legend explains Overdue while one is on screen', g.overdueLegend);
   check('a public holiday is teal, unlike a weekend', /bg-teal-50/.test(g.holCls) && /bg-zinc-100/.test(g.satCls) && !/teal/.test(g.satCls), g.holCls.slice(0, 60) + ' | ' + g.satCls.slice(0, 60));
