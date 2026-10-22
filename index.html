@@ -1505,7 +1505,7 @@
                  emerald bar was the one colour on screen with nothing to explain it. -->
             <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-emerald-400"></span>Done</span>
             <span class="flex items-center gap-1"><span class="w-0.5 h-3 bg-rose-500"></span>Today</span>
-            <span class="flex items-center gap-1"><span class="w-3 h-3 rounded-full bg-amber-500 flex items-center justify-center text-white text-[8px] font-black leading-none">!</span>Deadline stack</span>
+            <span class="flex items-center gap-1"><span class="inline-flex items-center gap-0.5 h-4 px-1 rounded text-[10px] font-bold leading-none bg-amber-100 text-amber-800 ring-1 ring-inset ring-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:ring-amber-500/40"><svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 2 10 5-10 5L2 7z"></path><path d="m2 17 10 5 10-5"></path><path d="m2 12 10 5 10-5"></path></svg>2</span>Same-day deadlines</span>
             <span id="gantt-stack-note" class="hidden text-rose-600 dark:text-rose-400 font-semibold" title="These tasks share an owner and a deadline -- more than one thing is due from the same person on the same day."></span>
             <span id="gantt-leave-note" class="hidden text-amber-700 dark:text-amber-400 font-semibold" title="The deadline falls on a day the owner is away. The shaded stripes on a row are that person's leave -- set it in the People tab."></span>
             <!-- Only while a holiday is in view; its title names them. The tint is the weekend one. -->
@@ -1886,7 +1886,7 @@
     <section id="view-archived" data-view class="flex-1">
       <!-- max-w-6xl and two rows per line from lg (was a 2xl single column), to cut scrolling on a
            list that only ever grows. Rows are short and independent, so reading left to right then
-           down still follows newest-first. Year headings span both columns (renderArchived). -->
+           down still follows newest-first. Year and month headings span both columns; older years fold (renderArchived). -->
       <div id="archived-list" class="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-2 gap-2"></div>
     </section>
 
@@ -6504,6 +6504,7 @@
     moreHorizontal: '<circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle>',
     refresh: '<path d="M21 12a9 9 0 0 1-15.4 6.4L3 16"></path><path d="M3 21v-5h5"></path><path d="M3 12a9 9 0 0 1 15.4-6.4L21 8"></path><path d="M21 3v5h-5"></path>',
     repeat: '<path d="m17 2 4 4-4 4"></path><path d="M3 11v-1a4 4 0 0 1 4-4h14"></path><path d="m7 22-4-4 4-4"></path><path d="M21 13v1a4 4 0 0 1-4 4H3"></path>',
+    layers: '<path d="m12 2 10 5-10 5L2 7z"></path><path d="m2 17 10 5 10-5"></path><path d="m2 12 10 5 10-5"></path>',
     // Team icons (teamspace tiles and department chips). ts-clap / ts-tick are animated on switch.
     grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect>',
     teamSuits: '<rect x="3" y="7" width="18" height="13" rx="2"></rect><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><path d="M3 13h18"></path>',
@@ -13186,12 +13187,14 @@
           // dating checklist items at all.
           '<div class="' + pm.bar + ' h-full w-full"></div>' +
           (overdue ? '<span class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-zinc-800"></span>' : '') +
-          // Opposite corner from the overdue dot (top-left, not top-right) and a different shape
-          // (a badge with a glyph, not a bare dot) -- overdue and a stacked deadline are both real
-          // but unrelated warnings, and two same-shaped colored dots on one small bar would blur
-          // together instead of reading as two distinct facts.
-          (rowStacked.length ? '<span class="absolute -top-1 -left-1 w-3.5 h-3.5 rounded-full bg-amber-500 ring-2 ring-white dark:ring-zinc-800 flex items-center justify-center text-white text-[9px] font-black leading-none pointer-events-none" aria-hidden="true">!</span>' : '') +
       '</button>';
+      // Deadline stack: a tag just past the bar's end, where the clashing deadline is, with how many
+      // things are due that day. It used to be a "!" circle on the bar's top-left corner, which the
+      // bar's overflow-hidden clipped ("This looks unpolished"); outside the bar nothing clips it.
+      // Still a different shape and place from the overdue dot, so the two warnings stay distinct.
+      if (rowStacked.length) html += '<span data-open-task="' + t.id + '" title="' + escapeHtml(t.assignee + ' has ' + (rowStacked.length + 1) + ' things due ' + formatShortDate(t.deadline) + ': ' + [t.name].concat(rowStacked.map(function (o) { return o.name; })).join(', ')) + '" ' +
+        'class="gantt-stack-tag absolute cursor-pointer inline-flex items-center gap-0.5 h-4 px-1 rounded text-[10px] font-bold leading-none bg-amber-100 text-amber-800 ring-1 ring-inset ring-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:ring-amber-500/40" ' +
+        'style="left:' + (Math.max(barLeft, 0) + Math.max(barWidth, 18) + 4) + 'px;top:' + (rowHeight / 2 - 8) + 'px;">' + svgIcon('layers', 'w-3 h-3') + (rowStacked.length + 1) + '</span>';
       // Over the faded tail, right-aligned to where the bar ends, so it says why the bar has no
       // end and never runs off the chart's right edge.
       if (kind === 'tbd') html += ganttTbdTagHtml(t, 'right:' + (totalDays * dayWidth - Math.max(barLeft, 0) - Math.max(barWidth, 18) + 6) + 'px;top:' + (rowHeight / 2 - 8) + 'px;line-height:16px;');
@@ -16420,15 +16423,45 @@
         (q ? 'No archived tasks match "' + escapeHtml(filters.search.trim()) + '".' : 'Nothing archived yet. Archived tasks wait here, and any of them can go back on the board.') + '</p>';
       return;
     }
-    var html = '';
-    var lastYear = null;
+    // Grouped by year, then month, newest first (asked for: "sorted clearly by Year, month"). The
+    // newest year is open and older ones fold to one line each ("past years folded"), so the list
+    // doesn't become an endless scroll. A search opens every year with a match, so it never hides
+    // one. A year you open or fold stays that way until reload (archivedYearOpen).
+    var years = {}, order = [];
     archived.forEach(function (t) {
-      var year = localDateOf(t.archivedAt).slice(0, 4);
-      if (year !== lastYear) {
-        html += '<div class="lg:col-span-2 text-xs font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wide mt-4 first:mt-0 mb-1">' + year + '</div>';
-        lastYear = year;
-      }
-      html += '<div class="flex items-center gap-3 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card px-3.5 py-2.5">' +
+      var ds = localDateOf(t.archivedAt), y = ds.slice(0, 4), m = ds.slice(0, 7);
+      if (!years[y]) { years[y] = { months: {}, monthOrder: [], n: 0 }; order.push(y); }
+      var Y = years[y];
+      if (!Y.months[m]) { Y.months[m] = []; Y.monthOrder.push(m); }
+      Y.months[m].push(t); Y.n++;
+    });
+    var html = '';
+    order.forEach(function (y, yi) {
+      var open = q ? true : (archivedYearOpen[y] != null ? archivedYearOpen[y] : yi === 0);
+      html += '<button type="button" data-archived-year="' + y + '" aria-expanded="' + open + '" class="lg:col-span-2 flex items-center gap-2 w-full text-left ' + (yi ? 'mt-5' : '') + ' pb-1.5 border-b border-zinc-200 dark:border-zinc-700 hover:text-brand-700 dark:hover:text-brand-400">' +
+        '<span class="text-base font-bold text-zinc-800 dark:text-zinc-100">' + y + '</span>' +
+        '<span class="text-xs text-zinc-500 dark:text-zinc-400">' + years[y].n + ' task' + (years[y].n === 1 ? '' : 's') + '</span>' +
+        svgIcon('chevronDown', 'ml-auto w-4 h-4 text-zinc-400 transition-transform' + (open ? '' : ' -rotate-90')) + '</button>';
+      if (!open) return;
+      years[y].monthOrder.forEach(function (m) {
+        var list = years[y].months[m];
+        html += '<p class="lg:col-span-2 mt-2 text-[11px] font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">' +
+          parseDate(m + '-01').toLocaleDateString('en-US', { month: 'long' }) + ' <span class="font-semibold text-zinc-400 dark:text-zinc-500">· ' + list.length + '</span></p>';
+        list.forEach(function (t) { html += archivedRowHtml(t); });
+      });
+    });
+    container.innerHTML = html;
+  }
+  var archivedYearOpen = {};
+  document.getElementById('archived-list').addEventListener('click', function (e) {
+    var b = e.target.closest('[data-archived-year]');
+    if (!b) return;
+    archivedYearOpen[b.getAttribute('data-archived-year')] = b.getAttribute('aria-expanded') !== 'true';
+    renderArchived();
+  });
+
+  function archivedRowHtml(t) {
+    return '<div class="flex items-center gap-3 bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card px-3.5 py-2.5">' +
         avatarHtml(t.assignee, 'w-6 h-6 shrink-0', 'text-xs') +
         '<div class="min-w-0 flex-1">' +
           '<button type="button" data-open-task="' + t.id + '" class="block max-w-full text-left text-sm font-medium text-zinc-700 dark:text-zinc-200 truncate hover:text-brand-700 dark:hover:text-brand-400 hover:underline decoration-zinc-400 underline-offset-2">' + escapeHtml(t.name) + '</button>' +
@@ -16436,8 +16469,6 @@
         '</div>' +
         '<button type="button" data-unarchive-task="' + t.id + '" class="shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">Restore</button>' +
       '</div>';
-    });
-    container.innerHTML = html;
   }
 
   /* =========================================================
@@ -18146,6 +18177,10 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-22d', date: '2026-10-22', items: [
+      { type: 'improved', title: 'Archived by year and month', text: 'Archived tasks are now grouped by year, then month, newest first, with a count on each. Older years fold to one line: click a year to open it. Searching opens any year with a match.' },
+      { type: 'improved', title: 'Clearer same-day deadline marker on the Timeline', text: 'When someone has more than one thing due on the same day, a small amber tag after the bar shows how many. Hover it to see which tasks.' }
+    ] },
     { id: '2026-10-22c', date: '2026-10-22', items: [
       { type: 'fixed', title: 'Filtering by person includes Also involved', text: 'Picking someone in the people filter now shows the tasks they\'re also involved in, not just the ones they own. Thanks Arvind for flagging it.' }
     ] },
@@ -18937,7 +18972,7 @@
     ] },
     gantt: { since: PAGE_TOURS_EXISTING, steps: [
       { target: '#gantt-wrap', title: "Your work over time", text: "Each bar runs from a task's start date to its deadline. Click a task's name to see its checklist steps: green diamonds are done, grey are still to do. Drag the edge of the Task column to make it wider." },
-      { target: '#gantt-legend', title: "What the marks mean", text: "Colours show priority. A red dot means overdue, an orange ! means one person has several things due the same day, and stripes mean the owner is away." }
+      { target: '#gantt-legend', title: "What the marks mean", text: "Colours show priority. A red dot means overdue, an amber number after a bar means its owner has that many things due that day, and stripes mean the owner is away." }
     ] },
     calendar: { since: PAGE_TOURS_EXISTING, steps: [
       { target: '#calendar-scope-toggle', title: "Just you, or everyone?", text: "Mine shows only your work. Everyone shows the whole team's." },
@@ -22132,7 +22167,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-22T02:42:43Z";
+  var CURRENT_BUILD_VERSION = "2026-10-22T02:51:12Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

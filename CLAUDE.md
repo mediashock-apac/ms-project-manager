@@ -169,7 +169,7 @@ here (dependencies, Gantt grouping, the progress column) stay out even when a re
 
 ## Commands
 
-**Browser tests: `node tests/run.mjs`** (see `tests/README.md`). 38 suites, each loading
+**Browser tests: `node tests/run.mjs`** (see `tests/README.md`). 39 suites, each loading
 the real `index.html` in Chromium with Firebase replaced by `tests/fbstub.js`. They run on every push to
 `main` and every weekday at 7am Singapore (`.github/workflows/tests.yml`); a failure is a red X plus
 GitHub's email. Asked for directly: "Constantly run checks as I did today to make sure everything is
@@ -394,8 +394,12 @@ sidebar so users will know whenever new updates are in."
   `bg-white` on that same container**: it overrides the tint and the dividers vanish (shipped
   that way for one build).
 - **The same "less scrolling" pass, applied to the other narrow pages** (all were `max-w-2xl`):
-  - **Archived**: `max-w-6xl`, a two-column grid from `lg`; year headings and the empty state
-    span both columns (`lg:col-span-2`).
+  - **Archived**: `max-w-6xl`, a two-column grid from `lg`; year and month headings and the empty
+    state span both columns (`lg:col-span-2`). Since 2026-10-22 ("sorted clearly by Year, month",
+    "past years folded"): a year heading with its count, then month headings with counts, newest
+    first. The newest year is open, older years fold to one line (`data-archived-year`, fold state
+    in `archivedYearOpen` until reload), and a search opens every year with a match.
+    `tests/archived-years.test.js`.
   - **Suggestions**: `max-w-6xl`, cards in **two independent columns** from `lg`, alternating
     (newest top-left, next top-right). Reply threads make cards very uneven, so a row grid would
     leave gaps. Below `lg` the columns are `display: contents` and each card carries an inline
@@ -420,6 +424,8 @@ updates] itself?" The page polls `version.txt` every 60s; once it differs (`pend
 - **Otherwise a quiet cue on the New Updates row** (`renderUpdateReadyCue`, `.update-ready`): the label
   reads "New version · refresh" with a refresh icon; clicking it reloads straight into New Updates.
   The old copy can't show what changed (the CHANGELOG ships with the new code), only that something did.
+  The row wears the same moving unread bar as `.updates-unread` (added 2026-10-22, on request: left
+  plain, the cue read as "New Updates stopped highlighting"). Quiet means no popup, not a plain row.
 - **The banner (`#update-banner`) is only a safety net**: shown once if a copy is still old after
   `UPDATE_NAG_MS` (8h of use). An old copy left open writes its older idea of the data (an old Monday
   editor would drop `resolved`/`follows`), which is why it isn't simply left to the person.
@@ -3496,6 +3502,11 @@ client-side domain check in `isAllowedEmail` is UX only, not enforcement):
         different corner and shape so the two warnings don't blur into each other), a
         `#gantt-stack-note` count in the legend, and the specific
         stacked task name(s) named in the bar's tooltip -- only the trigger condition changed.
+        **Badge replaced 2026-10-22** ("This looks unpolished"): the `!` sat inside the bar, whose
+        `overflow-hidden` clipped it, and a text glyph broke the SVG-icons rule. It is now
+        `.gantt-stack-tag`, a small amber tag just past the bar's right end (where the shared
+        deadline is) with the `layers` icon and how many things are due that day; its title names
+        them and it opens the task. Legend entry: "Same-day deadlines".
       - TeamGantt's closest equivalent (a Workloads heat-map showing hours/day per person) lives
         in a separate report, not on the chart itself, and its own users have publicly asked for
         an on-chart version that doesn't exist yet -- this is that, tuned to what this team
