@@ -10417,6 +10417,7 @@
         '</div>' +
       '</div></div>' +
       '<div class="flex items-center gap-2 px-4 sm:px-5 py-3 border-t border-zinc-100 dark:border-zinc-700">' +
+        (isNew ? '' : '<button type="button" data-brief-act="delete" class="-ml-2 px-2 py-2 text-sm font-medium text-rose-600 dark:text-rose-400 hover:text-rose-700 dark:hover:text-rose-300 inline-flex items-center gap-1.5">' + svgIcon('trash', 'w-4 h-4') + 'Delete brief</button>') +
         '<button type="button" data-brief-act="' + (isNew ? 'close' : 'cancel-edit') + '" class="ml-auto text-sm font-medium px-3.5 py-2 rounded-lg text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700">Cancel</button>' +
         '<button type="button" data-brief-act="save" class="text-sm font-semibold px-3.5 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700">Save brief</button></div>';
   }
@@ -10482,6 +10483,7 @@
     if (act === 'cancel-update') { var form2 = document.getElementById('brief-update-form'); form2.classList.add('hidden'); form2.classList.remove('flex'); return; }
     if (act === 'save-update') { briefSaveUpdate(); return; }
     if (act === 'save') { briefSave(); return; }
+    if (act === 'delete') { requestBriefDelete(); return; }
     briefCollect();
     if (act === 'up' && idx > 0) { var a = d.sections.splice(idx, 1)[0]; d.sections.splice(idx - 1, 0, a); }
     else if (act === 'down' && idx > -1 && idx < d.sections.length - 1) { var b2 = d.sections.splice(idx, 1)[0]; d.sections.splice(idx + 1, 0, b2); }
@@ -10548,6 +10550,24 @@
       showToast(prev ? 'Brief saved' + (added ? ' · ' + added + ' checklist step' + (added === 1 ? '' : 's') + ' added' : '') : 'Brief created' + (added ? ' · ' + added + ' checklist step' + (added === 1 ? '' : 's') + ' added' : ''), 'success');
       if (briefOpen && briefOpen.name === name) { briefOpen.lastSaved = brief; briefOpen.mode = 'view'; briefOpen.draft = null; renderBriefModal(); }
     }).catch(function (err) { showToast('Could not save the brief: ' + err.message, 'error'); });
+  }
+
+  // Anyone can delete a brief (asked for: "anyone", "ask first"). Removes the field, so the
+  // project shows "+ Brief" again; checklist steps it added stay, as briefAddSteps never deletes.
+  function requestBriefDelete() {
+    var name = briefOpen.name;
+    confirmModal.style.zIndex = '60'; // over the brief window, as in requestBriefCancel
+    openConfirm('Delete this brief?', 'This will permanently remove the "' + name + '" brief for everyone. Any checklist steps it added stay on their tasks. This cannot be undone.',
+      function () { briefDelete(name); }, { confirmText: 'Delete brief' });
+  }
+  function briefDelete(name) {
+    var pd = projectDeadlineDoc(name);
+    if (!pd) return;
+    updateDoc(doc(projectsCol, pd.id), { brief: deleteField() }).then(function () {
+      logActivity('project_brief', 'Deleted the brief for ' + name);
+      showToast('Brief deleted', 'info');
+      if (briefOpen && briefOpen.name === name) closeBrief();
+    }).catch(function (err) { showToast('Could not delete the brief: ' + err.message, 'error'); });
   }
 
   // Key dates -> checklist steps. Matched by step name (case-insensitive), so saving again
@@ -18007,6 +18027,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-22a', date: '2026-10-22', items: [
+      { type: 'improved', title: 'Briefs can be deleted', text: 'Open a brief, click Edit, then Delete brief at the bottom left. It asks first, and the project goes back to "+ Brief". Checklist steps the brief added stay on their tasks.' }
+    ] },
     { id: '2026-10-21b', date: '2026-10-21', items: [
       { type: 'improved', title: 'Briefs ask before you lose your writing', text: "Pressing Cancel, the X or Escape on a brief you're writing now asks \"Are you sure you want to cancel?\" first, so a stray click doesn't throw away what you typed. If you haven't changed anything, it just closes." }
     ] },
@@ -21983,7 +22006,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-21T04:21:15Z";
+  var CURRENT_BUILD_VERSION = "2026-10-22T02:04:09Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

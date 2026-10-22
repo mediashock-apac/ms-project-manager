@@ -169,7 +169,7 @@ here (dependencies, Gantt grouping, the progress column) stay out even when a re
 
 ## Commands
 
-**Browser tests: `node tests/run.mjs`** (see `tests/README.md`). 35 suites, each loading
+**Browser tests: `node tests/run.mjs`** (see `tests/README.md`). 36 suites, each loading
 the real `index.html` in Chromium with Firebase replaced by `tests/fbstub.js`. They run on every push to
 `main` and every weekday at 7am Singapore (`.github/workflows/tests.yml`); a failure is a red X plus
 GitHub's email. Asked for directly: "Constantly run checks as I did today to make sure everything is
@@ -3235,6 +3235,12 @@ version 1 first but I want to be able to revert cleanly if it is not for me."
   changes?". Discard drops back to the saved brief (or closes a new one); Keep editing / Escape stays.
   The confirm is raised to z-60 while it's over the brief (both are z-50 and the brief is added later in
   the page); `closeConfirm` resets it. `tests/brief-cancel.test.js`.
+- **Anyone can delete a brief** (2026-10-22, asked for: "anyone", "ask first"; `requestBriefDelete`,
+  `briefDelete`). "Delete brief" sits bottom left of the Edit view of a saved brief only, like the task
+  window's Delete, so the reading view's header stays Copy / Edit / X. It asks "Delete this brief?"
+  (raised to z-60 like the Cancel question), then removes `brief` with `deleteField()`, logs it, and the
+  project goes back to "+ Brief". Checklist steps the brief added stay. No rules change: `projects`
+  update only restricts `chat`. `tests/brief-delete.test.js`.
 - **Opened from:** "+ Brief" / "Brief" on the Projects card, the task window (Project field's helper
   line), and the WIP project header (only when a brief exists).
 - **No AI, no cost, no setup:** no Google OAuth, no API key, no rules change (`projects` update only
