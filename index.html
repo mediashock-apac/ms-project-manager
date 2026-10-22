@@ -287,6 +287,9 @@
      meant for the bar on top of it. */
   /* Timeline month/day rows: slid down by syncGanttHead so they stay under the sticky legend. */
   .gantt-head-cell { transform: translateY(var(--gantt-head-y, 0px)); }
+  /* Drag the chart sideways (see EASIER SIDEWAYS SCROLLING): a grab hand on empty chart space only. */
+  #gantt-grid [data-gantt-row], #gantt-grid .gantt-head-cell:not(.left-0) { cursor: grab; }
+  #gantt-grid.gantt-panning, #gantt-grid.gantt-panning * { cursor: grabbing !important; user-select: none; }
   .gantt-leave {
     pointer-events: none;
     background-image: repeating-linear-gradient(45deg, rgba(113, 113, 122, 0.18) 0 4px, transparent 4px 9px);
@@ -1500,9 +1503,19 @@
       <div class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card p-4">
         <!-- Sticky against <main> (it is outside the chart's scroll box); -top-5 cancels <main>'s pt-5 so it pins flush to the top. syncGanttHead slides the month/day rows down under it. -->
         <div id="gantt-head" class="sticky -top-5 z-[29] -mx-4 -mt-4 px-4 pt-4 pb-3 rounded-t-xl bg-white dark:bg-zinc-800 flex items-center justify-between">
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 shrink-0">
             <svg data-ic="gantt" class="w-4 h-4 text-zinc-400 dark:text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="10" height="4" rx="1.5"></rect><rect x="7" y="10" width="12" height="4" rx="1.5"></rect><rect x="11" y="16" width="10" height="4" rx="1.5"></rect></svg>
-            <h2 class="text-base font-bold text-zinc-900 dark:text-zinc-100">Workload Timeline</h2>
+            <h2 class="text-base font-bold text-zinc-900 dark:text-zinc-100 whitespace-nowrap">Workload Timeline</h2>
+            <!-- Week back / today / week on, same control as the Calendar's (sideways scrolling for trackpads). -->
+            <div id="gantt-nav" class="flex items-center gap-1 ml-2">
+              <button type="button" data-gantt-nav="-1" title="Back a week" aria-label="Back a week" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-400">
+                <svg data-ic="chevronLeft" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 18 9 12 15 6"></polyline></svg>
+              </button>
+              <button type="button" data-gantt-nav="0" class="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-700 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700">Today</button>
+              <button type="button" data-gantt-nav="1" title="Forward a week" aria-label="Forward a week" class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-500 dark:text-zinc-400">
+                <svg data-ic="chevronRight" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 18 15 12 9 6"></polyline></svg>
+              </button>
+            </div>
           </div>
           <div id="gantt-legend" class="flex items-center justify-end flex-wrap gap-x-3 gap-y-1 text-xs text-zinc-500 dark:text-zinc-400">
             <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-rose-400"></span>High</span>
@@ -6279,6 +6292,69 @@
     if (ganttHeadRaf) return;
     ganttHeadRaf = requestAnimationFrame(function () { ganttHeadRaf = 0; syncGanttHead(); });
   }, { passive: true });
+
+  /* EASIER SIDEWAYS SCROLLING (asked: "make horizontal scrolling easier... those only using the
+     trackpad on their laptops"). A two-finger sideways swipe already works, but the chart's own
+     horizontal scrollbar sits at the bottom of a tall chart (often off screen), nothing hints the
+     chart moves sideways, and some Windows trackpads only send up/down. So, on #gantt-wrap (which
+     outlives each render's pane):
+     - drag any empty part of the chart sideways, mouse or trackpad click-drag. Bars, tags and
+       buttons still open on click; the frozen Task column is left alone; a drag is never a click;
+     - #gantt-nav's ‹ Today ›: a week back, back to today, a week on (the Calendar's control);
+     - up/down scrolling over the month and date rows moves the chart sideways. */
+  var ganttSwallowClickUntil = 0;
+  (function () {
+    var wrap = document.getElementById('gantt-wrap');
+    var drag = null;
+    var smooth = function () { return window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'; };
+    wrap.addEventListener('pointerdown', function (e) {
+      if (e.pointerType === 'touch' || e.button !== 0) return;
+      var grid = document.getElementById('gantt-grid');
+      if (!grid || !grid.contains(e.target)) return;
+      if (e.target.closest('[data-open-task], button, a, input, select, textarea, label, #gantt-resize-handle')) return;
+      var corner = grid.querySelector('.gantt-head-cell.left-0');
+      if (corner && e.clientX < corner.getBoundingClientRect().right) return;   // the frozen Task column
+      e.preventDefault();   // no text selection while dragging
+      drag = { id: e.pointerId, x: e.clientX, left: grid.parentElement.scrollLeft, pane: grid.parentElement, grid: grid, moved: false };
+    });
+    window.addEventListener('pointermove', function (e) {
+      if (!drag || e.pointerId !== drag.id) return;
+      var dx = e.clientX - drag.x;
+      if (!drag.moved && Math.abs(dx) < 4) return;
+      if (!drag.moved) { drag.moved = true; drag.grid.classList.add('gantt-panning'); ganttCenterOnToday = false; }
+      drag.pane.scrollLeft = drag.left - dx;
+    });
+    var end = function () {
+      if (!drag) return;
+      if (drag.moved) { drag.grid.classList.remove('gantt-panning'); ganttSwallowClickUntil = Date.now() + 100; }
+      drag = null;
+    };
+    window.addEventListener('pointerup', end);
+    window.addEventListener('pointercancel', end);
+    // Letting go over a bar must not open it.
+    window.addEventListener('click', function (e) {
+      if (Date.now() < ganttSwallowClickUntil && wrap.contains(e.target)) { e.stopPropagation(); e.preventDefault(); }
+    }, true);
+    wrap.addEventListener('wheel', function (e) {
+      if (!e.target.closest('#gantt-grid .gantt-head-cell') || Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
+      var grid = document.getElementById('gantt-grid');
+      grid.parentElement.scrollLeft += e.deltaY * (e.deltaMode === 1 ? 16 : 1);
+      ganttCenterOnToday = false;
+      e.preventDefault();
+    }, { passive: false });
+    document.getElementById('gantt-nav').addEventListener('click', function (e) {
+      var b = e.target.closest('[data-gantt-nav]');
+      var grid = document.getElementById('gantt-grid');
+      if (!b || !grid) return;
+      var pane = grid.parentElement, dw = +grid.getAttribute('data-day-width') || GANTT_DAY_WIDTH, n = +b.getAttribute('data-gantt-nav');
+      var corner = grid.querySelector('.gantt-head-cell.left-0');
+      var left = n === 0
+        ? (+grid.getAttribute('data-today-index') || 0) * dw - (pane.clientWidth - (corner ? corner.offsetWidth : GANTT_LABEL_WIDTH)) * 0.3
+        : pane.scrollLeft + n * 7 * dw;
+      ganttCenterOnToday = false;
+      pane.scrollTo({ left: Math.max(0, left), behavior: smooth() });
+    });
+  })();
 
   function ganttTbdTagHtml(t, style) {
     return '<span data-open-task="' + t.id + '" class="absolute cursor-pointer whitespace-nowrap text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 hover:text-brand-700 dark:hover:text-brand-300" style="' + style + '">Deadline TBD</span>';
@@ -13057,7 +13133,7 @@
     // isolated fixture: scrolled 1400px right, the label sat 869px LEFT of the pane's edge; with
     // max-content it sits exactly ON it. min-width:100% stays for the opposite case, a short
     // date range whose columns do not fill the pane.
-    html += '<div class="relative" id="gantt-grid" data-day-width="' + dayWidth + '" data-total-days="' + totalDays + '" style="display:grid;grid-template-columns:' + GANTT_LABEL_WIDTH + 'px repeat(' + totalDays + ',' + dayWidth + 'px);grid-template-rows:32px 32px ' + rowTracks.join(' ') + ';min-width:100%;width:max-content;">';
+    html += '<div class="relative" id="gantt-grid" data-day-width="' + dayWidth + '" data-total-days="' + totalDays + '" data-today-index="' + todayIndex + '" style="display:grid;grid-template-columns:' + GANTT_LABEL_WIDTH + 'px repeat(' + totalDays + ',' + dayWidth + 'px);grid-template-rows:32px 32px ' + rowTracks.join(' ') + ';min-width:100%;width:max-content;">';
 
     // corner cells
     //
@@ -18233,6 +18309,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-22g', date: '2026-10-22', items: [
+      { type: 'improved', title: 'Easier to move the Timeline sideways', text: "Drag any empty part of the Timeline left or right to move along the dates, or use the arrows and Today next to its title to jump a week at a time. Scrolling up or down over the dates also moves it sideways, handy on a laptop trackpad." }
+    ] },
     { id: '2026-10-22f', date: '2026-10-22', items: [
       { type: 'improved', title: 'Same-day deadline tag only for 3 or more', text: "The amber tag on the Timeline now shows only when someone has three or more things due on the same day, the same rule the WIP meeting uses for a clash. Two on one day is normal, so it no longer flags." }
     ] },
@@ -22229,7 +22308,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-22T03:45:13Z";
+  var CURRENT_BUILD_VERSION = "2026-10-22T03:54:53Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

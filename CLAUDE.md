@@ -3523,6 +3523,12 @@ client-side domain check in `isAllowedEmail` is UX only, not enforcement):
         the legend row `#gantt-head` is `sticky` against `<main>`, and `syncGanttHead` slides the
         month/day cells (`.gantt-head-cell`, via `--gantt-head-y`) down under it on scroll, since
         the chart's sideways scroll box traps their own `sticky top`. `tests/timeline-marks.test.js`.
+        **Sideways scrolling** (asked: "make horizontal scrolling easier... those only using the
+        trackpad"; picked the recommendation): drag empty chart space (grab cursor; bars, tags,
+        buttons and the Task column excluded; a drag never counts as a click,
+        `ganttSwallowClickUntil`), `#gantt-nav` ‹ Today › beside the title (a week, today), and
+        up/down wheel over the month/date rows scrolls sideways. All in EASIER SIDEWAYS SCROLLING,
+        attached once to `#gantt-wrap`. Not built: a custom floating scrollbar.
       - TeamGantt's closest equivalent (a Workloads heat-map showing hours/day per person) lives
         in a separate report, not on the chart itself, and its own users have publicly asked for
         an on-chart version that doesn't exist yet -- this is that, tuned to what this team

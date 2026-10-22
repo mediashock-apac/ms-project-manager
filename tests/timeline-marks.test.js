@@ -103,6 +103,37 @@ async function newPage(browser, when, opts) {
   const p0 = await pos();
   check('scrolled back up, everything is back in place', p0.dayTop === p0.headBottom + 32 || p0.dayTop - p0.headBottom < 40, JSON.stringify(p0));
 
+  // ---------- easier sideways scrolling ----------
+  const sl = () => page.evaluate(() => document.getElementById('gantt-grid').parentElement.scrollLeft);
+  const modalOpen = () => page.evaluate(() => !document.getElementById('task-modal').classList.contains('hidden'));
+  const spot = await page.evaluate(() => {
+    const corner = document.querySelector('#gantt-grid .gantt-head-cell.left-0').getBoundingClientRect();
+    const row = document.querySelector('#gantt-grid .gantt-bar[data-open-task="f0"]').parentElement.getBoundingClientRect();   // empty until Oct 20
+    return { x: Math.round(corner.right + 40), y: Math.round(row.top + row.height / 2) };
+  });
+  const s0 = await sl();
+  await page.mouse.move(spot.x + 250, spot.y); await page.mouse.down(); await page.mouse.move(spot.x + 150, spot.y, { steps: 5 }); await page.mouse.move(spot.x + 50, spot.y, { steps: 5 }); await page.mouse.up();
+  await page.waitForTimeout(200);
+  const s1 = await sl();
+  check('dragging empty chart space slides it sideways', Math.abs((s1 - s0) - 200) <= 6, s0 + ' -> ' + s1);
+  check('...and letting go opens nothing', !(await modalOpen()));
+  await page.click('#gantt-grid .gantt-bar[data-open-task="late"]').catch(() => {}); await page.waitForTimeout(400);
+  check('clicking a bar still opens its task', await modalOpen());
+  await page.keyboard.press('Escape'); await page.waitForTimeout(300);
+  const dw = await page.evaluate(() => +document.getElementById('gantt-grid').getAttribute('data-day-width'));
+  const b0 = await sl();
+  await page.click('[data-gantt-nav="1"]'); await page.waitForTimeout(900);
+  const b1 = await sl();
+  check('the forward arrow moves a week', Math.abs((b1 - b0) - 7 * dw) <= 2, b0 + ' -> ' + b1 + ' (day ' + dw + ')');
+  await page.click('[data-gantt-nav="0"]'); await page.waitForTimeout(900);
+  const today = await page.evaluate(() => { const g = document.getElementById('gantt-grid'), p = g.parentElement, line = g.querySelector('[data-today-index]:not(#gantt-grid)'); const c = g.querySelector('.gantt-head-cell.left-0').getBoundingClientRect(); const t = [...g.querySelectorAll('.gantt-head-cell')].find(e => /font-bold/.test(e.className) && /rose/.test(e.className)); const r = t.getBoundingClientRect(); return { inView: r.left >= c.right && r.right <= p.getBoundingClientRect().right }; });
+  check('Today brings today back into view', today.inView);
+  const w0 = await sl();
+  const dayCell = await page.evaluate(() => { const r = [...document.querySelectorAll('#gantt-grid .gantt-head-cell')].filter(e => /grid-row: ?2;/.test(e.getAttribute('style')))[30].getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; });
+  await page.mouse.move(dayCell.x, dayCell.y); await page.mouse.wheel(0, 240); await page.waitForTimeout(300);
+  const w1 = await sl();
+  check('scrolling up/down over the dates moves the chart sideways', w1 - w0 >= 200, w0 + ' -> ' + w1);
+
   await page.click('[data-view-btn="wip"]'); await page.waitForTimeout(700);
   await page.click('[data-wip-mode="agenda"]'); await page.waitForTimeout(700);
   const w = await page.evaluate(() => { const e = document.querySelector('#wip-timeline .gantt-late-tag[data-open-task="late"]'); return { tag: e ? e.textContent : '', dot: !!document.querySelector('#wip-timeline .gantt-bar .rounded-full') }; });
