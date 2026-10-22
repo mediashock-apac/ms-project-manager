@@ -85,6 +85,19 @@ async function newPage(browser, when, opts) {
     check('open tasks are listed before done ones', R.options.join('|') === 'Promo cut|Post assets|Old recap', R.options.join('|'));
     const steps = await page.evaluate(() => (window.__fb.data.tasks.t3.checklist || []).map(s => s.text + '@' + s.due));
     check('saving the brief adds the date to that task', steps.indexOf('Client review@2026-10-26') !== -1, JSON.stringify(steps));
+    // Dark mode: date boxes get the dark calendar button (asked: "Contrast here is poor")
+    const scheme = await page.evaluate(async () => {
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+      const b = document.createElement('button'); b.setAttribute('data-open-brief', 'SMB webinars'); document.body.appendChild(b); b.click(); b.remove(); await wait(250);
+      const ed = document.querySelector('#brief-modal-card [data-brief-act="edit"]'); if (ed) { ed.click(); await wait(250); }
+      const inp = document.querySelector('#brief-modal-card input[type="date"]');
+      const light = inp ? getComputedStyle(inp).colorScheme : null;
+      document.documentElement.classList.add('dark'); await wait(100);
+      const dark = inp ? getComputedStyle(inp).colorScheme : null;
+      return { light, dark };
+    });
+    check('date boxes use the dark calendar button in dark mode', scheme.dark === 'dark' && scheme.light !== 'dark', JSON.stringify(scheme));
+    { const sec = await page.$('#brief-modal-card [data-brief-sec]:has(input[type="date"])'); if (sec) await sec.screenshot({ path: path.join(OUT, 'brief-dates-dark.png') }); }
     check('no page errors', errors.length === 0, errors.join(' | '));
     await ctx.close();
   }

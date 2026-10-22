@@ -746,6 +746,15 @@
     display: none !important;
   }
 
+  /* Date and time boxes in dark mode: the browser draws their calendar button (and the picker that
+     opens) in its light theme unless told otherwise, so the icon was near-black on a dark box
+     (reported 2026-10-22: "Contrast here is poor", the brief's key dates). One rule for every date
+     box, including ones added later, instead of a dark:[color-scheme:dark] class on each. */
+  html.dark input[type="date"], html.dark input[type="time"], html.dark input[type="month"],
+  html.dark input[type="week"], html.dark input[type="datetime-local"] {
+    color-scheme: dark;
+  }
+
   /* Plain Tailwind (no @tailwindcss/forms plugin) leaves checkboxes fully native, so their
      checked state renders in the browser's default blue instead of the app's brand orange.
      Scoped to this class (not a global reset) so no other input types are affected. */
@@ -1647,6 +1656,9 @@
                    (message bodies, not author names or pinned links), matching what a person
                    means by "search within the chat itself" for a group thread they're scrolling
                    back through. -->
+              <button type="button" id="chat-copy-link" title="Copy a link to this chat" aria-label="Copy a link to this chat" class="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-zinc-400 dark:text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700 hover:text-zinc-600 dark:hover:text-zinc-300">
+                <svg data-ic="link" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+              </button>
               <button type="button" id="chat-search-toggle" title="Search in this chat" class="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg text-zinc-400 dark:text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700 hover:text-zinc-600 dark:hover:text-zinc-300">
                 <svg data-ic="search" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
               </button>
@@ -2250,9 +2262,14 @@
         <h3 id="archived-task-title" class="text-base font-bold text-zinc-900 dark:text-zinc-100 break-words"></h3>
         <p id="archived-task-sub" class="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400 break-words"></p>
       </div>
+      <div class="flex items-center gap-1 shrink-0">
+      <button type="button" id="archived-task-copy-link" title="Copy a link to this task" aria-label="Copy a link to this task" class="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500">
+        <svg data-ic="link" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+      </button>
       <button type="button" id="archived-task-close" aria-label="Close" class="shrink-0 w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500">
         <svg data-ic="x" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
       </button>
+      </div>
     </div>
     <div id="archived-task-body" class="overflow-y-auto px-5 py-4 flex flex-col gap-5"></div>
     <div class="flex items-center gap-3 px-5 py-3 border-t border-zinc-100 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/40">
@@ -6087,6 +6104,7 @@
     return st === 'wip' ? 'Your suggestion is being worked on'
       : st === 'fixed' ? 'Your suggestion has been fixed'
       : st === 'unabletofix' ? "Your suggestion couldn't be fixed"
+      : st === 'review' ? 'Your suggestion is under review'
       : 'Your suggestion is open again';
   }
   function isSuggestionNotif(n) { return n.type === 'suggestion_status' || n.type === 'suggestion_fixed'; }
@@ -6556,11 +6574,13 @@
   // migration. SUGGESTION_STATUS_ORDER is the dropdown's option order.
   var SUGGESTION_STATUS_META = {
     open: { label: 'Open', badge: 'bg-zinc-100 text-zinc-600 ring-1 ring-inset ring-zinc-200 dark:bg-zinc-700 dark:text-zinc-300 dark:ring-zinc-600' },
+    // Under Review (2026-10-22, asked): looked at, not decided yet. Purple, the app's "review" colour.
+    review: { label: 'Under Review', badge: READY_FOR_REVIEW_META.badge },
     wip: { label: 'WIP', badge: 'bg-amber-100 text-amber-800 ring-1 ring-inset ring-amber-300 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/25' },
     fixed: { label: 'Fixed', badge: DONE_META.badge },
     unabletofix: { label: 'Unable to Fix', badge: PRIORITY_META.High.badge }
   };
-  var SUGGESTION_STATUS_ORDER = ['open', 'wip', 'fixed', 'unabletofix'];
+  var SUGGESTION_STATUS_ORDER = ['open', 'review', 'wip', 'fixed', 'unabletofix'];
 
   // A task is "ready for review": everything on its checklist is checked off and it's sitting
   // in the Review column -- fully done from the assignee's side, just waiting on someone else's
@@ -8082,14 +8102,65 @@
     if (location.hash.indexOf('#task=') === 0) history.replaceState(null, '', location.pathname + location.search);
   }
 
-  function copyTaskLink(taskId) {
-    var url = location.origin + location.pathname + '#task=' + taskId;
-    navigator.clipboard.writeText(url).then(function () {
-      showToast('Link copied', 'success');
-    }).catch(function () {
-      showToast('Could not copy link', 'error');
-    });
+  /* SHAREABLE LINKS (2026-10-22, asked: "make the important windows to be able to copy link so it
+     can be shared via other messaging channels that will lead to the PM tool"). One shape for every
+     link: #task=<id>, #brief=<project>, #project=<project>, #chat=<project> (names URI-encoded).
+     Copy link sits on the task window (as before), the brief, the project card's ⋯ row, the chat
+     header and the archived-task window. openAppLink opens any of them: on load (once the data is
+     in) and when a link is pasted into a tab that's already open. */
+  function appLink(kind, value) {
+    return location.origin + location.pathname + '#' + kind + '=' + encodeURIComponent(value);
   }
+  function copyAppLink(kind, value, what) {
+    try {
+      navigator.clipboard.writeText(appLink(kind, value)).then(function () {
+        showToast('Link to ' + (what || 'this') + ' copied', 'success');
+      }).catch(function () { showToast('Could not copy the link', 'error'); });
+    } catch (e) { showToast('Could not copy the link', 'error'); }
+  }
+  function parseAppLink(hash) {
+    var m = /^#(task|brief|project|chat)=(.+)$/.exec(hash || '');
+    if (!m) return null;
+    var v = m[2];
+    try { v = decodeURIComponent(v); } catch (e) {}
+    return { kind: m[1], value: v };
+  }
+  function openAppLink(link) {
+    if (!link) return;
+    var phone = typeof mActive === 'function' && mActive();
+    var name = link.value;
+    if (link.kind === 'task') { openTaskOrArchived(name); return; }
+    var pdoc = projectDeadlineDoc(name);
+    var known = allProjectNames().some(function (n) { return projectKey(n) === projectKey(name); }) || !!pdoc;
+    if (!known) { showToast('That project is no longer on the board', 'info'); return; }
+    if (link.kind === 'brief') {
+      if (!projectBrief(name)) { showToast('That brief has since been deleted', 'info'); return; }
+      if (phone) mOpenProject(name); else openBrief(name);
+      return;
+    }
+    if (link.kind === 'chat') {
+      if (!pdoc || !Array.isArray(pdoc.chat)) { showToast('That chat has since been deleted', 'info'); return; }
+      if (phone) mOpenChat(pdoc.name); else { setView('chat'); selectChatProject(pdoc.name); }
+      return;
+    }
+    if (phone) mOpenProject(name); else cmdkOpenProject(name);
+  }
+  // Opened once on load, as soon as both tasks and projects have arrived (briefs and chats live
+  // on project docs; a task may be archived, which openTaskOrArchived handles).
+  var pendingAppLink = parseAppLink(location.hash);
+  var projectsSnapshotSeen = false;
+  function maybeOpenPendingAppLink() {
+    if (!pendingAppLink || !tasksSnapshotSeen || !projectsSnapshotSeen) return;
+    var link = pendingAppLink;
+    pendingAppLink = null;
+    deepLinkOpened = true;
+    if (link.kind !== 'task') history.replaceState(null, '', location.pathname + location.search);
+    openAppLink(link);
+  }
+  function copyTaskLink(taskId) { copyAppLink('task', taskId, 'this task'); }
+  document.getElementById('chat-copy-link').addEventListener('click', function () {
+    if (currentChatProjectName) copyAppLink('chat', currentChatProjectName, 'this chat');
+  });
   document.getElementById('task-copy-link-btn').addEventListener('click', function () {
     if (editingTaskId) copyTaskLink(editingTaskId);
   });
@@ -10107,6 +10178,8 @@
       renderProjects();
       return;
     }
+    var copyLinkBtn = e.target.closest('.project-copy-link');
+    if (copyLinkBtn) { copyAppLink('project', copyLinkBtn.getAttribute('data-project'), 'this project'); return; }
     var archiveAllBtn = e.target.closest('.project-archive-all-btn');
     if (archiveAllBtn) { confirmArchiveWholeProject(archiveAllBtn.getAttribute('data-project')); return; }
     var restoreBtn = e.target.closest('.project-restore-btn');
@@ -10227,7 +10300,7 @@
   // Section types. `kind` decides how a section is edited and shown: text, list (comma tags),
   // rows (repeating rows of fields), fields (a small fixed set of labelled boxes).
   var BRIEF_TYPES = {
-    deliv:       { title: 'What to make', icon: 'checklist', kind: 'rows', cols: ['Deliverable', 'Sizes and specs'], addLabel: 'Add another' },
+    deliv:       { title: 'What to deliver', icon: 'checklist', kind: 'rows', cols: ['Deliverable', 'Sizes and specs'], addLabel: 'Add another' },
     msg:         { title: 'Key message or copy', icon: 'message', kind: 'text', ph: 'The one thing people should take away' },
     dates:       { title: 'Key dates', icon: 'calendar', kind: 'dates' },
     links:       { title: 'Links', icon: 'link', kind: 'rows', cols: ['Label', 'Link'], addLabel: 'Add a link' },
@@ -10402,7 +10475,7 @@
     var secs = b.sections || [];
     if (!b.job) gaps.push('No one-sentence job yet.');
     var deliv = secs.find(function (s) { return s.type === 'deliv'; });
-    if (!deliv || !(deliv.rows || []).some(function (r) { return r.a; })) gaps.push('Nothing listed under What to make.');
+    if (!deliv || !(deliv.rows || []).some(function (r) { return r.a; })) gaps.push('Nothing listed under What to deliver.');
     var dates = secs.find(function (s) { return s.type === 'dates'; });
     var dateRows = dates ? (dates.rows || []).filter(function (r) { return !r.track && r.a; }) : [];
     if (!dateRows.length) gaps.push('No key dates yet.');
@@ -10546,7 +10619,9 @@
         '<span class="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-brand-700 dark:text-brand-300">' + BRIEF_DOC_ICON + 'Brief</span>' +
         '<span class="min-w-0 truncate text-xs text-zinc-500 dark:text-zinc-400">' + projectNameHtml(briefOpen.name) + '</span>' +
         '<span class="ml-auto flex items-center gap-1.5 shrink-0">' +
-          '<button type="button" data-brief-act="copy" class="text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700">Copy for partners</button>' +
+          // Copy link (2026-10-22, asked: "Copy for partners to change to copy link"). It used to copy
+          // the brief as plain text without the budget; that text copy is gone.
+          '<button type="button" data-brief-act="copy-link" class="inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1.5 rounded-lg border border-zinc-200 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700">' + svgIcon('link', 'w-3.5 h-3.5') + 'Copy link</button>' +
           '<button type="button" data-brief-act="edit" class="text-xs font-semibold px-2.5 py-1.5 rounded-lg bg-brand-600 text-white hover:bg-brand-700">Edit</button>' +
           '<button type="button" data-brief-act="close" aria-label="Close" class="w-8 h-8 inline-flex items-center justify-center rounded-lg text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700">' + svgIcon('x', 'w-4 h-4') + '</button>' +
         '</span></div>' +
@@ -10720,7 +10795,7 @@
     if (act === 'close') { if (briefOpen.mode === 'edit') requestBriefCancel(); else closeBrief(); return; }
     if (act === 'edit') { briefEditExisting(); return; }
     if (act === 'cancel-edit') { requestBriefCancel(); return; }
-    if (act === 'copy') { briefCopyForPartners(); return; }
+    if (act === 'copy-link') { copyAppLink('brief', briefOpen.name, 'this brief'); return; }
     if (act === 'add-update') { var form = document.getElementById('brief-update-form'); form.classList.remove('hidden'); form.classList.add('flex'); document.getElementById('brief-update-text').focus(); return; }
     if (act === 'cancel-update') { var form2 = document.getElementById('brief-update-form'); form2.classList.add('hidden'); form2.classList.remove('flex'); return; }
     if (act === 'save-update') { briefSaveUpdate(); return; }
@@ -10866,28 +10941,6 @@
   }
 
   // Plain text for outside partners. Never includes the budget.
-  function briefCopyForPartners() {
-    var b = projectBrief(briefOpen.name); if (!b) return;
-    var out = [briefOpen.name, '', 'THE JOB', b.job, ''];
-    (b.sections || []).forEach(function (s) {
-      var t = BRIEF_TYPES[s.type]; if (!t || s.type === 'budget') return;
-      var lines = [];
-      if (t.kind === 'text' || t.kind === 'list') { if (s.text) lines.push(s.text); }
-      else if (t.kind === 'fields') t.cols.forEach(function (c, i) { if ((s.f || {})[i]) lines.push(c + ': ' + s.f[i]); });
-      else (s.rows || []).forEach(function (r) {
-        if (r.track) lines.push('', r.a.toUpperCase());
-        else if (s.type === 'dates') lines.push('- ' + (r.b ? formatShortDate(r.b) : 'No date') + ': ' + r.a + (r.c ? ' (' + r.c + ')' : ''));
-        else lines.push('- ' + [r.a, r.b, s.type === 'speakers' ? '' : r.c].filter(Boolean).join(' · '));
-      });
-      if (!lines.length) return;
-      out.push((s.type === 'custom' ? (s.title || 'Notes') : t.title).toUpperCase());
-      out = out.concat(lines); out.push('');
-    });
-    var text = out.join('\n').trim();
-    try {
-      navigator.clipboard.writeText(text).then(function () { showToast('Brief copied, without the budget', 'success'); }, function () { showToast('Could not copy. Your browser blocked it.', 'error'); });
-    } catch (err) { showToast('Could not copy. Your browser blocked it.', 'error'); }
-  }
 
   // Opening: any [data-open-brief] anywhere in the app. Escape closes, or steps back out of an edit.
   document.addEventListener('click', function (e) {
@@ -11891,6 +11944,8 @@
       '</div>';
     }
     return wrap + '<div class="flex items-center flex-wrap gap-y-1">' +
+      '<button type="button" class="project-copy-link ' + WIP_ACT_BTN + '" data-project="' + escapeHtml(p.name) + '" title="Copy a link that opens this project in Project Manager">Copy link</button>' +
+      '<span class="w-px h-4 mx-3 bg-zinc-200 dark:bg-zinc-600"></span>' +
       (isCompleted
         ? '<button type="button" class="project-restore-btn ' + WIP_ACT_BTN + '" data-project="' + escapeHtml(p.name) + '" title="Put every task back on the board">Restore project</button>'
         : '<button type="button" class="project-archive-all-btn ' + WIP_ACT_BTN + '" data-project="' + escapeHtml(p.name) + '" title="Archive every task, done or not, and move the project to Completed">Archive project</button>') +
@@ -12531,6 +12586,9 @@
     });
   }
   document.getElementById('archived-task-close').addEventListener('click', closeArchivedTask);
+  document.getElementById('archived-task-copy-link').addEventListener('click', function () {
+    if (archivedTaskOpenId) copyAppLink('task', archivedTaskOpenId, 'this task');
+  });
   archivedTaskModal.addEventListener('click', function (e) { if (e.target === archivedTaskModal) closeArchivedTask(); });
   document.getElementById('archived-task-restore').addEventListener('click', function () {
     var id = archivedTaskOpenId;
@@ -14214,13 +14272,13 @@
   function weeklyHelpOpen(r) { return !!(r && r.status === 'help' && !r.resolved); }
   var WEEKLY_RESOLVED_META = { label: 'Resolved', text: 'text-emerald-700 dark:text-emerald-400', row: '' };
   function weeklyCanResolve(name) { return name === weeklyMe() || isAdminUser(); }
-  function setWeeklyHelpResolved(name, key, project, resolved) {
+  function setWeeklyHelpResolved(name, key, project, resolved, task) {
     var target = weeklyTargetDoc(name);
     if (!target) { showToast('Only ' + String(name).split(' ')[0] + ' or an admin can resolve this.', 'info'); return; }
     var list = weeklyListOf(target).map(function (e) {
       if (!e || e.week !== key) return e;
       return Object.assign({}, e, { rows: (e.rows || []).map(function (r) {
-        if (!r || r.project !== project || r.status !== 'help') return r;
+        if (!r || r.project !== project || r.status !== 'help' || (r.task || '') !== (task || '')) return r;
         var nr = Object.assign({}, r);
         if (resolved) { nr.resolved = true; nr.resolvedAt = new Date().toISOString(); nr.resolvedBy = weeklyMe(); }
         else { delete nr.resolved; delete nr.resolvedAt; delete nr.resolvedBy; }
@@ -14228,7 +14286,7 @@
       }) });
     });
     setDoc(doc(peopleCol, target.id), { weekly: list }, { merge: true }).then(function () {
-      if (resolved) showToast('Marked resolved', 'success', { action: { label: 'Undo', onClick: function () { setWeeklyHelpResolved(name, key, project, false); } } });
+      if (resolved) showToast('Marked resolved', 'success', { action: { label: 'Undo', onClick: function () { setWeeklyHelpResolved(name, key, project, false, task); } } });
     }).catch(function (err) { showToast('Could not save: ' + err.message, 'error'); });
   }
 
@@ -14237,7 +14295,7 @@
   function weeklyRowIsNew(name, key, row) {
     var prev = weeklyEntryFor(name, weeklyShiftKey(key, -1));
     if (!prev || prev.leave) return false;
-    var old = (prev.rows || []).find(function (r) { return r.project === row.project; });
+    var old = (prev.rows || []).find(function (r) { return r.project === row.project && (r.task || '') === (row.task || ''); });
     return !old || old.status !== row.status || String(old.note || '') !== String(row.note || '');
   }
 
@@ -14263,7 +14321,7 @@
       if (owner === notName) return;
       var e = weeklyEntryFor(owner, key);
       if (!e || e.leave) return;
-      var r = (e.rows || []).find(function (x) { return x && projectKey(x.project) === k && WEEKLY_STATUS[x.status]; });
+      var r = (e.rows || []).find(function (x) { return x && !x.task && projectKey(x.project) === k && WEEKLY_STATUS[x.status]; });
       var at = e.editedAt || e.at || '';
       if (r && (!best || at > bestAt)) { best = { project: r.project, status: r.status, note: r.note || '', resolved: !!r.resolved, from: owner }; bestAt = at; }
     });
@@ -14273,7 +14331,7 @@
   function weeklyRowsWithFollowed(name, key, entry) {
     var rows = (entry.rows || []).slice();
     var have = {};
-    rows.forEach(function (r) { if (r) have[projectKey(r.project)] = true; });
+    rows.forEach(function (r) { if (r && !r.task) have[projectKey(r.project)] = true; });
     (entry.follows || []).forEach(function (p) {
       if (have[projectKey(p)]) return;
       var r = weeklyOwnerRow(p, key, name);
@@ -14450,6 +14508,50 @@
     '</div>';
   }
 
+  /* Task lines (2026-10-22, Zenon's suggestion, option A): a row can name one task in its project
+     (`task` = task id, `taskName`), for umbrella projects like Mediashock LinkedIn Marketing where
+     one status for the whole project says little. The project's own line is optional: task lines
+     alone count as an answer. On the card they sit indented under their project; the project's
+     place in the order follows the most urgent of its lines. */
+  function weeklyTaskRowHtml(name, key, row) {
+    var resolved = row.status === 'help' && row.resolved;
+    var meta = resolved ? WEEKLY_RESOLVED_META : WEEKLY_STATUS[row.status];
+    var isNew = weeklyRowIsNew(name, key, row);
+    return '<div data-weekly-task-row="' + escapeHtml(row.task) + '" class="grid grid-cols-1 sm:grid-cols-[8.5rem_minmax(0,1fr)] gap-x-3 gap-y-0.5 items-baseline px-4 py-2 ' + (meta.row || '') + '">' +
+      '<span class="flex items-center gap-1.5 text-xs font-bold ' + meta.text + '">' + weeklyIcon(resolved ? 'done' : row.status) + meta.label + '</span>' +
+      '<span class="text-sm leading-snug min-w-0 break-words pl-3 border-l-2 border-zinc-200 dark:border-zinc-600">' +
+        '<button type="button" data-open-task="' + escapeHtml(row.task) + '" data-tooltip="Open the task" class="tooltip-top inline text-left font-medium text-zinc-800 dark:text-zinc-100 hover:underline decoration-zinc-400 underline-offset-2">' + escapeHtml(row.taskName || 'Task') + '</button>' +
+        (row.note ? ' <span class="text-zinc-600 dark:text-zinc-300 whitespace-pre-line">– ' + escapeHtml(row.note) + '</span>' : '') +
+        (isNew ? ' <span class="align-middle text-[10px] font-bold px-1.5 py-px rounded-full bg-indigo-50 text-indigo-700 dark:bg-indigo-500/15 dark:text-indigo-300">NEW</span>' : '') +
+      '</span></div>';
+  }
+  function weeklyGroupedRowsHtml(name, key, rows, boardOf) {
+    var rank = function (r) { return WEEKLY_READ_ORDER.indexOf(weeklyHelpOpen(r) || r.status !== 'help' ? r.status : 'ontrack'); };
+    var groups = [], byKey = {};
+    (rows || []).forEach(function (r) {
+      if (!r || !WEEKLY_STATUS[r.status]) return;
+      var k = projectKey(r.project);
+      var g = byKey[k];
+      if (!g) { g = byKey[k] = { project: r.project, head: null, lines: [], rank: 99 }; groups.push(g); }
+      if (r.task) g.lines.push(r); else if (!g.head) g.head = r;
+      g.rank = Math.min(g.rank, rank(r));
+    });
+    groups.sort(function (a, b) { return a.rank - b.rank; });
+    return groups.map(function (g) {
+      var board = boardOf[projectKey(g.project)];
+      var head = g.head ? weeklyRowHtml(name, key, g.head, board)
+        // Task lines only: the project name on its own line, no status of its own.
+        : '<div class="grid grid-cols-1 sm:grid-cols-[8.5rem_minmax(0,1fr)] gap-x-3 gap-y-0.5 items-baseline px-4 pt-2.5 pb-0.5"><span class="hidden sm:block"></span>' +
+            '<span class="text-sm leading-snug min-w-0 break-words">' +
+            (g.project && g.project !== 'No project'
+              ? '<button type="button" ' + ((typeof mActive === 'function' && mActive()) ? 'data-m-project' : 'data-weekly-project') + '="' + escapeHtml(g.project) + '" data-tooltip="Open the project" class="tooltip-top inline text-left font-semibold text-zinc-900 dark:text-white hover:underline decoration-zinc-400 underline-offset-2">' + projectNameHtml(g.project) + '</button>'
+              : '<span class="font-semibold text-zinc-900 dark:text-white">' + projectNameHtml(g.project) + '</span>') +
+            (key === weeklyCurrentKey() ? weeklyRowContextHtml({ status: null, note: '-' }, board) : '') + '</span></div>';
+      var lines = g.lines.slice().sort(function (a, b) { return rank(a) - rank(b); });
+      return '<div data-weekly-group="' + escapeHtml(g.project) + '">' + head + lines.map(function (l) { return weeklyTaskRowHtml(name, key, l); }).join('') + '</div>';
+    }).join('');
+  }
+
   function weeklyCardHtml(name, key) {
     var entry = weeklyEntryFor(name, key);
     var me = weeklyMe();
@@ -14468,7 +14570,7 @@
       } else {
         var rows = weeklyRowsSorted(weeklyRowsWithFollowed(name, key, entry));
         body = '<div class="divide-y divide-zinc-100 dark:divide-zinc-700/60">' +
-          rows.map(function (r) { return weeklyRowHtml(name, key, r, boardOf[projectKey(r.project)]); }).join('') +
+          weeklyGroupedRowsHtml(name, key, rows, boardOf) +
           (entry.extra ? '<div class="grid grid-cols-1 sm:grid-cols-[8.5rem_minmax(0,1fr)] gap-x-3 gap-y-0.5 items-baseline px-4 py-2.5"><span class="flex items-center gap-1.5 text-xs font-bold text-zinc-500 dark:text-zinc-400">' + weeklyIcon('extra') + 'Also</span><span class="text-sm text-zinc-600 dark:text-zinc-300 break-words whitespace-pre-line">' + escapeHtml(entry.extra) + '</span></div>' : '') +
           (!rows.length && !entry.extra ? '<p class="px-4 py-3 text-sm text-zinc-400">Nothing to report.</p>' : '') +
         '</div>';
@@ -14532,7 +14634,7 @@
     people.forEach(function (n) {
       var e = weeklyEntryFor(n, key);
       if (!e || e.leave) return;
-      (e.rows || []).forEach(function (r) { if (weeklyHelpOpen(r)) out.push({ name: n, project: r.project, note: r.note }); });
+      (e.rows || []).forEach(function (r) { if (weeklyHelpOpen(r)) out.push({ name: n, project: r.project, note: r.note, task: r.task || '', taskName: r.taskName || '' }); });
     });
     return out;
   }
@@ -14595,9 +14697,10 @@
               '<span class="flex items-center gap-2 min-w-0 text-sm font-semibold text-zinc-800 dark:text-zinc-100">' + avatarHtml(h.name, 'w-6 h-6 shrink-0 self-center', 'text-[10px]') + '<span class="truncate">' + escapeHtml(h.name.split(' ')[0]) + '</span></span>' +
               '<span class="min-w-0 text-sm leading-snug">' +
                 '<button type="button" data-weekly-project="' + escapeHtml(h.project) + '" class="inline text-left font-semibold text-zinc-900 dark:text-white break-words hover:underline decoration-zinc-400 underline-offset-2">' + projectNameHtml(h.project) + '</button>' +
+                (h.task ? '<span class="text-zinc-400 dark:text-zinc-500"> · </span><button type="button" data-open-task="' + escapeHtml(h.task) + '" class="inline text-left font-medium text-zinc-800 dark:text-zinc-100 break-words hover:underline decoration-zinc-400 underline-offset-2">' + escapeHtml(h.taskName || 'Task') + '</button>' : '') +
                 '<span class="block mt-0.5 text-zinc-700 dark:text-zinc-200 break-words whitespace-pre-line">' + (h.note ? escapeHtml(h.note) : 'Needs help') + '</span>' +
                 (weeklyCanResolve(h.name) && !(typeof mActive === 'function' && mActive())
-                  ? '<button type="button" data-weekly-resolve="' + escapeHtml(h.project) + '" data-weekly-resolve-who="' + escapeHtml(h.name) + '" class="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg border border-emerald-300 dark:border-emerald-500/40 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-500/10">' + weeklyIcon('done', 'w-3 h-3') + 'Resolve</button>'
+                  ? '<button type="button" data-weekly-resolve="' + escapeHtml(h.project) + '" data-weekly-resolve-task="' + escapeHtml(h.task) + '" data-weekly-resolve-who="' + escapeHtml(h.name) + '" class="mt-1.5 inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg border border-emerald-300 dark:border-emerald-500/40 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-500/10">' + weeklyIcon('done', 'w-3 h-3') + 'Resolve</button>'
                   : '') +
               '</span>' +
             '</div>';
@@ -14643,18 +14746,29 @@
     var byProject = {};
     function add(project, info) {
       if (byProject[project]) return byProject[project];
-      var r = { project: project, status: null, note: '', late: info ? info.late : null, upcoming: info ? info.upcoming : [], latest: info ? info.latest : weeklyLatestStatus(project), last: null };
+      var r = { project: project, status: null, note: '', late: info ? info.late : null, upcoming: info ? info.upcoming : [], latest: info ? info.latest : weeklyLatestStatus(project), last: null, tasks: [] };
       byProject[project] = r; rows.push(r);
       return r;
     }
     board.forEach(function (g) { add(g.project, g); });
     // Anything you reported last week that's still open, even if it has left the board.
     if (prev && !prev.leave) (prev.rows || []).forEach(function (r) { if (r && r.status !== 'done' && weeklyProjectStillOpen(r.project)) add(r.project, null); });
-    if (prev && !prev.leave) (prev.rows || []).forEach(function (r) { if (r && byProject[r.project]) byProject[r.project].last = r; });
+    if (prev && !prev.leave) (prev.rows || []).forEach(function (r) { if (r && !r.task && byProject[r.project]) byProject[r.project].last = r; });
     if (existing && !existing.leave) (existing.rows || []).forEach(function (r) {
       if (!r) return;
       var row = add(r.project, null);
+      if (r.task) { row.tasks.push({ task: r.task, taskName: r.taskName || '', status: r.status, note: r.note || '', resolved: r.resolved ? { at: r.resolvedAt, by: r.resolvedBy } : null, last: null }); return; }
       row.status = r.status; row.note = r.note || ''; row.resolved = r.resolved ? { at: r.resolvedAt, by: r.resolvedBy } : null;
+    });
+    // Last week's task lines come back (unanswered, with "Same as last week") while the task is still
+    // on the board, so a task reported every week doesn't have to be picked again.
+    if (prev && !prev.leave) (prev.rows || []).forEach(function (r) {
+      if (!r || !r.task || !byProject[r.project]) return;
+      var row = byProject[r.project];
+      var line = row.tasks.find(function (l) { return l.task === r.task; });
+      if (line) { line.last = r; return; }
+      var t = activeTasks().find(function (x) { return x.id === r.task; });
+      if (t && t.status !== 'Done') row.tasks.push({ task: r.task, taskName: t.name, status: null, note: '', resolved: null, last: r });
     });
     // Projects you're only attached to: while an owner's update covers one, it's answered for you
     // (see weeklyOwnerRow). `mine` = you answered it yourself, which wins over the owner's.
@@ -14663,6 +14777,7 @@
       r.attached = owners.length > 0 && owners.indexOf(me) === -1;
       r.cover = r.attached ? weeklyOwnerRow(r.project, key, me) : null;
       r.mine = !!r.status;
+      r.picking = false;
     });
     // Rows saved last time for a project that isn't on this person's board and wasn't carried from
     // last week were added by hand ("+ Add a project"); they keep their Remove link.
@@ -14674,7 +14789,7 @@
     weeklyDraft = { week: key, person: me, personId: target.id, rows: rows, extra: existing ? (existing.extra || '') : '', leave: existing ? !!existing.leave : weeklyAwayDuring(me, key), existing: existing, adding: false, addQuery: '' };
     renderWeeklyEditor();
     weeklyModal.classList.remove('hidden');
-    document.querySelectorAll('#weekly-modal-body [data-weekly-note], #weekly-extra').forEach(weeklyAutosize);
+    document.querySelectorAll('#weekly-modal-body [data-weekly-note], #weekly-modal-body [data-weekly-tnote], #weekly-extra').forEach(weeklyAutosize);
     weeklyModal.classList.add('flex');
   }
 
@@ -14717,7 +14832,7 @@
               '<p class="text-xs text-zinc-500 dark:text-zinc-400 break-words mt-0.5">' + escapeHtml(ownerFirst) + ': <b class="' + cm.text + '">' + cm.label + '</b>' +
                 (r.cover.note ? ' – <span class="whitespace-pre-line">' + escapeHtml(r.cover.note) + '</span>' : '') + '</p></div>' +
             '<button type="button" data-weekly-own="' + i + '" class="shrink-0 text-xs font-bold text-brand-600 dark:text-brand-400 hover:underline mt-0.5">Answer myself</button>' +
-          '</div>';
+          '</div>' + (function () { var tl = weeklyTaskLinesHtml(r, i, d.person); return tl ? '<div class="px-5 pb-2.5 -mt-1 border-b border-zinc-100 dark:border-zinc-700/60">' + tl + '</div>' : ''; })();
           return;
         }
         var upcoming = r.upcoming && r.upcoming.length
@@ -14746,6 +14861,7 @@
           (r.status || r.note
             ? '<textarea data-weekly-note="' + i + '" rows="1" maxlength="' + WEEKLY_NOTE_MAX + '" placeholder="' + (r.status === 'help' ? 'What do you need, and from whom?' : 'Add a note (Shift+Enter for a new line)') + '" title="Enter sends your update. Shift+Enter starts a new line." aria-label="Note for ' + escapeHtml(r.project) + '" class="block w-full resize-none overflow-hidden text-sm rounded-lg border px-3 py-2 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand-500/40 ' + (r.status === 'help' ? 'border-brand-300 dark:border-brand-500/50' : 'border-zinc-300 dark:border-zinc-600') + '">' + escapeHtml(r.note || '') + '</textarea>'
             : '') +
+          weeklyTaskLinesHtml(r, i, d.person) +
         '</div>';
       });
       body += ownHtml;
@@ -14766,9 +14882,9 @@
       '<textarea id="weekly-extra" rows="1" maxlength="' + WEEKLY_NOTE_MAX + '" title="Enter sends your update. Shift+Enter starts a new line." placeholder="' + (d.leave ? 'e.g. Invoices sent before I left' : 'e.g. AI course booked for Thursday') + '" class="block w-full resize-none overflow-hidden text-sm rounded-lg border border-zinc-300 dark:border-zinc-600 px-3 py-2 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand-500/40">' + escapeHtml(d.extra) + '</textarea>' +
     '</div>';
     document.getElementById('weekly-modal-body').innerHTML = body;
-    document.querySelectorAll('#weekly-modal-body [data-weekly-note], #weekly-extra').forEach(weeklyAutosize);
+    document.querySelectorAll('#weekly-modal-body [data-weekly-note], #weekly-modal-body [data-weekly-tnote], #weekly-extra').forEach(weeklyAutosize);
     if (d.adding) weeklyRenderAddList();
-    var answered = d.rows.filter(function (r) { return r.status || weeklyRowFollowsOwner(r); }).length;
+    var answered = d.rows.filter(weeklyRowAnswered).length;
     var open = d.rows.length - answered;
     document.getElementById('weekly-modal-foot').innerHTML =
       '<button type="button" data-weekly-leave class="text-[13px] font-semibold px-3 py-1.5 rounded-full border ' + (d.leave ? 'bg-amber-100 border-amber-300 text-amber-800 dark:bg-amber-500/15 dark:border-amber-500/30 dark:text-amber-300' : 'border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:border-zinc-400') + '">' + (d.leave ? 'On leave this week' : mine ? 'I\'m on leave this week' : first + ' is on leave this week') + '</button>' +
@@ -14818,13 +14934,62 @@
     if (!d || !name) return;
     weeklyKeepNotes();
     var prev = weeklyEntryFor(d.person, weeklyShiftKey(d.week, -1));
-    var last = prev && !prev.leave ? (prev.rows || []).find(function (x) { return x && x.project === name; }) || null : null;
-    d.rows.push({ project: name, status: null, note: '', late: null, upcoming: [], latest: weeklyLatestStatus(name), last: last, added: true, attached: false, cover: null, mine: true });
+    var last = prev && !prev.leave ? (prev.rows || []).find(function (x) { return x && !x.task && x.project === name; }) || null : null;
+    d.rows.push({ project: name, status: null, note: '', late: null, upcoming: [], latest: weeklyLatestStatus(name), last: last, added: true, attached: false, cover: null, mine: true, tasks: [], picking: false });
     d.adding = false;
     d.addQuery = '';
     renderWeeklyEditor();
     var sel = document.querySelector('#weekly-modal-body [data-weekly-select="' + (d.rows.length - 1) + '"]');
     if (sel) sel.focus();
+  }
+
+  // Tasks a project's task line can name: open tasks in the project first (yours first), Done ones
+  // last, minus the ones already lined. Offered only when the project has 2+ tasks: a one-task
+  // project's own line already says it.
+  function weeklyTaskChoices(r, person) {
+    var k = projectKey(r.project);
+    var taken = {};
+    (r.tasks || []).forEach(function (l) { taken[l.task] = true; });
+    var mineFirst = function (t) {
+      var onIt = t.assignee === person || (t.involved || []).indexOf(person) !== -1 || (t.checklist || []).some(function (it) { return stepPeople(it).indexOf(person) !== -1; });
+      return (t.status === 'Done' ? 2 : 0) + (onIt ? 0 : 1);
+    };
+    var all = activeTasks().filter(function (t) { return projectKey(t.project || 'No project') === k; });
+    return {
+      total: all.length,
+      list: all.filter(function (t) { return !taken[t.id]; }).sort(function (a, b) { return mineFirst(a) - mineFirst(b) || String(a.name).localeCompare(String(b.name)); })
+    };
+  }
+  function weeklyTaskLinesHtml(r, i, person) {
+    var choices = weeklyTaskChoices(r, person);
+    if (choices.total < 2 && !(r.tasks || []).length) return '';
+    var html = (r.tasks || []).map(function (l, j) {
+      var id = i + ':' + j;
+      var meta = l.status ? WEEKLY_STATUS[l.status] : null;
+      var opts = '<option value="">Pick a status</option>' +
+        (l.last && !l.status && WEEKLY_STATUS[l.last.status] ? '<option value="same">Same as last week (' + escapeHtml(WEEKLY_STATUS[l.last.status].label) + ')</option>' : '') +
+        WEEKLY_PICK_ORDER.map(function (st) { return '<option value="' + st + '"' + (l.status === st ? ' selected' : '') + '>' + WEEKLY_STATUS[st].label + '</option>'; }).join('');
+      return '<div data-weekly-tline="' + id + '" class="flex flex-col gap-1.5">' +
+        '<div class="flex items-start gap-3"><p class="min-w-0 flex-1 text-sm font-medium text-zinc-800 dark:text-zinc-100 break-words">' + escapeHtml(l.taskName || 'Task') +
+          ' <button type="button" data-weekly-tremove="' + id + '" class="text-xs font-semibold text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-200 hover:underline whitespace-nowrap">Remove</button></p>' +
+          '<select data-weekly-tselect="' + id + '" aria-label="Status for ' + escapeHtml(l.taskName || 'task') + '" class="shrink-0 w-44 text-sm rounded-lg border px-2.5 py-1.5 bg-white dark:bg-zinc-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40 ' +
+            (meta ? 'font-semibold ' + (l.status === 'help' ? 'border-brand-300 dark:border-brand-500/50 ' : 'border-zinc-300 dark:border-zinc-600 ') + meta.text : 'border-zinc-300 dark:border-zinc-600 text-zinc-500 dark:text-zinc-400') + '">' + opts + '</select></div>' +
+        (l.status || l.note
+          ? '<textarea data-weekly-tnote="' + id + '" rows="1" maxlength="' + WEEKLY_NOTE_MAX + '" placeholder="' + (l.status === 'help' ? 'What do you need, and from whom?' : 'Add a note (Shift+Enter for a new line)') + '" title="Enter sends your update. Shift+Enter starts a new line." aria-label="Note for ' + escapeHtml(l.taskName || 'task') + '" class="block w-full resize-none overflow-hidden text-sm rounded-lg border px-3 py-2 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand-500/40 ' + (l.status === 'help' ? 'border-brand-300 dark:border-brand-500/50' : 'border-zinc-300 dark:border-zinc-600') + '">' + escapeHtml(l.note || '') + '</textarea>'
+          : '') +
+      '</div>';
+    }).join('');
+    if (r.picking) {
+      html += '<div class="flex items-center gap-2"><select data-weekly-tpick="' + i + '" aria-label="Pick a task in ' + escapeHtml(r.project) + '" class="min-w-0 flex-1 text-sm rounded-lg border border-zinc-300 dark:border-zinc-600 px-2.5 py-1.5 bg-white dark:bg-zinc-700 text-zinc-700 dark:text-zinc-200 focus:outline-none focus:ring-2 focus:ring-brand-500/40">' +
+        '<option value="">Pick a task</option>' + choices.list.map(function (t) { return '<option value="' + t.id + '">' + escapeHtml(t.name) + (t.status === 'Done' ? ' (done)' : '') + '</option>'; }).join('') + '</select>' +
+        '<button type="button" data-weekly-tcancel="' + i + '" class="shrink-0 text-xs font-semibold text-zinc-500 dark:text-zinc-400 hover:underline">Cancel</button></div>';
+    } else if (choices.list.length) {
+      html += '<button type="button" data-weekly-tadd="' + i + '" class="w-fit text-xs font-semibold text-zinc-500 dark:text-zinc-400 hover:text-brand-600 dark:hover:text-brand-400">+ Status for a task</button>';
+    }
+    return '<div class="ml-1 pl-3 border-l-2 border-zinc-200 dark:border-zinc-600 flex flex-col gap-2">' + html + '</div>';
+  }
+  function weeklyRowAnswered(r) {
+    return !!(r.status || weeklyRowFollowsOwner(r) || (r.tasks || []).some(function (l) { return l.status; }));
   }
 
   // An editor row answered by the project's owner (you're only attached, and haven't answered it).
@@ -14840,12 +15005,21 @@
     el.style.overflowY = el.scrollHeight + 2 > 240 ? 'auto' : 'hidden';
   }
 
+  function weeklyTaskLineAt(id) {
+    var parts = String(id || '').split(':');
+    var r = weeklyDraft && weeklyDraft.rows[+parts[0]];
+    return r && r.tasks ? r.tasks[+parts[1]] || null : null;
+  }
   function weeklyKeepNotes() {
     // Notes and the extra line are read from the DOM before any re-render throws them away.
     if (!weeklyDraft) return;
     document.querySelectorAll('#weekly-modal-body [data-weekly-note]').forEach(function (el) {
       var r = weeklyDraft.rows[+el.getAttribute('data-weekly-note')];
       if (r) r.note = el.value;
+    });
+    document.querySelectorAll('#weekly-modal-body [data-weekly-tnote]').forEach(function (el) {
+      var l = weeklyTaskLineAt(el.getAttribute('data-weekly-tnote'));
+      if (l) l.note = el.value;
     });
     var ex = document.getElementById('weekly-extra');
     if (ex) weeklyDraft.extra = ex.value;
@@ -14883,17 +15057,23 @@
     var d = weeklyDraft;
     var me = weeklyDraftDoc(d);
     if (!d || !me) return;
-    var rows = d.leave ? [] : d.rows.filter(function (r) { return r.status; }).map(function (r) {
-      var out = { project: r.project, status: r.status, note: String(r.note || '').trim().slice(0, WEEKLY_NOTE_MAX) };
-      if (r.status === 'help' && r.resolved) { out.resolved = true; out.resolvedAt = r.resolved.at || null; out.resolvedBy = r.resolved.by || null; }
-      return out;
+    var rows = [];
+    if (!d.leave) d.rows.forEach(function (r) {
+      // The project's own line (optional), then its task lines, in that order.
+      [r].concat(r.tasks || []).forEach(function (x) {
+        if (!x.status) return;
+        var out = { project: r.project, status: x.status, note: String(x.note || '').trim().slice(0, WEEKLY_NOTE_MAX) };
+        if (x !== r) { out.task = x.task; out.taskName = x.taskName || ''; }
+        if (x.status === 'help' && x.resolved) { out.resolved = true; out.resolvedAt = x.resolved.at || null; out.resolvedBy = x.resolved.by || null; }
+        rows.push(out);
+      });
     });
     // Projects you're only attached to and didn't answer yourself follow their owner's update,
     // including one the owner hasn't written yet: it shows up on your card once they do.
     var follows = d.leave ? [] : d.rows.filter(function (r) { return r.attached && !r.status && !r.added; }).map(function (r) { return r.project; });
     var extra = String(d.extra || '').trim().slice(0, WEEKLY_NOTE_MAX);
     var anyCovered = !d.leave && d.rows.some(weeklyRowFollowsOwner);
-    if (!d.leave && !rows.length && !extra && !anyCovered) { showToast('Tap a status on at least one project first', 'info'); return; }
+    if (!d.leave && !rows.length && !extra && !anyCovered) { showToast('Pick a status on at least one project or task first', 'info'); return; }
     var now = new Date().toISOString();
     var entry = { week: d.week, rows: rows, follows: follows, extra: extra, leave: d.leave, at: d.existing ? (d.existing.at || now) : now };
     if (d.existing) entry.editedAt = now;
@@ -14962,9 +15142,22 @@
         weeklyKeepNotes();
         weeklyDraft.rows.splice(+t.getAttribute('data-weekly-remove'), 1);
         renderWeeklyEditor();
+      } else if (t.hasAttribute('data-weekly-tadd') || t.hasAttribute('data-weekly-tcancel')) {
+        weeklyKeepNotes();
+        var pr = weeklyDraft.rows[+t.getAttribute(t.hasAttribute('data-weekly-tadd') ? 'data-weekly-tadd' : 'data-weekly-tcancel')];
+        if (pr) pr.picking = t.hasAttribute('data-weekly-tadd');
+        renderWeeklyEditor();
+        var pk = pr && pr.picking && document.querySelector('#weekly-modal-body [data-weekly-tpick="' + weeklyDraft.rows.indexOf(pr) + '"]');
+        if (pk) pk.focus();
+      } else if (t.hasAttribute('data-weekly-tremove')) {
+        weeklyKeepNotes();
+        var tp = t.getAttribute('data-weekly-tremove').split(':');
+        var tr = weeklyDraft.rows[+tp[0]];
+        if (tr && tr.tasks) tr.tasks.splice(+tp[1], 1);
+        renderWeeklyEditor();
       } else if (t.hasAttribute('data-weekly-rest')) {
         weeklyKeepNotes();
-        weeklyDraft.rows.forEach(function (x) { if (!x.status && !weeklyRowFollowsOwner(x)) { x.status = 'ontrack'; x.mine = true; } });
+        weeklyDraft.rows.forEach(function (x) { if (!weeklyRowAnswered(x)) { x.status = 'ontrack'; x.mine = true; } });
         renderWeeklyEditor();
       } else if (t.hasAttribute('data-weekly-leave')) {
         weeklyKeepNotes();
@@ -14980,8 +15173,43 @@
     });
     // A project's status dropdown ("Same as last week" also brings last week's note).
     weeklyModal.addEventListener('change', function (e) {
-      var sel = e.target.closest && e.target.closest('[data-weekly-select]');
-      if (!sel || !weeklyDraft) return;
+      if (!weeklyDraft || !e.target.closest) return;
+      // Pick a task for a new task line.
+      var pick = e.target.closest('[data-weekly-tpick]');
+      if (pick) {
+        if (!pick.value) return;
+        weeklyKeepNotes();
+        var prow = weeklyDraft.rows[+pick.getAttribute('data-weekly-tpick')];
+        var tk = activeTasks().find(function (x) { return x.id === pick.value; });
+        if (!prow || !tk) return;
+        var prevE = weeklyEntryFor(weeklyDraft.person, weeklyShiftKey(weeklyDraft.week, -1));
+        var lastT = prevE && !prevE.leave ? (prevE.rows || []).find(function (x) { return x && x.task === tk.id; }) || null : null;
+        prow.tasks.push({ task: tk.id, taskName: tk.name, status: null, note: '', resolved: null, last: lastT });
+        prow.picking = false;
+        renderWeeklyEditor();
+        var ts = document.querySelector('#weekly-modal-body [data-weekly-tselect="' + weeklyDraft.rows.indexOf(prow) + ':' + (prow.tasks.length - 1) + '"]');
+        if (ts) ts.focus();
+        return;
+      }
+      // A task line's status (same rules as a project's).
+      var tsel = e.target.closest('[data-weekly-tselect]');
+      if (tsel) {
+        weeklyKeepNotes();
+        var tid = tsel.getAttribute('data-weekly-tselect');
+        var line = weeklyTaskLineAt(tid);
+        if (!line) return;
+        if (tsel.value === 'same' && line.last) { line.status = line.last.status; line.note = line.last.note || ''; }
+        else line.status = tsel.value || null;
+        line.resolved = null;
+        renderWeeklyEditor();
+        if (line.status === 'help') {
+          var tn = document.querySelector('#weekly-modal-body [data-weekly-tnote="' + tid + '"]');
+          if (tn) tn.focus();
+        }
+        return;
+      }
+      var sel = e.target.closest('[data-weekly-select]');
+      if (!sel) return;
       weeklyKeepNotes();
       var r = weeklyDraft.rows[+sel.getAttribute('data-weekly-select')];
       if (!r) return;
@@ -14998,7 +15226,7 @@
     });
     weeklyModal.addEventListener('input', function (e) {
       if (e.target.id === 'weekly-add-input') weeklyRenderAddList();
-      if (e.target.matches && e.target.matches('[data-weekly-note], #weekly-extra')) weeklyAutosize(e.target);
+      if (e.target.matches && e.target.matches('[data-weekly-note], [data-weekly-tnote], #weekly-extra')) weeklyAutosize(e.target);
     });
     weeklyModal.addEventListener('keydown', function (e) {
       // In the project search: Enter adds the top match, Escape closes just the search.
@@ -15027,7 +15255,7 @@
     });
     document.getElementById('weekly-view').addEventListener('click', function (e) {
       var res = e.target.closest('[data-weekly-resolve]');
-      if (res) { setWeeklyHelpResolved(res.getAttribute('data-weekly-resolve-who'), weeklyShownKey(), res.getAttribute('data-weekly-resolve'), true); return; }
+      if (res) { setWeeklyHelpResolved(res.getAttribute('data-weekly-resolve-who'), weeklyShownKey(), res.getAttribute('data-weekly-resolve'), true, res.getAttribute('data-weekly-resolve-task') || ''); return; }
       var proj = e.target.closest('[data-weekly-project]');
       if (proj) { cmdkOpenProject(proj.getAttribute('data-weekly-project')); return; }
       var ed = e.target.closest('[data-weekly-edit]');
@@ -17922,7 +18150,7 @@
       var e = list.find(function (x) { return x && x.week === key; }) || list.find(function (x) { return x && x.week === prevKey; });
       if (!e || e.leave) return;
       (e.rows || []).forEach(function (r) {
-        if (weeklyHelpOpen(r) && r.project) out.push({ who: person.name, project: r.project, note: r.note || '' });
+        if (weeklyHelpOpen(r) && r.project) out.push({ who: person.name, project: r.project, note: (r.taskName ? r.taskName + ': ' : '') + (r.note || '') });
       });
     });
     return out;
@@ -18450,6 +18678,13 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-22l', date: '2026-10-22', items: [
+      { type: 'new', title: 'Monday update: status for single tasks', text: "In your Monday update, a project with several tasks now has \"+ Status for a task\". Pick a task and give it its own status and note, for example one post in Mediashock LinkedIn. The project's own status becomes optional, and task lines show under the project on your card." },
+      { type: 'new', title: 'Copy link on briefs, projects and chats', text: "Briefs, project cards (under ⋯), project chats and archived tasks now have Copy link, like tasks already did. Paste it into WhatsApp, email or anywhere else and it opens that exact thing in Project Manager. On a brief it replaces \"Copy for partners\"." },
+      { type: 'fixed', title: 'Date boxes are readable in dark mode', text: "In dark mode the little calendar button in date boxes (brief key dates and elsewhere) was almost black on a dark box. It's light now, and the date picker opens dark too." },
+      { type: 'improved', title: 'Briefs: "What to deliver"', text: "The brief section that lists the deliverables is now called \"What to deliver\" (it was \"What to make\")." },
+      { type: 'improved', title: 'Suggestions can be Under Review', text: "Suggestions have a new status, Under Review, between Open and WIP. Whoever posted the suggestion is told when it moves there." }
+    ] },
     { id: '2026-10-22k', date: '2026-10-22', items: [
       { type: 'improved', title: 'Brief dates go into the checklist by default (Suits)', text: "When Suits write or edit a brief, \"Add these dates as checklist steps\" now starts ticked, on the project's open task due soonest. Save and the key dates appear on that task. Untick it to leave the checklist alone." }
     ] },
@@ -22128,12 +22363,7 @@
       // actually load -- doing this before the first snapshot arrives would always miss, since
       // `tasks` starts as an empty array. Guarded so a later snapshot (someone else's edit
       // landing live) can't re-trigger it after the person already closed the modal.
-      if (!deepLinkOpened && location.hash.indexOf('#task=') === 0) {
-        deepLinkOpened = true;
-        var deepLinkTask = tasks.find(function (t) { return t.id === location.hash.slice(6); });
-        if (deepLinkTask) openTaskModal(deepLinkTask);
-        else showToast('That task link is no longer valid', 'info');
-      }
+      maybeOpenPendingAppLink();
       renderAll();
       checkProjectDeadlinePopups();
       runTaskAutomations();
@@ -22195,6 +22425,8 @@
     });
     unsubProjects = onSnapshot(projectsCol, function (snap) {
       projectDocs = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
+      projectsSnapshotSeen = true;
+      maybeOpenPendingAppLink();
       // Full re-render, not just the Projects tab: project deadlines drive the Gantt's grouped
       // rows and the deadline popups too, so any of them can be on screen when this fires.
       // renderAll -> renderCurrentSecondaryView also covers the Chat tab, so a teammate's new
@@ -22461,7 +22693,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-22T06:28:39Z";
+  var CURRENT_BUILD_VERSION = "2026-10-22T07:14:00Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
@@ -22596,11 +22828,12 @@
   // already had open. Ignored while that exact task is already the one open, so this can't
   // fight with a normal in-app openTaskModal call (which itself sets this same hash).
   window.addEventListener('hashchange', function () {
-    if (location.hash.indexOf('#task=') !== 0) return;
-    var id = location.hash.slice(6);
-    if (id === editingTaskId) return;
-    var t = tasks.find(function (x) { return x.id === id; });
-    if (t) openTaskModal(t);
+    var link = parseAppLink(location.hash);
+    if (!link) return;
+    if (link.kind === 'task' && link.value === editingTaskId) return;
+    if (!tasksSnapshotSeen || !projectsSnapshotSeen) { pendingAppLink = link; return; }
+    if (link.kind !== 'task') history.replaceState(null, '', location.pathname + location.search);
+    openAppLink(link);
   });
 
   function init() {

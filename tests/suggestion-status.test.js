@@ -107,6 +107,14 @@ async function newPage(browser, when, opts) {
   const toast = await page.evaluate(() => document.body.innerText.includes('Moved to Fixed'));
   check('changing a status moves the card to its section', r[0] === 'Open 2:2' && r[2] === 'Fixed 3 (open):3', r.join(' | '));
   check('...and says where it went', toast);
+  // Under Review (asked 2026-10-22): second in the list, its own section between Open and WIP
+  const opts = await page.$$eval('[data-suggestion-section="open"] .suggestion-status-select[data-suggestion-id="a2"] option', os => os.map(o => o.textContent));
+  check('Under Review is an option, after Open', opts.join(',') === 'Open,Under Review,WIP,Fixed,Unable to Fix', opts.join(','));
+  await page.selectOption('[data-suggestion-section="open"] .suggestion-status-select[data-suggestion-id="a2"]', 'review'); await page.waitForTimeout(700);
+  r = await read();
+  check('Under Review gets its own section between Open and WIP', r[0] === 'Open 1:1' && r[1] === 'Under Review 1:1' && r[2] === 'WIP 1:1', r.join(' | '));
+  const rn = await page.evaluate(() => Object.values(window.__fb.data.notifications).filter(n => n.suggestionId === 'a2'));
+  check('the author is told', rn.length === 1 && rn[0].status === 'review' && rn[0].recipient === 'Chloe Hu', JSON.stringify(rn));
   check('no page errors', errors.length === 0, errors.join(' | '));
   await ctx.close();
   console.log(results.join('\n'));

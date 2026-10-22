@@ -2525,6 +2525,16 @@ to bottom:
          search from the pre-existing `runChatSearch` ("search within the chat itself"), which
          only ever looked inside whichever ONE chat was already open — this one finds *which*
          chat to open in the first place.
+   - **Shareable links (2026-10-22, asked: "make the important windows to be able to copy link so it
+     can be shared via other messaging channels that will lead to the PM tool")**: SHAREABLE LINKS in
+     index.html. `#task=<id>`, `#brief=<project>`, `#project=<project>`, `#chat=<project>` (names
+     URI-encoded; `appLink`, `copyAppLink`, `parseAppLink`, `openAppLink`). Copy link on the task
+     window, the brief header, the project card's ⋯ row, the chat header and the archived-task
+     window. On load a link waits for both the tasks and projects snapshots
+     (`maybeOpenPendingAppLink`); pasted into an open tab, `hashchange` opens it. A task link to an
+     archived task opens it read-only; the phone layout opens the phone's project page or chat. Links
+     to something gone say so in a toast. Only people who can sign in can open them.
+     `tests/app-links.test.js`. The note below is the original task-only version.
    - **Task deep links** (`copyTaskLink`, the `#task=<id>` hash) — "point another user to a
      specific task card," built alongside the project chat above (a message can reference a
      task by pasting its link). `openTaskModal(task)` sets `#task=<id>` via
@@ -2900,6 +2910,11 @@ Asked "what other quality of life changes or fixes can be made?", then "your pic
   Creative/Post team chip (now a neutral outline: it's a role, not a team); the people filter list ran
   off the right edge (now right-anchored) and its tick boxes were plain white (now `brand-checkbox`).
   Plus `.float-panel` (see "Popups that open over the sidebar"). Rest looked right.
+- **Date boxes in dark mode (2026-10-22)**: one style rule, `html.dark input[type="date"]` (and time,
+  month, week, datetime-local) `{ color-scheme: dark }`, so the browser draws the calendar button and
+  picker in its dark theme. Reported from the brief's key dates ("Contrast here is poor"): the icon
+  was near-black on the dark box. It replaces adding `dark:[color-scheme:dark]` to each box, which
+  only a few had; new date boxes need nothing. Checked in `tests/brief-steps-default.test.js`.
 
 ### Features in sync (2026-10-07)
 
@@ -3248,7 +3263,10 @@ version 1 first but I want to be able to revert cleanly if it is not for me."
 - **Budget** is a link to a Sheet locked in Google Drive. The field and link only show for Suits members
   and admins; that hiding is tidiness, and the real lock is Drive sharing (departments are self-chosen,
   so the app can't enforce "Suits only"). Saving by a non-Suits person keeps the existing budget link.
-- **Copy for partners** puts the brief on the clipboard as plain text, never including the budget.
+- **Copy link** (2026-10-22, asked: "Copy for partners to change to copy link") copies a `#brief=<project>`
+  link (see "Shareable links"). The old **Copy for partners** (the brief as plain text, without the
+  budget) is gone with it; people outside Mediashock can't open a link, so bring a text copy back if
+  partners need one.
 - **After saving, the card shows the just-saved copy until the snapshot arrives** (`briefOpen.lastSaved`,
   newest by `updatedAt` wins), so it never falls back to an empty form.
 - **Cancel, X and Escape ask "Are you sure you want to cancel?" before losing a brief being written**
@@ -4393,6 +4411,17 @@ their week into a cell before the Monday meeting. Asked: "Is there a way to inte
   Needs help, In review = a Waiting, Behind = derived from dates). A note is optional; picking Needs help focuses it.
   "Same as last week", "Mark the rest On track", "I'm on leave this week" and one line for things
   not on the board (admin, new biz). Unanswered projects are simply left out.
+- **Task lines inside a project (2026-10-22, Zenon's suggestion, option A)**: for umbrella projects
+  like Mediashock LinkedIn Marketing, where one status says little. Under a project with 2+ tasks, a
+  quiet "+ Status for a task" picks one of its tasks (yours first, Done last) and gives it its own
+  status and note (`weeklyTaskLinesHtml`, `weeklyTaskChoices`, data attrs `data-weekly-t*`). Saved as
+  rows with `task` (id) and `taskName`. **The project line is optional**: task lines alone count the
+  project as answered (`weeklyRowAnswered`). Last week's task lines come back unanswered with "Same as
+  last week" while the task is still open. Card: indented under the project, which shows its own
+  name and Next list when it has no line of its own (`weeklyGroupedRowsHtml`). Needs help and Resolve
+  name the task (`setWeeklyHelpResolved(..., task)`); WIP's help line prefixes the task name. Owner
+  following and NEW only use project lines / match on task. Monday.com and Asana use the same shape.
+  `tests/monday-task-lines.test.js`.
 - **Notes are boxes that grow as you type, up to 2,000 characters** (`WEEKLY_NOTE_MAX`,
   `weeklyAutosize`; 2026-10-19, from two Suggestions: a one-line box capped at 200/300 couldn't hold
   a long note or a line break). Shift+Enter is a new line; Enter still sends the update, as in chat
@@ -5126,6 +5155,9 @@ not just not gotten to yet — in the same message.
   `PRIORITY_META.High.badge`'s exact rose classes** — a different badge in a different spot on
   the card than the priority chip (AI cards show both at once), so sharing rose doesn't collide
   the way reusing it *within* the same badge group would.
+- **Under Review** (`review`, 2026-10-22, asked): between Open and WIP, purple (the app's review
+  colour, `READY_FOR_REVIEW_META.badge`), its own section on the page; the author is told "Your
+  suggestion is under review". No rules change: the rules only check that an admin changes `status`.
 - **Missing `status` on a suggestion reads as `'open'`** (`SUGGESTION_STATUS_META[s.status] ?
   s.status : 'open'` in `suggestionCardHtml`) — every suggestion posted before this field existed
   needs no migration, same fix-it-forward pattern as the checklist-item-id backfill.
