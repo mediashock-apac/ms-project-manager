@@ -96,9 +96,9 @@ async function newPage(browser, when, opts) {
   const g = await page.evaluate(() => {
     const h = document.querySelector('#gantt-grid [title="Deepavali (in lieu) (public holiday)"]');
     const note = document.getElementById('gantt-holiday-note'), clash = document.getElementById('gantt-holiday-clash-note');
-    return { head: !!h, tinted: !!h && /bg-zinc-100/.test(h.className), note: !note.classList.contains('hidden'), noteTitle: note.title, clash: clash.classList.contains('hidden') ? '' : clash.textContent };
+    return { head: !!h, tinted: !!h && /bg-teal-50/.test(h.className), note: !note.classList.contains('hidden'), noteTitle: note.title, clash: clash.classList.contains('hidden') ? '' : clash.textContent };
   });
-  check('the Timeline header shades the holiday and names it on hover', g.head && g.tinted);
+  check('the Timeline header marks the holiday in teal and names it on hover', g.head && g.tinted);
   check('the legend shows the holiday shading while one is in view', g.note && /Deepavali/.test(g.noteTitle), g.noteTitle);
   check('a deadline on a public holiday is pointed out', g.clash === '1 deadline on a public holiday', g.clash);
   await page.screenshot({ path: path.join(OUT, 'holidays-timeline.png') });

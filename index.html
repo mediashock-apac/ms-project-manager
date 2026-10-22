@@ -285,6 +285,8 @@
      under the task bar (it's emitted before the bar in the same relative container, and neither
      sets z-index, so DOM order wins) and takes no pointer events, so it can never eat a click
      meant for the bar on top of it. */
+  /* Timeline month/day rows: slid down by syncGanttHead so they stay under the sticky legend. */
+  .gantt-head-cell { transform: translateY(var(--gantt-head-y, 0px)); }
   .gantt-leave {
     pointer-events: none;
     background-image: repeating-linear-gradient(45deg, rgba(113, 113, 122, 0.18) 0 4px, transparent 4px 9px);
@@ -1496,7 +1498,8 @@
     <!-- ============ GANTT VIEW ============ -->
     <section id="view-gantt" data-view class="flex-1">
       <div class="bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl shadow-card p-4">
-        <div class="flex items-center justify-between mb-3">
+        <!-- Sticky against <main> (it is outside the chart's scroll box); -top-5 cancels <main>'s pt-5 so it pins flush to the top. syncGanttHead slides the month/day rows down under it. -->
+        <div id="gantt-head" class="sticky -top-5 z-[29] -mx-4 -mt-4 px-4 pt-4 pb-3 rounded-t-xl bg-white dark:bg-zinc-800 flex items-center justify-between">
           <div class="flex items-center gap-2">
             <svg data-ic="gantt" class="w-4 h-4 text-zinc-400 dark:text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="10" height="4" rx="1.5"></rect><rect x="7" y="10" width="12" height="4" rx="1.5"></rect><rect x="11" y="16" width="10" height="4" rx="1.5"></rect></svg>
             <h2 class="text-base font-bold text-zinc-900 dark:text-zinc-100">Workload Timeline</h2>
@@ -1510,11 +1513,13 @@
                  emerald bar was the one colour on screen with nothing to explain it. -->
             <span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-emerald-400"></span>Done</span>
             <span class="flex items-center gap-1"><span class="w-0.5 h-3 bg-rose-500"></span>Today</span>
+            <!-- Only while an overdue task is on the chart (renderGantt). -->
+            <span id="gantt-overdue-note" class="hidden"><span class="flex items-center gap-1"><span class="inline-flex items-center gap-0.5 h-4 px-1 rounded text-[10px] font-bold leading-none bg-rose-100 text-rose-700 ring-1 ring-inset ring-rose-300 dark:bg-rose-500/20 dark:text-rose-300 dark:ring-rose-500/40"><svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>3d late</span>Overdue</span></span>
             <span class="flex items-center gap-1"><span class="inline-flex items-center gap-0.5 h-4 px-1 rounded text-[10px] font-bold leading-none bg-amber-100 text-amber-800 ring-1 ring-inset ring-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:ring-amber-500/40"><svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 2 10 5-10 5L2 7z"></path><path d="m2 17 10 5 10-5"></path><path d="m2 12 10 5 10-5"></path></svg>2</span>Same-day deadlines</span>
             <span id="gantt-stack-note" class="hidden text-rose-600 dark:text-rose-400 font-semibold" title="These tasks share an owner and a deadline -- more than one thing is due from the same person on the same day."></span>
             <span id="gantt-leave-note" class="hidden text-amber-700 dark:text-amber-400 font-semibold" title="The deadline falls on a day the owner is away. The shaded stripes on a row are that person's leave -- set it in the People tab."></span>
-            <!-- Only while a holiday is in view; its title names them. The tint is the weekend one. -->
-            <span id="gantt-holiday-note" class="hidden"><span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600"></span>Weekend or public holiday</span></span>
+            <!-- Only while a holiday is in view; its title names them. Teal, as on the Calendar. -->
+            <span id="gantt-holiday-note" class="hidden"><span class="flex items-center gap-1"><span class="w-2.5 h-2.5 rounded-sm bg-teal-50 dark:bg-teal-950 border border-teal-400 dark:border-teal-500"></span>Public holiday</span></span>
             <span id="gantt-holiday-clash-note" class="hidden text-teal-700 dark:text-teal-400 font-semibold" title="These deadlines fall on a Singapore public holiday. Hover a shaded day in the header to see which."></span>
           </div>
         </div>
@@ -6235,6 +6240,46 @@
   }
   // Fades the right ~45% of an open-ended bar to nothing.
   var GANTT_TBD_MASK = '-webkit-mask-image:linear-gradient(to right,#000 55%,transparent);mask-image:linear-gradient(to right,#000 55%,transparent);';
+  /* Deadline warnings on both timelines, as small tags just past the bar's end, where the deadline
+     is: rose "3d late" (overdue) and amber "2" with a layers icon (things due the same day). One
+     system, told apart by colour (asked: "visually consistent and easy to understand"). They
+     replaced a red dot and a "!" circle on the bar's corners, which the bar's overflow-hidden
+     clipped ("This looks unpolished"); outside the bar nothing clips them. */
+  var GANTT_TAG_CLS = 'cursor-pointer inline-flex items-center gap-0.5 h-4 px-1 rounded text-[10px] font-bold leading-none whitespace-nowrap ring-1 ring-inset ';
+  function ganttEndTagsHtml(t, overdue, stacked) {
+    var out = '';
+    if (overdue) {
+      var late = Math.max(1, -(daysUntil(t.deadline) || 0));
+      out += '<span data-open-task="' + t.id + '" title="' + escapeHtml('Overdue: was due ' + formatShortDate(t.deadline) + ', ' + late + ' day' + (late === 1 ? '' : 's') + ' ago') + '" ' +
+        'class="gantt-late-tag ' + GANTT_TAG_CLS + 'bg-rose-100 text-rose-700 ring-rose-300 dark:bg-rose-500/20 dark:text-rose-300 dark:ring-rose-500/40">' + svgIcon('clock', 'w-3 h-3') + late + 'd late</span>';
+    }
+    if (stacked && stacked.length) {
+      out += '<span data-open-task="' + t.id + '" title="' + escapeHtml(t.assignee + ' has ' + (stacked.length + 1) + ' things due ' + formatShortDate(t.deadline) + ': ' + [t.name].concat(stacked.map(function (o) { return o.name; })).join(', ')) + '" ' +
+        'class="gantt-stack-tag ' + GANTT_TAG_CLS + 'bg-amber-100 text-amber-800 ring-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:ring-amber-500/40">' + svgIcon('layers', 'w-3 h-3') + (stacked.length + 1) + '</span>';
+    }
+    return out;
+  }
+
+  /* Sticky Timeline header (asked: "the date and month bar and legend should be sticky so when
+     scrolled, those information can still be referenced"). The legend row (#gantt-head) sits
+     outside the chart's scroll box, so plain `sticky top-0` pins it to <main>. The month/day rows
+     can't do the same: the box scrolls sideways, and that traps their own `sticky top` inside a
+     box that never scrolls down (see the NO max-height note in renderGantt). So this slides them
+     down by how far <main> has scrolled past the chart's top, to just under the legend, and stops
+     before the last row. One scrollbar, no max-height. */
+  function syncGanttHead() {
+    var grid = document.getElementById('gantt-grid'), head = document.getElementById('gantt-head');
+    if (!grid || !head || currentView !== 'gantt') return;
+    var r = grid.parentElement.getBoundingClientRect();
+    var y = Math.max(0, Math.min(head.getBoundingClientRect().bottom - r.top - 1, r.height - 64 - 48));   // -1: tuck under the legend, no gap
+    grid.style.setProperty('--gantt-head-y', Math.round(y) + 'px');
+  }
+  var ganttHeadRaf = 0;
+  document.querySelector('main').addEventListener('scroll', function () {
+    if (ganttHeadRaf) return;
+    ganttHeadRaf = requestAnimationFrame(function () { ganttHeadRaf = 0; syncGanttHead(); });
+  }, { passive: true });
+
   function ganttTbdTagHtml(t, style) {
     return '<span data-open-task="' + t.id + '" class="absolute cursor-pointer whitespace-nowrap text-[11px] font-semibold text-zinc-500 dark:text-zinc-400 hover:text-brand-700 dark:hover:text-brand-300" style="' + style + '">Deadline TBD</span>';
   }
@@ -12938,6 +12983,8 @@
 
     // Public holidays: a legend entry only when one is in view, and a note when deadlines land on one.
     var holsInView = days.map(function (d) { return holidayName(toDateInputValue(d)); }).filter(Boolean);
+    var overdueNote = document.getElementById('gantt-overdue-note');
+    if (overdueNote) overdueNote.classList.toggle('hidden', !list.some(function (t) { return dueUrgency(t).overdue; }));
     var holNote = document.getElementById('gantt-holiday-note');
     if (holNote) {
       holNote.classList.toggle('hidden', !holsInView.length);
@@ -13029,7 +13076,7 @@
     // everything, including the other frozen edge.
     // text-sm, not text-xs -- reported directly ("the title 'Tasks' in the top of the task
     // column"), matching the same size bump the project title badge already got below it.
-    html += '<div class="sticky top-0 left-0 z-[26] bg-white dark:bg-zinc-800 border-b border-r border-zinc-200 dark:border-zinc-700 flex items-center px-3" style="grid-column:1;grid-row:1 / span 2;"><span class="text-sm font-bold text-zinc-500 dark:text-zinc-400">Task</span></div>';
+    html += '<div class="gantt-head-cell sticky top-0 left-0 z-[26] bg-white dark:bg-zinc-800 border-b border-r border-zinc-200 dark:border-zinc-700 flex items-center px-3" style="grid-column:1;grid-row:1 / span 2;"><span class="text-sm font-bold text-zinc-500 dark:text-zinc-400">Task</span></div>';
 
     // Label column resize handle -- a thin strip pinned to the column-1/column-2 boundary,
     // sticky the same way the label column itself is (position:sticky;left) so it stays grabbable
@@ -13063,20 +13110,22 @@
       // dark:bg-zinc-800 either, or the month row would coincidentally match "weekend" in light
       // mode -- three genuinely distinct tones now: month (lightest in dark mode, most
       // prominent) > weekday > weekend (darkest/most muted), an ascending step in light mode.
-      html += '<div class="sticky top-0 z-[25] bg-zinc-200 dark:bg-zinc-600 border-b border-l border-zinc-300 dark:border-zinc-500 gantt-month-divider flex items-center px-2 text-xs font-semibold text-zinc-600 dark:text-zinc-200" style="grid-column:' + colCursor + ' / span ' + m.span + ';grid-row:1;white-space:nowrap;overflow:hidden;" title="' + m.label + '">' + (m.span >= 6 ? m.label : m.short) + '</div>';
+      html += '<div class="gantt-head-cell sticky top-0 z-[25] bg-zinc-200 dark:bg-zinc-600 border-b border-l border-zinc-300 dark:border-zinc-500 gantt-month-divider flex items-center px-2 text-xs font-semibold text-zinc-600 dark:text-zinc-200" style="grid-column:' + colCursor + ' / span ' + m.span + ';grid-row:1;white-space:nowrap;overflow:hidden;" title="' + m.label + '">' + (m.span >= 6 ? m.label : m.short) + '</div>';
       colCursor += m.span;
     });
 
     // day header row
     days.forEach(function (d, i) {
-      var isWeekend = !isWorkingDay(d);   // a public holiday gets the weekend tint, named on hover
+      var isWeekend = d.getDay() === 0 || d.getDay() === 6;
+      // A public holiday has its own teal, the Calendar's holiday colour, named on hover (asked:
+      // "separate weekends and public holidays in timeline. They should look different").
       var hol = holidayName(toDateInputValue(d));
       var isToday = i === todayIndex;
       // Solid tints for the same reason as the month row above -- the weekend and today tints
       // were the most transparent cells of the lot (/70, /40, /10) and let the most through.
       // The three still read as three distinct days, just without the see-through.
-      html += '<div class="sticky top-8 z-[25] border-b border-zinc-200 dark:border-zinc-700 flex flex-col items-center justify-center text-xs leading-tight ' +
-        (isToday ? 'bg-rose-50 dark:bg-rose-950 text-rose-600 dark:text-rose-400 font-bold' : (isWeekend ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500' : 'bg-zinc-50 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400')) +
+      html += '<div class="gantt-head-cell sticky top-8 z-[25] border-b border-zinc-200 dark:border-zinc-700 flex flex-col items-center justify-center text-xs leading-tight ' +
+        (isToday ? 'bg-rose-50 dark:bg-rose-950 text-rose-600 dark:text-rose-400 font-bold' : hol ? 'bg-teal-50 dark:bg-teal-950 text-teal-700 dark:text-teal-400 font-semibold' : (isWeekend ? 'bg-zinc-100 dark:bg-zinc-800 text-zinc-400 dark:text-zinc-500' : 'bg-zinc-50 dark:bg-zinc-700 text-zinc-500 dark:text-zinc-400')) +
         '"' + (hol ? ' title="' + escapeHtml(hol) + ' (public holiday)"' : '') + ' style="grid-column:' + (i + 2) + ';grid-row:2;">' +
         '<span>' + d.toLocaleDateString('en-US', { weekday: 'narrow' }) + '</span><span class="font-semibold">' + d.getDate() + '</span>' +
       '</div>';
@@ -13191,15 +13240,10 @@
           // that, and that column has since been removed too; the diamonds say what is due when. Same split TeamGantt avoids by not
           // dating checklist items at all.
           '<div class="' + pm.bar + ' h-full w-full"></div>' +
-          (overdue ? '<span class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-zinc-800"></span>' : '') +
       '</button>';
-      // Deadline stack: a tag just past the bar's end, where the clashing deadline is, with how many
-      // things are due that day. It used to be a "!" circle on the bar's top-left corner, which the
-      // bar's overflow-hidden clipped ("This looks unpolished"); outside the bar nothing clips it.
-      // Still a different shape and place from the overdue dot, so the two warnings stay distinct.
-      if (rowStacked.length) html += '<span data-open-task="' + t.id + '" title="' + escapeHtml(t.assignee + ' has ' + (rowStacked.length + 1) + ' things due ' + formatShortDate(t.deadline) + ': ' + [t.name].concat(rowStacked.map(function (o) { return o.name; })).join(', ')) + '" ' +
-        'class="gantt-stack-tag absolute cursor-pointer inline-flex items-center gap-0.5 h-4 px-1 rounded text-[10px] font-bold leading-none bg-amber-100 text-amber-800 ring-1 ring-inset ring-amber-300 dark:bg-amber-500/20 dark:text-amber-300 dark:ring-amber-500/40" ' +
-        'style="left:' + (Math.max(barLeft, 0) + Math.max(barWidth, 18) + 4) + 'px;top:' + (rowHeight / 2 - 8) + 'px;">' + svgIcon('layers', 'w-3 h-3') + (rowStacked.length + 1) + '</span>';
+      // Deadline warnings are tags just past the bar's end, where the deadline is (ganttEndTagsHtml).
+      var endTags = ganttEndTagsHtml(t, overdue, rowStacked);
+      if (endTags) html += '<span class="absolute inline-flex items-center gap-1" style="left:' + (Math.max(barLeft, 0) + Math.max(barWidth, 18) + 4) + 'px;top:' + (rowHeight / 2 - 8) + 'px;">' + endTags + '</span>';
       // Over the faded tail, right-aligned to where the bar ends, so it says why the bar has no
       // end and never runs off the chart's right edge.
       if (kind === 'tbd') html += ganttTbdTagHtml(t, 'right:' + (totalDays * dayWidth - Math.max(barLeft, 0) - Math.max(barWidth, 18) + 6) + 'px;top:' + (rowHeight / 2 - 8) + 'px;line-height:16px;');
@@ -13269,12 +13313,11 @@
     // The trade, worth knowing before anyone "fixes" this back: a sticky element resolves against
     // its nearest scroll-container ancestor, and this box is still one even when only one axis
     // actually overflows -- so the month/day header's `sticky top-0` is now pinned to a box that
-    // never scrolls vertically, i.e. it scrolls up with the page instead of staying put. Keeping
-    // that frozen while still showing only one vertical scrollbar needs the whole Timeline view
-    // sized to the viewport so this pane becomes the only vertical scroller on the page -- a
-    // layout change, not a height tweak. Don't just put max-height back; that's where the second
-    // scrollbar came from.
+    // never scrolls vertically, i.e. it scrolls up with the page instead of staying put. Since
+    // 2026-10-22 syncGanttHead keeps it on screen anyway, by sliding those cells down as <main>
+    // scrolls (asked for). Don't just put max-height back; that's where the second scrollbar came from.
     wrap.innerHTML = '<div class="overflow-auto border border-zinc-200 dark:border-zinc-700 rounded-lg">' + html + '</div>';
+    syncGanttHead();
 
     // Rebuilding innerHTML resets the new pane's scroll to 0 (the range start), which can leave
     // today out of view on any range extending more than a screen-width into the future.
@@ -17159,7 +17202,7 @@
      drop bars from the agenda -- see the EVENTS -> WIP header) and is built for the full date
      range with a frozen label column and horizontal scroll. This draws from the WIP-scoped `open`
      list, one fixed-width grid that fits the card at 7/14/28 days, so it never scrolls sideways.
-     Bar colours, fill stages, overdue dot and leave bands reuse the Gantt's own metadata, so the
+     Bar colours, fill stages, overdue tag and leave bands reuse the Gantt's own metadata, so the
      two cannot disagree about what a task looks like.
   --------------------------------------------------------- */
   // Same checklist due-date diamonds as the Timeline tab (see renderGantt), positioned by
@@ -17227,9 +17270,9 @@
       '<div class="flex-1 min-w-0 grid" style="grid-template-columns:' + cols + ';">';
     for (var i = 0; i < n; i++) {
       var d = addDays(rangeStart, i);
-      var weekend = !isWorkingDay(d), hol = holidayName(toDateInputValue(d));   // a public holiday looks like a weekend
+      var weekend = d.getDay() === 0 || d.getDay() === 6, hol = holidayName(toDateInputValue(d));   // a public holiday is teal
       head += '<div' + (hol ? ' title="' + escapeHtml(hol) + ' (public holiday)"' : '') + ' class="flex flex-col items-center py-1 text-[10px] leading-tight ' +
-        (i === 0 ? 'text-rose-600 dark:text-rose-400 font-bold' : (weekend ? 'text-zinc-300 dark:text-zinc-600' : 'text-zinc-400 dark:text-zinc-500')) + '">' +
+        (i === 0 ? 'text-rose-600 dark:text-rose-400 font-bold' : hol ? 'text-teal-600 dark:text-teal-400 font-bold' : (weekend ? 'text-zinc-300 dark:text-zinc-600' : 'text-zinc-400 dark:text-zinc-500')) + '">' +
         // 28 columns cannot fit a weekday letter AND a number each; the number alone is enough there.
         (n <= 14 ? '<span>' + d.toLocaleDateString('en-US', { weekday: 'narrow' }) + '</span>' : '') +
         '<span class="font-semibold">' + d.getDate() + '</span></div>';
@@ -17281,8 +17324,10 @@
               'class="gantt-bar absolute rounded-md ' + pm.barLight + ' border border-black/5 dark:border-white/5 overflow-hidden text-left" ' +
               'style="left:' + left + '%;width:calc(' + width + '% - 3px);min-width:14px;top:calc(50% - ' + (GANTT_BAR_HEIGHT / 2) + 'px);height:' + GANTT_BAR_HEIGHT + 'px;' + (kind === 'tbd' ? GANTT_TBD_MASK : '') + '">' +
               '<div class="' + pm.bar + ' h-full w-full"></div>' +
-              (overdue ? '<span class="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-rose-500 ring-2 ring-white dark:ring-zinc-800"></span>' : '') +
             '</button>' + tbdTag +
+            // Same end-of-bar tag as the Timeline tab. An overdue bar ends before today, so here it's
+            // clamped to a 14px stub at the window's left edge and the tag follows that.
+            (overdue ? '<span class="absolute inline-flex items-center" style="' + (to < from ? 'left:18px' : 'left:calc(' + ((to + 1) / n * 100) + '% + 2px)') + ';top:calc(50% - 8px);">' + ganttEndTagsHtml(t, true, []) + '</span>' : '') +
             (ganttExpanded[t.id] ? '' : wipChecklistMarkers(t, today, horizon, rangeStart, n))) +
         '</div>' +
       '</div>' +
@@ -17319,7 +17364,7 @@
     if (seen.Low) legend += sw('bg-sky-400', 'Low');
     if (seen.review) legend += sw('bg-purple-400', 'Ready for review');
     if (list.some(function (t) { return dueUrgency(t).overdue; })) {
-      legend += '<span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-rose-500"></span>Overdue</span>';
+      legend += '<span class="flex items-center gap-1"><span class="' + GANTT_TAG_CLS + 'cursor-default bg-rose-100 text-rose-700 ring-rose-300 dark:bg-rose-500/20 dark:text-rose-300 dark:ring-rose-500/40">' + svgIcon('clock', 'w-3 h-3') + '3d late</span>Overdue</span>';
     }
     if (list.some(function (t) { return (t.checklist || []).some(function (i) { return i.due && i.due >= today && i.due <= horizon; }); })) {
       legend += '<span class="flex items-center gap-1"><span class="w-2 h-2 rotate-45 bg-zinc-500/60 dark:bg-zinc-300/60"></span>Checklist item due</span>';
@@ -18182,6 +18227,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-22e', date: '2026-10-22', items: [
+      { type: 'improved', title: 'Timeline: clearer late tasks, holidays and a header that stays put', text: 'A late task now shows how late it is, like "3d late", in a small tag after its bar, next to the same-day deadline tag. Public holidays are teal, so they no longer look like weekends. And the legend, months and dates stay at the top of the screen as you scroll down.' }
+    ] },
     { id: '2026-10-22d', date: '2026-10-22', items: [
       { type: 'improved', title: 'Archived by year and month', text: 'Archived tasks are now grouped by year, then month, newest first, with a count on each. Older years fold to one line: click a year to open it. Searching opens any year with a match.' },
       { type: 'improved', title: 'Clearer same-day deadline marker on the Timeline', text: 'When someone has more than one thing due on the same day, a small amber tag after the bar shows how many. Hover it to see which tasks.' }
@@ -18977,7 +19025,7 @@
     ] },
     gantt: { since: PAGE_TOURS_EXISTING, steps: [
       { target: '#gantt-wrap', title: "Your work over time", text: "Each bar runs from a task's start date to its deadline. Click a task's name to see its checklist steps: green diamonds are done, grey are still to do. Drag the edge of the Task column to make it wider." },
-      { target: '#gantt-legend', title: "What the marks mean", text: "Colours show priority. A red dot means overdue, an amber number after a bar means its owner has that many things due that day, and stripes mean the owner is away." }
+      { target: '#gantt-legend', title: "What the marks mean", text: "Colours show priority. Tags after a bar flag its deadline: rose says how many days late it is, amber how many things its owner has due that day, and stripes mean the owner is away." }
     ] },
     calendar: { since: PAGE_TOURS_EXISTING, steps: [
       { target: '#calendar-scope-toggle', title: "Just you, or everyone?", text: "Mine shows only your work. Everyone shows the whole team's." },
@@ -22172,7 +22220,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-22T02:56:36Z";
+  var CURRENT_BUILD_VERSION = "2026-10-22T03:17:56Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

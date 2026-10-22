@@ -169,7 +169,7 @@ here (dependencies, Gantt grouping, the progress column) stay out even when a re
 
 ## Commands
 
-**Browser tests: `node tests/run.mjs`** (see `tests/README.md`). 39 suites, each loading
+**Browser tests: `node tests/run.mjs`** (see `tests/README.md`). 40 suites, each loading
 the real `index.html` in Chromium with Firebase replaced by `tests/fbstub.js`. They run on every push to
 `main` and every weekday at 7am Singapore (`.github/workflows/tests.yml`); a failure is a red X plus
 GitHub's email. Asked for directly: "Constantly run checks as I did today to make sure everything is
@@ -3506,7 +3506,14 @@ client-side domain check in `isAllowedEmail` is UX only, not enforcement):
         `overflow-hidden` clipped it, and a text glyph broke the SVG-icons rule. It is now
         `.gantt-stack-tag`, a small amber tag just past the bar's right end (where the shared
         deadline is) with the `layers` icon and how many things are due that day; its title names
-        them and it opens the task. Legend entry: "Same-day deadlines".
+        them and it opens the task. Legend entry: "Same-day deadlines". **The overdue dot went the
+        same way** (also clipped; asked: "visually consistent and easy to understand"): a rose
+        "3d late" tag with a clock icon, beside the amber one. Both come from `ganttEndTagsHtml`,
+        used by the Timeline and the WIP timeline; "Overdue" shows in the legend only while one is
+        on screen. **Sticky header** (asked: "the date and month bar and legend should be sticky"):
+        the legend row `#gantt-head` is `sticky` against `<main>`, and `syncGanttHead` slides the
+        month/day cells (`.gantt-head-cell`, via `--gantt-head-y`) down under it on scroll, since
+        the chart's sideways scroll box traps their own `sticky top`. `tests/timeline-marks.test.js`.
       - TeamGantt's closest equivalent (a Workloads heat-map showing hours/day per person) lives
         in a separate report, not on the chart itself, and its own users have publicly asked for
         an on-chart version that doesn't exist yet -- this is that, tuned to what this team
@@ -3900,9 +3907,9 @@ Saturday holiday gives the Monday off ("Monday off"), and the Monday Meeting rem
   `leaveDayCount`. Use these, never a bare `getDay() === 0 || 6`, for anything about working days.
 - **Shown:** Calendar (desktop week and month, phone) lists a holiday first on its day as kind
   `holiday` (teal), for everyone including Mine; a holiday weekday column gets the weekend tint.
-  Timeline and the WIP timeline give it the weekend header tint with the name on hover;
-  `#gantt-holiday-note` shows in the legend only while one is in view, and `#gantt-holiday-clash-note`
-  counts deadlines that land on one.
+  Timeline and the WIP timeline give it a teal header cell (not the weekend grey: "They should look
+  different"), named on hover; `#gantt-holiday-note` ("Public holiday", teal) shows in the legend only
+  while one is in view, and `#gantt-holiday-clash-note` counts deadlines that land on one.
 - **Counted as days off:**
   - `dueUrgency`: due soon also covers the next working day across days off. The card badge says
     "DUE MON" etc. when that's not tomorrow.
