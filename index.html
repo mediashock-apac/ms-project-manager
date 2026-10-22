@@ -10346,13 +10346,15 @@
     briefOpen.draft = {
       template: template, job: job,
       sections: t.open.map(function (type) { return { id: 'n' + (briefNextId++), type: type, rows: briefDefaultRows(type, template), f: {} }; }),
-      stepsTask: briefOpen.fromTaskId || '', addSteps: false
+      // Ticked by default for Suits and admins (2026-10-22, Arvind's suggestion, option A: it was
+      // off unless ticked). Only they ever see it, and saving checks briefStepsAllowed() again.
+      stepsTask: briefOpen.fromTaskId || '', addSteps: true
     };
   }
   function briefEditExisting() {
     var b = projectBrief(briefOpen.name);
     var copy = JSON.parse(JSON.stringify(b));
-    briefOpen.draft = { template: copy.template || 'blank', job: copy.job || '', sections: copy.sections || [], stepsTask: briefOpen.fromTaskId || '', addSteps: false };
+    briefOpen.draft = { template: copy.template || 'blank', job: copy.job || '', sections: copy.sections || [], stepsTask: briefOpen.fromTaskId || '', addSteps: true };
     briefOpen.mode = 'edit';
     briefOpen.baseline = null;
     renderBriefModal();
@@ -10602,7 +10604,14 @@
     else if (t.kind === 'rows') body = '<div class="flex flex-col gap-1.5" data-rows>' + (s.rows && s.rows.length ? s.rows : [{}]).map(function (r) { return briefRowHtml(s.type, r, t.cols); }).join('') + '</div>' +
       '<button type="button" data-brief-act="add-row" class="w-fit inline-flex items-center gap-1 text-xs font-semibold text-zinc-500 hover:text-brand-600">' + svgIcon('plus', 'w-3 h-3') + t.addLabel + '</button>';
     else if (t.kind === 'dates') {
-      var tasksHere = briefStepsAllowed() ? activeTasks().filter(function (x) { return x.project === briefOpen.name; }) : [];
+      // Open tasks first, soonest deadline first (undated after), so the default pick is the task
+      // the dates most likely belong to; Done tasks last.
+      var tasksHere = briefStepsAllowed() ? activeTasks().filter(function (x) { return x.project === briefOpen.name; }).sort(function (a, b) {
+        var da = a.status === 'Done', db = b.status === 'Done';
+        if (da !== db) return da ? 1 : -1;
+        var xa = a.deadline || '9999-12-31', xb = b.deadline || '9999-12-31';
+        return xa < xb ? -1 : xa > xb ? 1 : 0;
+      }) : [];
       var sel = briefOpen.draft.stepsTask || (tasksHere[0] && tasksHere[0].id) || '';
       body = '<div class="flex flex-col gap-1.5" data-rows>' + (s.rows && s.rows.length ? s.rows : [{}]).map(function (r) { return briefRowHtml('dates', r); }).join('') + '</div>' +
         '<div class="flex flex-wrap gap-x-4 gap-y-1"><button type="button" data-brief-act="add-row" class="inline-flex items-center gap-1 text-xs font-semibold text-zinc-500 hover:text-brand-600">' + svgIcon('plus', 'w-3 h-3') + 'Add a date</button>' +
@@ -18441,6 +18450,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-22k', date: '2026-10-22', items: [
+      { type: 'improved', title: 'Brief dates go into the checklist by default (Suits)', text: "When Suits write or edit a brief, \"Add these dates as checklist steps\" now starts ticked, on the project's open task due soonest. Save and the key dates appear on that task. Untick it to leave the checklist alone." }
+    ] },
     { id: '2026-10-22j', date: '2026-10-22', items: [
       { type: 'improved', title: 'Pile-ups count checklist steps', text: "When three or more things are due from one person on the same day, steps now count too: on the Timeline (an amber tag on that day), in WIP Meeting's Clash and in Team load. Steps from one task due the same day count as one batch. Two working days before, that person gets one heads-up so they can ask for help or move something." }
     ] },
@@ -22449,7 +22461,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-22T06:04:31Z";
+  var CURRENT_BUILD_VERSION = "2026-10-22T06:28:39Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

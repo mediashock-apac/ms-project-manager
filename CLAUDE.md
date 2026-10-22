@@ -3227,6 +3227,13 @@ version 1 first but I want to be able to revert cleanly if it is not for me."
   any task in the project) that's ticked shows green, a past date whose step isn't ticked shows LATE in
   rose, a past date with no matching step is just grey. Shipped first as "past = green", which made an
   overdue step look done.
+- **Now TICKED by default (2026-10-22)**, from Arvind's suggestion ("when adding checklist items, make sure it
+  gets added automatically to the task on the board"), option A of three: the box starts ticked for Suits and
+  admins (`addSteps: true` in both draft set-ups) and the task list is sorted open-first, soonest deadline
+  first, so the default pick is the task the dates most likely belong to. Unticking still opts a brief out;
+  nobody else sees it, and saving re-checks `briefStepsAllowed()`. Fully automatic with no box (B) was
+  declined: it has to guess the task and can't be opted out of, so hand-typed steps would duplicate.
+  `tests/brief-steps-default.test.js`. The history below is how it got here.
 - **Dates into checklists: Suits and admins only, unticked by default** (`briefStepsAllowed()`). Asked: "should
   key dates placed in briefs flow into checklists? I don't want information to be duplicated or go stale".
   A two-way linked sync was proposed and declined as too complicated and too sticky to revert. It was then
