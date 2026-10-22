@@ -5023,6 +5023,7 @@ somewhere to land.
 
 **App-side import** (`AI PRODUCT SUGGESTIONS IMPORT` in index.html's module script, Suggestions
 view): an admin-only bar above the suggestions list —
+- **The import panel is behind an admin-only sparkles icon button** (`#ai-suggestions-toggle`, top right of the "Suggest a change" card) since 2026-10-22: "Make this into an icon button. No need to make it so prominent because it is not used as often." Closed by default; open state (`aiImportOpen`) lasts until reload. `tests/suggestion-status.test.js`.
 - **"Check GitHub for new suggestions"** fetches the latest `ai-suggestions`-labeled issue via
   GitHub's public REST API, called directly from the browser with no token (this repo is public,
   and anonymous reads of a public repo's issues don't need auth — confirmed against the live API

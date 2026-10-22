@@ -83,6 +83,18 @@ async function newPage(browser, when, opts) {
   const order = await page.evaluate(() => [...document.querySelectorAll('[data-suggestion-section="open"] .suggestion-card')].sort((x, y) => (+x.parentElement.style.order) - (+y.parentElement.style.order)).map(c => c.innerText.includes('Open newest') ? 'newest' : c.innerText.includes('Open older') ? 'older' : 'nostatus'));
   check('newest first within a section, and no status counts as Open', order.join(',') === 'newest,older,nostatus', order.join(','));
   await page.screenshot({ path: path.join(OUT, 'suggestion-status.png'), fullPage: true });
+  // The AI import panel is behind a quiet admin icon button ("No need to make it so prominent").
+  const bar = () => page.evaluate(() => { const b = document.getElementById('ai-suggestions-import-bar'), t = document.getElementById('ai-suggestions-toggle'); return { icon: !!t && t.checkVisibility(), expanded: t && t.getAttribute('aria-expanded'), open: b.checkVisibility(), github: document.getElementById('ai-suggestions-import-btn').checkVisibility() }; });
+  let ai = await bar();
+  check('the AI import panel starts closed, behind an icon button', ai.icon && !ai.open && ai.expanded === 'false', JSON.stringify(ai));
+  await page.screenshot({ path: path.join(OUT, 'suggestion-ai-icon.png'), clip: { x: 240, y: 260, width: 1200, height: 160 } });
+  await page.click('#ai-suggestions-toggle'); await page.waitForTimeout(200);
+  ai = await bar();
+  check('...the icon opens it with both import actions', ai.open && ai.github && ai.expanded === 'true', JSON.stringify(ai));
+  await page.screenshot({ path: path.join(OUT, 'suggestion-ai-open.png'), clip: { x: 240, y: 260, width: 1200, height: 240 } });
+  await page.click('#ai-suggestions-toggle'); await page.waitForTimeout(200);
+  ai = await bar();
+  check('...and closes it again', !ai.open && ai.expanded === 'false', JSON.stringify(ai));
   await page.click('[data-suggestion-section="fixed"] > summary'); await page.waitForTimeout(300);
   r = await read();
   check('a folded section opens on click', r[2] === 'Fixed 2 (open):2', r[2]);
