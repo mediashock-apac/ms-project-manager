@@ -4163,7 +4163,7 @@ Client contact / Key links columns).
   Jobs stay in the sheet**. One inline editor at a time (`wipEdit`; for a task status its
   `project` holds the task id), drafts in `wipDraft` and focus restored after each live re-render
   so someone else's save doesn't wipe what you're typing. Enter saves, Escape cancels.
-- **Projects are grouped by WIP category**, in Suits' order (labels in sentence case, like every in-page label): Active jobs, Content marketing,
+- **Projects are grouped by WIP category**, in Suits' order (labels in sentence case, like every in-page label): Client jobs (key `active`; renamed from "Active jobs" 2026-10-30, from a Suggestion), Content marketing,
   Pitches, Hot leads, Cold leads, Closing reports (`WIP_CATEGORIES`), then **Not sorted** for
   anything uncategorised, so nothing vanishes. Empty groups are skipped; within a group, soonest
   open deadline first. Stored as `projects/{id}.wipCategory` (absent or an unknown key = Not
@@ -4183,19 +4183,19 @@ Client contact / Key links columns).
     answer, and was reversed the same day once the sheet's Cold leads (a client + one line, no
     tasks, no Drive folder) and Pending closing reports (all work done) were shown — see below.
 - **A categorised project can stay on WIP with no open tasks** (`wipListsWithoutOpenTasks`), which
-  is what keeps leads and Closing reports populated. **But a finished Active job or Content
+  is what keeps leads and Closing reports populated. **But a finished Client job or Content
   marketing project leaves on its own** (2026-10-19, asked: "Is it done? If it's done it should
   not be here", option A over an "All done · Remove from WIP" button that would be a click per
   project): in those two categories (`WIP_DONE_LEAVES`) a project with no open task and no typed
   deliverable isn't listed, desktop and phone. One that never had a task stays while it has a
   note. New open work brings it back. WIP loads archived tasks to tell "finished" from "new".
   **Trade-off, accepted:** a job that needs a closing report must be moved to Closing reports
-  before its last task is done. "+ Add entry" refuses a bare Active/Content entry with nothing
+  before its last task is done. "+ Add entry" refuses a bare Client job/Content entry with nothing
   open and asks for a first deliverable, so it can't vanish on save. Not sorted still takes
   anything off by hand. `tests/wip-finished.test.js`.
 - **"Finished this week"** (`wipFinishedProjects`, `wipFinishedHtml`; same day, recommended and
   picked): a folded line at the bottom of By project listing projects whose work all finished in
-  the last `WIP_FINISHED_DAYS` (7) and that WIP no longer lists (Active jobs, Content marketing,
+  the last `WIP_FINISHED_DAYS` (7) and that WIP no longer lists (Client jobs, Content marketing,
   uncategorised). Finished = latest `completedAt`/`archivedAt` of its tasks (tasks done before
   `completedAt` existed have no date and aren't listed). Each row: name (opens the Projects card),
   "Finished Oct 17", and **Move to Closing reports** (one click; it's then listed there). It

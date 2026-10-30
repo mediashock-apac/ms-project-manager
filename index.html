@@ -2921,7 +2921,7 @@
   // project header by anyone on the team. An unknown stored key reads as "Not sorted", so a
   // category can be renamed or retired here without migrating data.
   var WIP_CATEGORIES = [
-    { key: 'active', label: 'Active jobs' },
+    { key: 'active', label: 'Client jobs' },
     { key: 'content', label: 'Content marketing' },
     { key: 'pitch', label: 'Pitches' },
     { key: 'hot', label: 'Hot leads' },
@@ -2937,7 +2937,7 @@
     return wipCategoryLabel(key) ? key : '';
   }
   // Finished projects leave WIP on their own (2026-10-19, asked: "Is it done? If it's done it
-  // should not be here", option A). A project in Active jobs or Content marketing with no open task
+  // should not be here", option A). A project in Client jobs or Content marketing with no open task
   // and no typed-in deliverable is done, so it isn't listed. Leads (no tasks yet) and Closing
   // reports (work done, report to write) still stay with nothing open: that's what they're for.
   // An entry that never had a task stays while it has a note (someone typed it into WIP).
@@ -2955,7 +2955,7 @@
   }
   // Finished this week (2026-10-19, asked after the rule above: the room never saw what wrapped,
   // and a job needing a closing report vanished before anyone could move it). Projects whose work
-  // all finished in the last WIP_FINISHED_DAYS, not listed on WIP any more: Active jobs, Content
+  // all finished in the last WIP_FINISHED_DAYS, not listed on WIP any more: Client jobs, Content
   // marketing and uncategorised ones (leads and Closing reports are still listed). Finished = the
   // latest completedAt / archivedAt among its tasks. Derived, so it empties itself after a week.
   var WIP_FINISHED_DAYS = 7;
@@ -3080,7 +3080,7 @@
   }
   // Owner of a WIP entry (`projects/{id}.wipOwner`, a roster display name) -- the sheet's
   // "Internal PIC", one per project. Only offered for Pitches, Hot leads, Cold leads and Closing
-  // reports (WIP_OWNER_CATEGORIES): Active jobs and Content marketing already have an owner on
+  // reports (WIP_OWNER_CATEGORIES): Client jobs and Content marketing already have an owner on
   // every task. Asked for directly. Not counted in workload; it is a who-to-ask, not a task.
   var WIP_OWNER_CATEGORIES = ['pitch', 'hot', 'cold', 'closing'];
   function setProjectWipOwner(name, owner) {
@@ -18103,11 +18103,11 @@
       var entryName = (d.entryName || '').trim();
       if (!entryName) { showToast('Give the entry a name', 'info'); return; }
       if (!d.cat) { showToast('Pick a category for it', 'info'); return; }
-      // An Active job / Content marketing entry with nothing open would leave WIP straight away.
+      // A Client job / Content marketing entry with nothing open would leave WIP straight away.
       var entryKey = projectKey(canonicalProjectName(entryName));
       if (WIP_DONE_LEAVES.indexOf(d.cat) !== -1 && !(d.entryNote || '').trim() &&
           !activeTasks().some(function (t) { return t.status !== 'Done' && t.project && projectKey(t.project) === entryKey; })) {
-        showToast("Add a first deliverable too: an active job with nothing open doesn't show on WIP", 'info');
+        showToast("Add a first deliverable too: a client job with nothing open doesn't show on WIP", 'info');
         return;
       }
       p = addWipEntry(entryName.slice(0, 100), d.cat, (d.entryNote || '').trim().slice(0, 200));
@@ -18229,7 +18229,7 @@
     open.forEach(function (t) { (byProject[t.project || ''] = byProject[t.project || ''] || []).push(t); });
     // A project with a category can stay listed with NO open tasks: a lead typed straight into
     // WIP ("+ Add entry", no tasks at all) and a finished project waiting on its closing report.
-    // A finished Active job / Content marketing project leaves on its own (wipListsWithoutOpenTasks);
+    // A finished Client job / Content marketing project leaves on its own (wipListsWithoutOpenTasks);
     // Not sorted takes anything off by hand.
     projectDocs.forEach(function (pd) {
       if (pd.name && !byProject[pd.name] && wipListsWithoutOpenTasks(pd.name)) byProject[pd.name] = [];
@@ -18684,6 +18684,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-30a', date: '2026-10-30', items: [
+      { type: 'improved', title: 'Active jobs is now Client jobs', text: "On WIP Meeting, the first project group is now called Client jobs. Nothing moved: every project that was under Active jobs is under Client jobs." }
+    ] },
     { id: '2026-10-22m', date: '2026-10-22', items: [
       { type: 'improved', title: 'Overtime in Time by person', text: "On a project card, Time by person now shows how much of each person's hours was overtime, for example \"Deane 11h · 1h OT\". It's part of their hours, not extra on top, and only shows for people who logged overtime. Hovering a total shows it too." }
     ] },
@@ -22702,7 +22705,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-22T07:49:12Z";
+  var CURRENT_BUILD_VERSION = "2026-10-30T05:58:20Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

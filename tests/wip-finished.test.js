@@ -1,4 +1,4 @@
-// wip-finished -- finished Active jobs / Content marketing projects leave WIP on their own; leads, closing reports and typed-in entries stay. Browser test against index.html with Firebase stubbed (see tests/README.md).
+// wip-finished -- finished Client jobs / Content marketing projects leave WIP on their own; leads, closing reports and typed-in entries stay. Browser test against index.html with Firebase stubbed (see tests/README.md).
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
@@ -96,9 +96,9 @@ async function skipTours(page) {
   await skipTours(page);
   await page.click('[data-view-btn="wip"]'); await page.waitForTimeout(900); await skipTours(page);
   const wip = await page.textContent('#view-wip');
-  check('finished Active job (all tasks Done) is gone', !wip.includes('Mediashock Office Reno'));
+  check('finished Client job (all tasks Done) is gone', !wip.includes('Mediashock Office Reno'));
   check('finished Content project (tasks archived, old note) is gone', !wip.includes('Claude INT Onboarding'));
-  check('an Active entry with nothing in it is gone', !wip.includes('Bare Active'));
+  check('a Client job entry with nothing in it is gone', !wip.includes('Bare Active'));
   check('a project with open work stays', wip.includes('Live Job'));
   check('Closing reports stay with nothing open', wip.includes('Closing Co'));
   check('leads stay with nothing open', wip.includes('Cold Lead Ltd'));
@@ -122,12 +122,12 @@ async function skipTours(page) {
   await page.evaluate(() => window.__fb.remote(function (d) { d.tasks.t9 = { name: 'Snag list', project: 'Mediashock Office Reno', priority: 'Medium', status: 'In Progress', startDate: '2026-10-19', deadline: '2026-10-24', assignee: 'Deane Cheng', checklist: [], comments: [], timeEntries: [], createdAt: '2026-10-19T00:00:00Z' }; }));
   await page.waitForTimeout(400);
   check('new open work puts it back on WIP', (await page.textContent('#view-wip')).includes('Mediashock Office Reno'));
-  // + Add entry: a bare Active job is refused with a reason, not added and then hidden
+  // + Add entry: a bare Client job is refused with a reason, not added and then hidden
   await page.click('#view-wip [data-wip-act="add-entry"]'); await page.waitForTimeout(200);
   await page.fill('#view-wip [data-wip-field="entryName"]', 'Brand New Job');
   await page.click('#view-wip [data-wip-act="entry-cat"][data-id="active"]'); await page.waitForTimeout(100);
   await page.click('#view-wip [data-wip-act="save"]'); await page.waitForTimeout(400);
-  check('bare Active entry asks for a first deliverable', /first deliverable/.test(await page.textContent('#toast-container')));
+  check('bare Client job entry asks for a first deliverable', /first deliverable/.test(await page.textContent('#toast-container')));
   check('and is not saved', !(await page.evaluate(() => Object.values(window.__fb.data.projects).some(p => p.name === 'Brand New Job'))));
   await page.fill('#view-wip [data-wip-field="entryNote"]', 'Launch film');
   await page.click('#view-wip [data-wip-act="save"]'); await page.waitForTimeout(500);
