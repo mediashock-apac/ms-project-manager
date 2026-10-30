@@ -9149,7 +9149,7 @@
                 '<button type="button" class="comment-remove p-1 text-zinc-300 dark:text-zinc-600 hover:text-rose-500 dark:hover:text-rose-400" data-i="' + i + '" aria-label="Remove comment">' + svgIcon('x', 'w-3 h-3') + '</button>' +
               '</div>' +
             '</div>' +
-            '<p class="text-sm text-zinc-700 dark:text-zinc-200">' + enrichCommentText(c.text) + '</p>' +
+            '<p class="text-sm text-zinc-700 dark:text-zinc-200 whitespace-pre-wrap break-words">' + enrichCommentText(c.text) + '</p>' +
           '</div>' +
           kids.map(function (k) { return commentNode(k, depth + 1); }).join('') +
         '</div>'
@@ -18684,6 +18684,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-30b', date: '2026-10-30', items: [
+      { type: 'fixed', title: 'Comments keep their line breaks', text: "A comment typed over several lines in a task now shows on those lines once posted, blank lines and indents included. Comments already posted show their lines too. Thanks, Kan!" }
+    ] },
     { id: '2026-10-30a', date: '2026-10-30', items: [
       { type: 'improved', title: 'Active jobs is now Client jobs', text: "On WIP Meeting, the first project group is now called Client jobs. Nothing moved: every project that was under Active jobs is under Client jobs." }
     ] },
@@ -22705,7 +22708,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-30T05:58:20Z";
+  var CURRENT_BUILD_VERSION = "2026-10-30T06:25:41Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
