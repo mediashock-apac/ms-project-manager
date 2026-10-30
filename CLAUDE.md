@@ -4772,6 +4772,17 @@ draws one Timeline diamond instead of six, and hides a late size inside the batc
   the field; a year still being typed (0002, 0020...) is ignored and the finished date is measured from
   the deadline the person started from. A teammate's live change to the deadline offers nothing. Not
   dependencies (still removed): it only moves steps inside one task.
+- **A step can be a date range (2026-10-30)** (from a Suggestion: "a range of dates for each
+  checklist item ... either a single date or a range"). Optional `item.start`; **`due` stays the END
+  date and the only date every other view reads** (Timeline/WIP diamonds, Calendar, late, Focus, Team
+  load, Clash, phone). Decided: "I don't wanna mess with existing way the timeline works", so for now
+  the range shows ONLY in the task window's checklist ("Oct 12–16"; in a dated group the heading
+  carries the due date and the row says "From Oct 12"). "+ Start" appears beside a picked due date
+  (add row and step editor), never at rest; TBD or no due date means no range. `setStepRange` swaps a
+  back-to-front pair and drops a start equal to the due date; read it only through `stepStart(item)`,
+  which ignores a start that is no longer before `due`. Kept by import, copy steps (shifted like the
+  due date) and the deadline shift (moves as a whole); a drag into another date's group drops it.
+  Google Calendar export makes a multi-day event. `tests/checklist-range.test.js`.
 - **The Add button says "Add 6"** once the box holds several lines, so a paragraph pasted by
   mistake shows what it would do before it's done.
 - **A hint shows only while the add row has focus** (`#task-checklist-hint`, focusin/focusout on

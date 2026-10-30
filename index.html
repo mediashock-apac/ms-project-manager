@@ -2131,7 +2131,11 @@
                pasted). Enter adds them all. -->
           <textarea id="task-checklist-input" rows="1" placeholder="Add checklist items…" title="Enter adds. Shift+Enter or pasting several lines adds one item per line, all with the date and link set here." class="flex-[2] min-w-[9rem] text-sm leading-5 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 resize-none overflow-y-auto max-h-40 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400"></textarea>
           <input type="text" id="task-checklist-link-input" placeholder="Paste a link…" class="flex-1 min-w-[8rem] text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
-          <input type="date" id="task-checklist-due-input" class="text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+          <!-- Optional start date (a range step: "Oct 12–16"). Hidden until "+ Start" is clicked after a
+               due date is picked; the due date stays the one every other view reads. -->
+          <span id="task-checklist-start-wrap" class="hidden items-center gap-2"><input type="date" id="task-checklist-start-input" aria-label="Start date" title="Start date" class="text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400"><span class="text-xs text-zinc-500 dark:text-zinc-400">to</span></span>
+          <input type="date" id="task-checklist-due-input" aria-label="Due date" title="Due date" class="text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400">
+          <button type="button" id="task-checklist-start-btn" title="Make this a date range" class="hidden h-[38px] text-xs font-semibold text-brand-800 dark:text-brand-300 hover:underline">+ Start</button>
           <label class="h-[38px] flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400"><input type="checkbox" id="task-checklist-tbd-check" class="brand-checkbox w-3.5 h-3.5 rounded border border-zinc-300 dark:border-zinc-600"> TBD</label>
           <div id="task-checklist-add-people" class="min-h-[38px] flex flex-wrap items-center gap-1.5"></div>
           <label title="Add to Google Calendar once a date is set" id="task-checklist-gcal-label" class="h-[38px] flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400 opacity-50"><input type="checkbox" id="task-checklist-gcal-check" disabled class="brand-checkbox w-3.5 h-3.5 rounded border border-zinc-300 dark:border-zinc-600"> Calendar</label>
@@ -8330,15 +8334,41 @@
   // due date up to same line where the edit button is"; it was a line of its own under the text).
   // Rose when it is overdue and still open, amber when it falls after the task's own deadline (the
   // Timeline would otherwise draw the marker beyond the bar and contradict it); the tooltip says why.
-  function checklistDueLabelHtml(item, i) {
+  /* Step date ranges (asked: "a range of dates for each checklist item ... either a single date or a
+     range"). An optional `start` on a step; `due` stays the END date and the one every other view
+     reads (Timeline, WIP, Calendar, late, Focus, Team load, Clash), so for now a range only shows in
+     the task window's checklist ("Oct 12–16"). `start` is kept only while it is a real date before
+     `due`: setStepRange swaps a back-to-front pair and drops a start equal to the due date.
+     stepStart() is the one reader, so a start left behind by a later due change is ignored. */
+  function stepStart(item) {
+    return item && item.start && item.due && parseDate(item.start) && item.start < item.due ? item.start : '';
+  }
+  function setStepRange(item, start, due) {
+    delete item.start;
+    if (start && due && parseDate(start) && start !== due) {
+      if (start > due) { var t = start; start = due; due = t; }
+      item.start = start;
+    }
+    return due;
+  }
+  function stepRangeText(item) {
+    var s = parseDate(stepStart(item)), d = parseDate(item.due);
+    if (!s) return formatShortDate(item.due);
+    return s.getMonth() === d.getMonth() && s.getFullYear() === d.getFullYear()
+      ? formatShortDate(item.start) + '–' + d.getDate()
+      : formatShortDate(item.start) + ' – ' + formatShortDate(item.due);
+  }
+  function checklistDueLabelHtml(item, i, inGroup) {
     var base = 'shrink-0 whitespace-nowrap text-[11px] ';
+    // In a dated group the heading carries the due date; a range still names its start on the row.
+    if (inGroup) return stepStart(item) ? '<span class="' + base + 'text-zinc-500 dark:text-zinc-400" title="' + escapeHtml(stepRangeText(item)) + '">From ' + formatShortDate(item.start) + '</span>' : '';
     if (!item.due) return item.dueTbd ? '<span class="' + base + 'text-zinc-500 dark:text-zinc-400">Due TBD</span>' : '';
     var taskDeadline = document.getElementById('task-deadline').value;
     var overdue = stepIsLate({ status: document.getElementById('task-status').value }, item);
     var after = taskDeadline && item.due > taskDeadline;
     var cls = overdue ? 'font-semibold text-rose-600 dark:text-rose-400' : (after ? 'font-semibold text-amber-700 dark:text-amber-400' : 'text-zinc-500 dark:text-zinc-400');
     var why = overdue ? 'Overdue' : after ? 'Due after the task deadline' : '';
-    return '<span class="' + base + cls + '"' + (why ? ' title="' + why + '"' : '') + '>Due ' + formatShortDate(item.due) + (overdue ? ' · late' : '') + '</span>';
+    return '<span class="' + base + cls + '"' + (why ? ' title="' + why + '"' : '') + '>' + (stepStart(item) ? stepRangeText(item) : 'Due ' + formatShortDate(item.due)) + (overdue ? ' · late' : '') + '</span>';
   }
 
   /* Checklist items can be handed to a person -- asked for directly: "checklist to be able to
@@ -8434,8 +8464,11 @@
                     '<input type="text" class="checklist-text-input w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400 px-2 py-1" maxlength="300" value="' + escapeHtml(item.text) + '">' +
                     '<div class="flex flex-wrap items-center gap-2">' +
                       '<input type="text" class="checklist-link-input flex-1 min-w-[8rem] text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400 px-2 py-1" placeholder="Paste a link…" value="' + escapeHtml(item.link || '') + '">' +
-                      '<input type="date" class="checklist-due-input text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400 px-2 py-1" value="' + escapeHtml(item.due || '') + '"' + (item.dueTbd && !item.due ? ' disabled' : '') + '>' +
+                      // Start date: shown once set, else behind "+ Start" (only with a due date).
+                      '<span class="checklist-start-wrap ' + (stepStart(item) ? 'inline-flex' : 'hidden') + ' items-center gap-2"><input type="date" class="checklist-start-input text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400 px-2 py-1" aria-label="Start date" title="Start date" value="' + escapeHtml(stepStart(item)) + '"><span class="text-xs text-zinc-500 dark:text-zinc-400">to</span></span>' +
+                      '<input type="date" aria-label="Due date" title="Due date" class="checklist-due-input text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400 px-2 py-1" value="' + escapeHtml(item.due || '') + '"' + (item.dueTbd && !item.due ? ' disabled' : '') + '>' +
                       '<label class="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400"><input type="checkbox" class="checklist-tbd-input brand-checkbox w-3.5 h-3.5 rounded border border-zinc-300 dark:border-zinc-600"' + (item.dueTbd && !item.due ? ' checked' : '') + '> TBD</label>' +
+                      '<button type="button" class="checklist-start-add ' + (!stepStart(item) && item.due ? '' : 'hidden ') + 'text-xs font-semibold text-brand-800 dark:text-brand-300 hover:underline" title="Make this a date range">+ Start</button>' +
                       '<button type="button" class="checklist-edit-done text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">Done</button>' +
                     '</div>' +
                     checklistPeopleEditorHtml(stepPeople(item)) +
@@ -8455,7 +8488,7 @@
                   (item.link && !linkOnHead ? '<div>' + linkChipHtml(item.link) + '</div>' : '') +
                   (stepPeople(item).length && !peopleOnHead ? '<span class="flex items-center gap-1 text-[11px] text-zinc-500 dark:text-zinc-400">' + stepPeople(item).map(function (n) { return avatarHtml(n, 'w-3.5 h-3.5 shrink-0', 'text-[8px]'); }).join('') + escapeHtml(stepPeopleLabel(item)) + '</span>' : '') +
                 '</div>') +
-              (inGroup || editing ? '' : checklistDueLabelHtml(item, i)) +
+              (editing ? '' : checklistDueLabelHtml(item, i, inGroup)) +
               (itemMinutes ? '<span class="shrink-0 text-[10px] font-semibold text-zinc-400 dark:text-zinc-500" title="Time logged against this item">' + formatDuration(itemMinutes) + '</span>' : '') +
               '<button type="button" class="checklist-edit-toggle shrink-0 p-1 text-zinc-300 dark:text-zinc-600 hover:text-zinc-500 dark:hover:text-zinc-400" data-checklist-i="' + i + '" title="Edit item" aria-label="Edit item">' + svgIcon('pencil', 'w-3.5 h-3.5') + '</button>' +
               '<button type="button" class="checklist-remove p-1 text-zinc-300 dark:text-zinc-600 hover:text-rose-500 dark:hover:text-rose-400 shrink-0" data-checklist-i="' + i + '" aria-label="Remove item">' + svgIcon('x', 'w-3 h-3') + '</button>' +
@@ -8530,7 +8563,8 @@
   // The user confirms in Google Calendar; later date changes here do not update that event.
   function openChecklistInGoogleCalendar(item) {
     if (!item || !item.due || !/^\d{4}-\d{2}-\d{2}$/.test(item.due)) return;
-    var start = item.due.replace(/-/g, '');
+    // A range step becomes a multi-day all-day event (end date exclusive, hence the +1 below).
+    var start = (stepStart(item) || item.due).replace(/-/g, '');
     var d = new Date(item.due + 'T00:00:00Z');
     d.setUTCDate(d.getUTCDate() + 1);
     var end = d.toISOString().slice(0, 10).replace(/-/g, '');
@@ -8571,7 +8605,9 @@
       item.link = link ? normalizeUrl(link) : '';
       var due = box.querySelector('.checklist-due-input').value;
       var tbd = box.querySelector('.checklist-tbd-input').checked;
+      var startEl = box.querySelector('.checklist-start-input');
       delete item.due; delete item.dueTbd;
+      due = setStepRange(item, startEl && !tbd ? startEl.value : '', due);
       if (due) item.due = due; else if (tbd) item.dueTbd = true;
       // Deleted rather than stored as '' when cleared, like due/dueTbd above.
       setStepPeople(item, checklistPeopleInBox(box));
@@ -8603,6 +8639,13 @@
       return;
     }
     if (e.target.closest('.checklist-edit-done')) { commitChecklistEdit(); return; }
+    var startAdd = e.target.closest('.checklist-start-add');
+    if (startAdd) {
+      var sBox = startAdd.closest('[data-checklist-editor-i]');
+      var sWrap = sBox && sBox.querySelector('.checklist-start-wrap');
+      if (sWrap) { sWrap.classList.remove('hidden'); sWrap.classList.add('inline-flex'); startAdd.classList.add('hidden'); sWrap.querySelector('input').focus(); }
+      return;
+    }
     var personRemove = e.target.closest('.checklist-person-remove');
     if (personRemove) {
       var pBox = personRemove.closest('[data-checklist-editor-i]');
@@ -8645,10 +8688,23 @@
       if (addBox && added) redrawChecklistPeople(addBox, checklistPeopleInBox(addBox).concat([added]));
       return;
     }
+    if (e.target.classList.contains('checklist-due-input')) {
+      // "+ Start" only makes sense once there is a due date to end the range on.
+      var dBox = e.target.closest('[data-checklist-editor-i]');
+      var dWrap = dBox && dBox.querySelector('.checklist-start-wrap');
+      var dAdd = dBox && dBox.querySelector('.checklist-start-add');
+      if (dAdd && dWrap) dAdd.classList.toggle('hidden', !e.target.value || !dWrap.classList.contains('hidden'));
+      return;
+    }
     if (!e.target.classList.contains('checklist-tbd-input')) return;
     var box = e.target.closest('[data-checklist-editor-i]');
     var dateEl = box && box.querySelector('.checklist-due-input');
     if (dateEl) { if (e.target.checked) dateEl.value = ''; dateEl.disabled = e.target.checked; }
+    // TBD has no range: hide the start (it is ignored on save while TBD is ticked).
+    var tbdWrap = box && box.querySelector('.checklist-start-wrap');
+    if (tbdWrap && e.target.checked) { tbdWrap.classList.add('hidden'); tbdWrap.classList.remove('inline-flex'); }
+    var tbdAdd = box && box.querySelector('.checklist-start-add');
+    if (tbdAdd && e.target.checked) tbdAdd.classList.add('hidden');
   });
   document.getElementById('task-checklist-editor').addEventListener('focusout', function (e) {
     var box = e.target.closest ? e.target.closest('[data-checklist-editor-i]') : null;
@@ -8703,7 +8759,8 @@
     var dropTarget = currentChecklist[targetIndex];
     var dragged = currentChecklist[fromIndex];
     if (checklistIsGrouped() && dropTarget && dragged && checklistGroupKey(dropTarget) !== checklistGroupKey(dragged)) {
-      delete dragged.due; delete dragged.dueTbd;
+      // A range doesn't carry into another date's group: the step takes that single date.
+      delete dragged.due; delete dragged.dueTbd; delete dragged.start;
       if (dropTarget.due) dragged.due = dropTarget.due; else if (dropTarget.dueTbd) dragged.dueTbd = true;
       // Never change a date silently: someone only meaning to reorder should see that it moved.
       showToast('"' + dragged.text + '" ' + (dragged.due ? 'is now due ' + formatShortDate(dragged.due) : dragged.dueTbd ? 'is now due TBD' : 'no longer has a date'), 'info');
@@ -8913,6 +8970,7 @@
       var c = { id: uid(), text: String(it.text).trim(), done: false };
       var due = pair && it.due ? copiedStepDue(it.due, pair[0], pair[1]) : '';
       if (due) { c.due = due; dated++; } else if (it.dueTbd && !it.due) c.dueTbd = true;
+      if (due && stepStart(it)) setStepRange(c, copiedStepDue(it.start, pair[0], pair[1]), due);
       setStepPeople(c, stepPeople(it));
       return c;
     });
@@ -9015,15 +9073,21 @@
       var was = {};
       currentChecklist = currentChecklist.map(function (it) {
         if (!shiftableStep(it)) return it;
-        was[it.id] = it.due;
-        return Object.assign({}, it, { due: shiftedStepDue(it.due, days) });
+        was[it.id] = { due: it.due, start: it.start };
+        // A range moves as a whole: its start shifts by the same number of days.
+        var moved = Object.assign({}, it, { due: shiftedStepDue(it.due, days) });
+        if (stepStart(it)) moved.start = toDateInputValue(addDays(parseDate(it.start), days));
+        return moved;
       });
       renderChecklistEditor();
       var moved = Object.keys(was).length;
       showToast('Moved ' + moved + (moved === 1 ? ' step ' : ' steps ') + span, 'success', { action: { label: 'Undo', onClick: function () {
         if (taskModal.classList.contains('hidden') || editingTaskId !== openFor) return;
         currentChecklist = currentChecklist.map(function (it) {
-          return it && was[it.id] ? Object.assign({}, it, { due: was[it.id] }) : it;
+          if (!it || !was[it.id]) return it;
+          var back = Object.assign({}, it, { due: was[it.id].due });
+          if (was[it.id].start) back.start = was[it.id].start; else delete back.start;
+          return back;
         });
         renderChecklistEditor();
       } } });
@@ -9037,6 +9101,8 @@
     renderChecklistAddPeople();
     document.getElementById('task-checklist-link-input').value = '';
     document.getElementById('task-checklist-due-input').value = '';
+    document.getElementById('task-checklist-start-input').value = '';
+    setChecklistStartOpen(false);
     document.getElementById('task-checklist-gcal-check').checked = false;
     document.getElementById('task-checklist-tbd-check').checked = false;
     syncChecklistGcalCheck();
@@ -9052,10 +9118,24 @@
     check.disabled = !hasDate;
     if (!hasDate) check.checked = false;
     document.getElementById('task-checklist-gcal-label').classList.toggle('opacity-50', !hasDate);
+    // No due date (or TBD): no range. "+ Start" shows only beside a picked due date.
+    var startOpen = !document.getElementById('task-checklist-start-wrap').classList.contains('hidden');
+    if (!hasDate && startOpen) { document.getElementById('task-checklist-start-input').value = ''; setChecklistStartOpen(false); startOpen = false; }
+    document.getElementById('task-checklist-start-btn').classList.toggle('hidden', !hasDate || startOpen);
   }
+  function setChecklistStartOpen(open) {
+    var wrap = document.getElementById('task-checklist-start-wrap');
+    wrap.classList.toggle('hidden', !open);
+    wrap.classList.toggle('flex', open);
+    document.getElementById('task-checklist-start-btn').classList.toggle('hidden', open || !document.getElementById('task-checklist-due-input').value);
+  }
+  document.getElementById('task-checklist-start-btn').addEventListener('click', function () {
+    setChecklistStartOpen(true);
+    document.getElementById('task-checklist-start-input').focus();
+  });
   document.getElementById('task-checklist-due-input').addEventListener('change', syncChecklistGcalCheck);
   document.getElementById('task-checklist-tbd-check').addEventListener('change', syncChecklistGcalCheck);
-  ['task-checklist-link-input', 'task-checklist-due-input'].forEach(function (id) {
+  ['task-checklist-link-input', 'task-checklist-due-input', 'task-checklist-start-input'].forEach(function (id) {
     document.getElementById(id).addEventListener('keydown', function (e) {
       if (e.key === 'Enter') { e.preventDefault(); addChecklistItem(); }
     });
@@ -9091,14 +9171,18 @@
     var link = document.getElementById('task-checklist-link-input').value.trim();
     var due = document.getElementById('task-checklist-due-input').value;
     var tbd = !due && document.getElementById('task-checklist-tbd-check').checked;
+    var start = due ? document.getElementById('task-checklist-start-input').value : '';
     var added = lines.map(function (text) {
       var item = { id: uid(), text: sentenceCase(text), done: false };
       if (link) item.link = normalizeUrl(link);
-      if (due) item.due = due; else if (tbd) item.dueTbd = true;
+      var d = setStepRange(item, start, due);
+      if (d) item.due = d; else if (tbd) item.dueTbd = true;
       if (checklistAddPeople.length) setStepPeople(item, checklistAddPeople);
       return item;
     });
     var wantsCalendar = !!due && document.getElementById('task-checklist-gcal-check').checked;
+    due = added[0].due;   // a back-to-front range was swapped by setStepRange
+    start = added[0].start || '';
     added.forEach(function (item) { currentChecklist.push(item); });
     input.value = '';
     autosizeChecklistInput();
@@ -9106,7 +9190,7 @@
     renderChecklistEditor();
     input.focus();
     // One calendar event for the batch, never one tab per item.
-    if (wantsCalendar) openChecklistInGoogleCalendar(added.length === 1 ? added[0] : { text: added.map(function (it) { return it.text; }).join(', '), due: due, assignees: stepPeople(added[0]) });
+    if (wantsCalendar) openChecklistInGoogleCalendar(added.length === 1 ? added[0] : { text: added.map(function (it) { return it.text; }).join(', '), due: due, start: start, assignees: stepPeople(added[0]) });
   }
 
   document.getElementById('task-checklist-add-btn').addEventListener('click', addChecklistItem);
@@ -18684,6 +18768,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-30d', date: '2026-10-30', items: [
+      { type: 'new', title: 'Checklist steps can run over several days', text: "Pick a step's date, then click + Start beside it to give it a start date too. The step then reads like Oct 12–16 in the task's checklist. Its last day is still the due date everywhere else (Timeline, Calendar, reminders)." }
+    ] },
     { id: '2026-10-30c', date: '2026-10-30', items: [
       { type: 'improved', title: 'Content marketing is now Marketing', text: "On WIP Meeting, the Content marketing project group is now called Marketing. Nothing moved: every project that was under Content marketing is under Marketing." }
     ] },
@@ -20414,6 +20501,7 @@
       // Only set when valid: Firestore rejects `undefined` field values.
       if (item && item.due && parseDate(item.due)) clean.due = String(item.due);
       else if (item && item.dueTbd === true) clean.dueTbd = true;
+      if (clean.due && stepStart(item)) clean.start = String(item.start);
       if (item && typeof item.assignee === 'string' && item.assignee) clean.assignee = item.assignee.slice(0, 100);
       if (item && Array.isArray(item.assignees)) setStepPeople(clean, item.assignees.filter(function (n) { return typeof n === 'string'; }).map(function (n) { return n.slice(0, 100); }).slice(0, 20));
       return clean;
@@ -22711,7 +22799,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-30T07:28:50Z";
+  var CURRENT_BUILD_VERSION = "2026-10-30T07:46:25Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
