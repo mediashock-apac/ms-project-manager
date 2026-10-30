@@ -1,4 +1,4 @@
-// wip-finished -- finished Client jobs / Content marketing projects leave WIP on their own; leads, closing reports and typed-in entries stay. Browser test against index.html with Firebase stubbed (see tests/README.md).
+// wip-finished -- finished Client jobs / Marketing projects leave WIP on their own; leads, closing reports and typed-in entries stay. Browser test against index.html with Firebase stubbed (see tests/README.md).
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');

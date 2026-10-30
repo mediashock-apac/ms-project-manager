@@ -4163,7 +4163,7 @@ Client contact / Key links columns).
   Jobs stay in the sheet**. One inline editor at a time (`wipEdit`; for a task status its
   `project` holds the task id), drafts in `wipDraft` and focus restored after each live re-render
   so someone else's save doesn't wipe what you're typing. Enter saves, Escape cancels.
-- **Projects are grouped by WIP category**, in Suits' order (labels in sentence case, like every in-page label): Client jobs (key `active`; renamed from "Active jobs" 2026-10-30, from a Suggestion), Content marketing,
+- **Projects are grouped by WIP category**, in Suits' order (labels in sentence case, like every in-page label): Client jobs (key `active`; renamed from "Active jobs" 2026-10-30, from a Suggestion), Marketing (key `content`; renamed from "Content marketing" 2026-10-30, from a Suggestion),
   Pitches, Hot leads, Cold leads, Closing reports (`WIP_CATEGORIES`), then **Not sorted** for
   anything uncategorised, so nothing vanishes. Empty groups are skipped; within a group, soonest
   open deadline first. Stored as `projects/{id}.wipCategory` (absent or an unknown key = Not
@@ -4177,7 +4177,7 @@ Client contact / Key links columns).
   (`wipCategoryPicking`, kept in state so a live re-render doesn't close it — a native `<select>`
   would snap shut on every roster heartbeat). Anyone can change it (same as status); logged to
   Activity as `project_category`. No rules change.
-  - Decided with the user: **set by hand in WIP, anyone can change it**; **Content marketing sits
+  - Decided with the user: **set by hand in WIP, anyone can change it**; **Marketing (then Content marketing) sits
     second as listed** — this replaced a name-matched "Mediashock LinkedIn always last" rule
     shipped an hour earlier. "A lead needs at least one open task to appear" was the first
     answer, and was reversed the same day once the sheet's Cold leads (a client + one line, no
@@ -4195,7 +4195,7 @@ Client contact / Key links columns).
   anything off by hand. `tests/wip-finished.test.js`.
 - **"Finished this week"** (`wipFinishedProjects`, `wipFinishedHtml`; same day, recommended and
   picked): a folded line at the bottom of By project listing projects whose work all finished in
-  the last `WIP_FINISHED_DAYS` (7) and that WIP no longer lists (Client jobs, Content marketing,
+  the last `WIP_FINISHED_DAYS` (7) and that WIP no longer lists (Client jobs, Marketing,
   uncategorised). Finished = latest `completedAt`/`archivedAt` of its tasks (tasks done before
   `completedAt` existed have no date and aren't listed). Each row: name (opens the Projects card),
   "Finished Oct 17", and **Move to Closing reports** (one click; it's then listed there). It
@@ -4226,7 +4226,7 @@ Client contact / Key links columns).
     active project (a "+ Notes" line under every project would be clutter).
   - **Owner** — `wipOwner`, a roster name, the sheet's "Internal PIC", only for Pitches, Hot
     leads, Cold leads and Closing reports (`WIP_OWNER_CATEGORIES`, asked for by name); Active
-    jobs/Content marketing have owners on every task. Picked from roster pills (not a `<select>`,
+    jobs/Marketing have owners on every task. Picked from roster pills (not a `<select>`,
     which a live re-render would snap shut). Not counted in workload.
   - Header count reads "N deliverables" for an entry with text deliverables and no tasks, never
     "0 open". Deliverable/status/note/owner edits are not logged to Activity (only adding an entry

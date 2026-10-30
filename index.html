@@ -2922,7 +2922,7 @@
   // category can be renamed or retired here without migrating data.
   var WIP_CATEGORIES = [
     { key: 'active', label: 'Client jobs' },
-    { key: 'content', label: 'Content marketing' },
+    { key: 'content', label: 'Marketing' },
     { key: 'pitch', label: 'Pitches' },
     { key: 'hot', label: 'Hot leads' },
     { key: 'cold', label: 'Cold leads' },
@@ -2937,7 +2937,7 @@
     return wipCategoryLabel(key) ? key : '';
   }
   // Finished projects leave WIP on their own (2026-10-19, asked: "Is it done? If it's done it
-  // should not be here", option A). A project in Client jobs or Content marketing with no open task
+  // should not be here", option A). A project in Client jobs or Marketing with no open task
   // and no typed-in deliverable is done, so it isn't listed. Leads (no tasks yet) and Closing
   // reports (work done, report to write) still stay with nothing open: that's what they're for.
   // An entry that never had a task stays while it has a note (someone typed it into WIP).
@@ -2955,8 +2955,8 @@
   }
   // Finished this week (2026-10-19, asked after the rule above: the room never saw what wrapped,
   // and a job needing a closing report vanished before anyone could move it). Projects whose work
-  // all finished in the last WIP_FINISHED_DAYS, not listed on WIP any more: Client jobs, Content
-  // marketing and uncategorised ones (leads and Closing reports are still listed). Finished = the
+  // all finished in the last WIP_FINISHED_DAYS, not listed on WIP any more: Client jobs, Marketing
+  // and uncategorised ones (leads and Closing reports are still listed). Finished = the
   // latest completedAt / archivedAt among its tasks. Derived, so it empties itself after a week.
   var WIP_FINISHED_DAYS = 7;
   function wipFinishedProjects(listedNames) {
@@ -3080,7 +3080,7 @@
   }
   // Owner of a WIP entry (`projects/{id}.wipOwner`, a roster display name) -- the sheet's
   // "Internal PIC", one per project. Only offered for Pitches, Hot leads, Cold leads and Closing
-  // reports (WIP_OWNER_CATEGORIES): Client jobs and Content marketing already have an owner on
+  // reports (WIP_OWNER_CATEGORIES): Client jobs and Marketing already have an owner on
   // every task. Asked for directly. Not counted in workload; it is a who-to-ask, not a task.
   var WIP_OWNER_CATEGORIES = ['pitch', 'hot', 'cold', 'closing'];
   function setProjectWipOwner(name, owner) {
@@ -18103,7 +18103,7 @@
       var entryName = (d.entryName || '').trim();
       if (!entryName) { showToast('Give the entry a name', 'info'); return; }
       if (!d.cat) { showToast('Pick a category for it', 'info'); return; }
-      // A Client job / Content marketing entry with nothing open would leave WIP straight away.
+      // A Client job / Marketing entry with nothing open would leave WIP straight away.
       var entryKey = projectKey(canonicalProjectName(entryName));
       if (WIP_DONE_LEAVES.indexOf(d.cat) !== -1 && !(d.entryNote || '').trim() &&
           !activeTasks().some(function (t) { return t.status !== 'Done' && t.project && projectKey(t.project) === entryKey; })) {
@@ -18229,7 +18229,7 @@
     open.forEach(function (t) { (byProject[t.project || ''] = byProject[t.project || ''] || []).push(t); });
     // A project with a category can stay listed with NO open tasks: a lead typed straight into
     // WIP ("+ Add entry", no tasks at all) and a finished project waiting on its closing report.
-    // A finished Client job / Content marketing project leaves on its own (wipListsWithoutOpenTasks);
+    // A finished Client job / Marketing project leaves on its own (wipListsWithoutOpenTasks);
     // Not sorted takes anything off by hand.
     projectDocs.forEach(function (pd) {
       if (pd.name && !byProject[pd.name] && wipListsWithoutOpenTasks(pd.name)) byProject[pd.name] = [];
@@ -18684,6 +18684,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-10-30c', date: '2026-10-30', items: [
+      { type: 'improved', title: 'Content marketing is now Marketing', text: "On WIP Meeting, the Content marketing project group is now called Marketing. Nothing moved: every project that was under Content marketing is under Marketing." }
+    ] },
     { id: '2026-10-30b', date: '2026-10-30', items: [
       { type: 'fixed', title: 'Comments keep their line breaks', text: "A comment typed over several lines in a task now shows on those lines once posted, blank lines and indents included. Comments already posted show their lines too. Thanks, Kan!" }
     ] },
@@ -22708,7 +22711,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-10-30T06:25:41Z";
+  var CURRENT_BUILD_VERSION = "2026-10-30T07:28:50Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
