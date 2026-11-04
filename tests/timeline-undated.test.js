@@ -12,7 +12,7 @@ function check(name, ok, extra) { results.push((ok ? 'PASS ' : 'FAIL ') + name +
 
 function seed() {
   const now = new Date().toISOString();
-  const P = (o) => Object.assign({ departmentChosen: true, lastSeen: now, photoURL: null, toursSeen: ["cl-2026-10-07l", "welcome", "tours-intro"], updatesSeen: 'zzzz' }, o);
+  const P = (o) => Object.assign({ departmentChosen: true, lastSeen: now, photoURL: null, toursSeen: ["cl-2026-11-04a","cl-2026-10-07l", "welcome", "tours-intro"], updatesSeen: 'zzzz' }, o);
   const T = (o) => Object.assign({ priority: 'Medium', status: 'In Progress', assignee: 'Zenon Kwok Ze Yong', createdBy: 'Zenon Kwok Ze Yong', checklist: [], comments: [], timeEntries: [], createdAt: '2026-09-01T00:00:00Z' }, o);
   window.__fb = {
     seq: 1, writes: [],

@@ -11,7 +11,7 @@ function check(name, ok, extra) { results.push((ok ? 'PASS ' : 'FAIL ') + name +
 
 function seed() {
   const now = new Date().toISOString();
-  const P = (o) => Object.assign({ departmentChosen: true, lastSeen: now, photoURL: null, toursSeen: ["cl-2026-10-07l","welcome","tours-intro"], updatesSeen: 'zzzz' }, o);
+  const P = (o) => Object.assign({ departmentChosen: true, lastSeen: now, photoURL: null, toursSeen: ["cl-2026-11-04a","cl-2026-10-07l","welcome","tours-intro"], updatesSeen: 'zzzz' }, o);
   const base = { comments: [], timeEntries: [], createdAt: '2026-09-01T00:00:00Z', createdBy: 'Deane Cheng', priority: 'Medium', project: 'Google GWS', status: 'In Progress' };
   const T = (o) => Object.assign({}, base, o);
   window.__fb = {

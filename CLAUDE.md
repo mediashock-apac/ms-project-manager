@@ -31,7 +31,7 @@ Google Auth) so the whole team edits one live board together with real-time upda
   no caching, see comment in the file).
 - `version.txt` — a timestamp stamped on every deploy; polled client-side to trigger auto-reload.
 
-Views: Board, Timeline (Gantt), Calendar, People, Projects, Chat, **Events → WIP Meeting**, **Monday Meeting**,
+Views: **My Tasks**, Board, Timeline (Gantt), Calendar, People, Projects, Chat, **Events → WIP Meeting**, **Monday Meeting**,
 Activity, Suggestions, Archived, **New Updates**.
 
 Live at https://mediashock-apac.github.io/ms-project-manager/ (deployed via GitHub Pages, not Firebase
@@ -169,7 +169,7 @@ here (dependencies, Gantt grouping, the progress column) stay out even when a re
 
 ## Commands
 
-**Browser tests: `node tests/run.mjs`** (see `tests/README.md`). 42 suites, each loading
+**Browser tests: `node tests/run.mjs`** (see `tests/README.md`). 49 suites, each loading
 the real `index.html` in Chromium with Firebase replaced by `tests/fbstub.js`. They run on every push to
 `main` and every weekday at 7am Singapore (`.github/workflows/tests.yml`); a failure is a red X plus
 GitHub's email. Asked for directly: "Constantly run checks as I did today to make sure everything is
@@ -3127,6 +3127,23 @@ into two or three lines (measured). A zero-width space respects nowrap. Because 
 on copy, a document `copy` handler strips it, and every project-name save strips it (`stripZwsp`):
 the task form, quick add and WIP's "+ Add entry". **Any new place that saves a project name typed
 by hand should strip it too**, or a pasted name becomes a different project.
+
+### My Tasks (2026-11-04)
+
+From a Suggestion ("a view where all my tasks are shown in one single clean view, with the dates
+info"), placement approved first: **a page at the top of Work, above Board** (Asana My Tasks, Monday
+My Work, Linear My Issues). MY TASKS in index.html (`renderMyTasks`, `myTasksItems`, `#view-mytasks`).
+- **Yours** = tasks you own or are involved in (Calendar's "Mine" rule), plus open steps assigned to
+  you on other people's tasks as their own rows ("Step in <task>", indigo diamond). A step on a task
+  already listed is that task's "Next:" line (soonest open dated step, rose when late, with its
+  people), never a second row. Done tasks and done steps are left out.
+- **Groups** (the phone Tasks tab's): Overdue, Today, Tomorrow, Next 7 days, Later, In review, No
+  date; by date then priority. Right column: "2d late" / Today / Tomorrow / "Fri, Nov 6".
+- **Priority badge for High only**: MEDIUM on almost every row was noise on a page about dates.
+- **Ignores the teamspace and the saved toolbar filters** (hidden here, like Activity); search
+  applies. Focus of the Day is hidden on it (it repeated the overdue rows). Reads only; live.
+- Page tour `since: '2026-11-04'` plus a New Updates `tourTarget` (`cl-2026-11-04a`, added to every
+  suite's `toursSeen`). Sidebar icon `userCheck` (person nods, tick draws). `tests/my-tasks.test.js`.
 
 ### Sidebar groups (named, 11 rows)
 
