@@ -589,6 +589,9 @@
       &[data-ic="bell"] > :first-child { transform-origin: 12px 2px; animation: ic-ring .7s ease; }
       &[data-ic="bell"] > :last-child { animation: ic-clapper .7s ease .03s; }
       &[data-ic="bellOff"] > :not(line) { animation: ic-shake .4s ease; }
+      /* Alarm clock: the bells on top rattle while the hands go round. */
+      &[data-ic="alarm"] > path:nth-child(n+3) { animation: ic-shake .5s ease; }
+      &[data-ic="alarm"] > path:nth-child(2) { transform-origin: 12px 13px; animation: ic-spin .7s ease-in-out; }
       &[data-ic="bellOff"] > line { --ic-len: 29; stroke-dasharray: 29; animation: ic-draw .45s ease; }
       /* Star turns one point and swells; sparkles twinkle. */
       &[data-ic="star"] > * { animation: ic-star .55s ease; }
@@ -1372,6 +1375,8 @@
               <span class="text-sm font-bold text-zinc-800 dark:text-zinc-100">Notifications</span>
               <button type="button" id="btn-mark-all-read" class="text-xs font-medium text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300">Mark all read</button>
             </div>
+            <!-- Your upcoming reminders (REMINDERS), only while you have any. -->
+            <div id="reminder-list" class="hidden border-b border-zinc-100 dark:border-zinc-700"></div>
             <div id="notification-list" class="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-700"></div>
           </div>
           <button id="btn-add-task" class="inline-flex items-center gap-1.5 text-sm font-semibold px-3.5 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700 shadow-card transition">
@@ -1982,6 +1987,9 @@
         <p id="task-created-by" class="hidden text-xs text-zinc-400 dark:text-zinc-500"></p>
       </div>
       <div class="flex items-center gap-1">
+        <button id="task-remind-btn" type="button" class="hidden w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500" title="Remind me about this task" aria-label="Remind me about this task">
+          <svg data-ic="alarm" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13" r="8"></circle><path d="M12 9v4l2 2"></path><path d="M5 3 2 6"></path><path d="m22 6-3-3"></path></svg>
+        </button>
         <button id="task-copy-link-btn" type="button" class="hidden w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500" title="Copy a link to this task card">
           <svg data-ic="link" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
         </button>
@@ -2626,6 +2634,7 @@
       : type === 'time_nudge' ? 'Log this week\'s time'
       : type === 'dates_missing' ? 'Some of your work has no dates'
       : type === 'clash_heads_up' ? 'Several things are due the same day'
+      : type === 'reminder' ? 'Reminder'
       : null;
   }
 
@@ -2645,6 +2654,7 @@
   }
 
   function fireDesktopNotification(notif) {
+    if (notif.type === 'reminder') return;   // reminders choose their own way of showing (showReminderAlert)
     if (!desktopNotifActive() || firedDesktopNotifIds[notif.id]) return;
     firedDesktopNotifIds[notif.id] = true;
     // `chat_post` is a project-assignee broadcast with no real @mention behind it (see
@@ -6625,6 +6635,7 @@
      shared viewBox/stroke attributes and whatever sizing class is passed in.
   ========================================================= */
   var ICONS = {
+    alarm: '<circle cx="12" cy="13" r="8"></circle><path d="M12 9v4l2 2"></path><path d="M5 3 2 6"></path><path d="m22 6-3-3"></path>',
     dashboard: '<rect x="3" y="3" width="7" height="9" rx="1"></rect><rect x="14" y="3" width="7" height="5" rx="1"></rect><rect x="14" y="12" width="7" height="9" rx="1"></rect><rect x="3" y="16" width="7" height="5" rx="1"></rect>',
     sun: '<circle cx="12" cy="12" r="4"></circle><line x1="12" y1="2" x2="12" y2="4"></line><line x1="12" y1="20" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="6.34" y2="6.34"></line><line x1="17.66" y1="17.66" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="4" y2="12"></line><line x1="20" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="6.34" y2="17.66"></line><line x1="17.66" y1="6.34" x2="19.07" y2="4.93"></line>',
     moon: '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"></path>',
@@ -8040,6 +8051,8 @@
     deriveProjectFolder();
     document.getElementById('task-delete-btn').classList.toggle('hidden', !task);
     document.getElementById('task-copy-link-btn').classList.toggle('hidden', !task);
+    document.getElementById('task-remind-btn').classList.toggle('hidden', !task);
+    syncTaskRemindBtn();
     // Makes every open task shareable via the address bar for free, not just through the
     // explicit Copy-link button -- replaceState so opening/closing tasks doesn't spam browser
     // history with an entry per card. Only ever set for an existing task; a new "Add Task" has
@@ -8484,6 +8497,7 @@
                       '<input type="date" aria-label="Due date" title="Due date" class="checklist-due-input text-xs rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400 px-2 py-1" value="' + escapeHtml(item.due || '') + '"' + (item.dueTbd && !item.due ? ' disabled' : '') + '>' +
                       '<label class="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400"><input type="checkbox" class="checklist-tbd-input brand-checkbox w-3.5 h-3.5 rounded border border-zinc-300 dark:border-zinc-600"' + (item.dueTbd && !item.due ? ' checked' : '') + '> TBD</label>' +
                       '<button type="button" class="checklist-start-add ' + (!stepStart(item) && item.due ? '' : 'hidden ') + 'text-xs font-semibold text-brand-800 dark:text-brand-300 hover:underline" title="Make this a date range">+ Start</button>' +
+                      (editingTaskId && item.id && !item.done ? '<button type="button" class="checklist-remind inline-flex items-center gap-1 text-xs font-semibold text-brand-800 dark:text-brand-300 hover:underline" data-checklist-i="' + i + '" title="Get a reminder about this step">' + svgIcon('alarm', 'w-3.5 h-3.5') + 'Remind me</button>' : '') +
                       '<button type="button" class="checklist-edit-done text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">Done</button>' +
                     '</div>' +
                     checklistPeopleEditorHtml(stepPeople(item)) +
@@ -8505,6 +8519,7 @@
                 '</div>') +
               (editing ? '' : checklistDueLabelHtml(item, i, inGroup)) +
               (itemMinutes ? '<span class="shrink-0 text-[10px] font-semibold text-zinc-400 dark:text-zinc-500" title="Time logged against this item">' + formatDuration(itemMinutes) + '</span>' : '') +
+              (editing ? '' : checklistReminderMarkHtml(item, i)) +
               '<button type="button" class="checklist-edit-toggle shrink-0 p-1 text-zinc-300 dark:text-zinc-600 hover:text-zinc-500 dark:hover:text-zinc-400" data-checklist-i="' + i + '" title="Edit item" aria-label="Edit item">' + svgIcon('pencil', 'w-3.5 h-3.5') + '</button>' +
               '<button type="button" class="checklist-remove p-1 text-zinc-300 dark:text-zinc-600 hover:text-rose-500 dark:hover:text-rose-400 shrink-0" data-checklist-i="' + i + '" aria-label="Remove item">' + svgIcon('x', 'w-3 h-3') + '</button>' +
             '</div>' +
@@ -8644,6 +8659,18 @@
         currentChecklist.splice(Math.min(removeIdx, currentChecklist.length), 0, removeItem);
         renderChecklistEditor();
       } } });
+      return;
+    }
+    // Reminders (REMINDERS): "Remind me" in the step editor saves the edit first; the alarm mark
+    // on a step opens its reminder.
+    var remindBtn = e.target.closest('.checklist-remind, .checklist-reminder-mark');
+    if (remindBtn) {
+      var rItem = currentChecklist[parseInt(remindBtn.dataset.checklistI, 10)];
+      if (remindBtn.classList.contains('checklist-remind')) commitChecklistEdit();
+      if (rItem && editingTaskId) {
+        var existing = myPendingReminderFor(editingTaskId, rItem.id);
+        openReminderModal(existing ? { reminder: existing } : { taskId: editingTaskId, itemId: rItem.id });
+      }
       return;
     }
     // Clicking a step's name edits it, same as the pencil (asked; Asana/Todoist work this way).
@@ -15501,6 +15528,596 @@
     openWeeklyEditor();
   }
 
+  /* =========================================================
+     REMINDERS (2026-11-12, asked: "a feature that is like a reminder ... choose ... a pop up or a
+     notification ... set date and time ... whether to link to a specific checklist item"; agreed
+     plan: for yourself only, pop-up by default). ClickUp Reminders and Slack /remind are the model.
+     - Stored on your OWN roster doc, people/{uid}.reminders = [{id, at, before, taskId, itemId,
+       label, note, how, createdAt}], so no rules change and nobody else sees them. `at` is the
+       time as an ISO string; `before` (1) means "a working day before the step/task is due, 9am"
+       and follows that date if it moves (`at` keeps the time worked out when it was set, used if
+       the date is later removed). `how`: 'popup' | 'desktop' | 'bell'. Google Calendar is offered
+       in the same window but stores nothing here (a pre-filled event link, no sign-in).
+     - No server, so a reminder goes off while the app is open in some tab (checked every 30s and
+       when a tab comes back). Missed while closed = it goes off on your next visit, worded "Missed".
+     - Going off = removed from the list and written as a notification with a fixed id per
+       reminder, so two tabs or devices racing write ONE (same guard as the Monday reminder). The
+       notification drives the bell, and the pop-up card / desktop popup in every open tab;
+       marking it read (Done, Open, Snooze, or the bell) clears the card everywhere.
+     - A reminder on a step that's been ticked, or a task that's Done or gone, is dropped quietly:
+       no "remember to do X" after X is done. A step that isn't in the saved task yet (added in an
+       open window) keeps its reminder.
+  ========================================================= */
+  var REMINDER_HOW_KEY = 'flowboard_reminder_how';
+  var REMINDER_MAX = 50;
+  var REMINDER_MISSED_MS = 5 * 60 * 1000;
+  var reminderFiring = {};
+  var lastReminderSig = '';
+
+  function myReminders() {
+    var me = myPersonDoc();
+    return (me && Array.isArray(me.reminders)) ? me.reminders.filter(function (r) { return r && r.id; }) : [];
+  }
+  function reminderDefaultHow() {
+    try { var v = localStorage.getItem(REMINDER_HOW_KEY); if (v === 'popup' || v === 'desktop' || v === 'bell' || v === 'calendar') return v; } catch (e) {}
+    return 'popup';
+  }
+  function reminderTask(r) { return r && r.taskId ? tasks.find(function (t) { return t.id === r.taskId; }) : null; }
+  function reminderItem(r) {
+    var t = reminderTask(r);
+    return t && r.itemId && Array.isArray(t.checklist) ? t.checklist.find(function (it) { return it && it.id === r.itemId; }) : null;
+  }
+  // The date a "before it's due" reminder counts back from: the step's due date, else the task's.
+  function reminderDueDate(taskId, itemId) {
+    var t = tasks.find(function (x) { return x.id === taskId; });
+    if (!t) return '';
+    var it = itemId && Array.isArray(t.checklist) ? t.checklist.find(function (x) { return x && x.id === itemId; }) : null;
+    if (itemId && it && editingTaskId === taskId) {
+      var live = currentChecklist.find(function (x) { return x && x.id === itemId; });
+      if (live) it = live;
+    }
+    if (itemId) return it && it.due ? it.due : '';
+    return t.deadline || '';
+  }
+  function reminderBeforeTime(due) {
+    var d = parseDate(due);
+    if (!d) return null;
+    d = workingDayOnOrBefore(addDays(d, -1));
+    d.setHours(9, 0, 0, 0);
+    return d;
+  }
+  function reminderTime(r) {
+    if (r.before && r.taskId) {
+      var t = reminderBeforeTime(reminderDueDate(r.taskId, r.itemId));
+      if (t) return t;
+    }
+    var d = new Date(r.at);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  function reminderObsolete(r) {
+    if (!r.taskId || !tasksSnapshotSeen) return false;
+    var t = reminderTask(r);
+    if (!t || t.status === 'Done') return true;
+    var it = reminderItem(r);
+    return !!(it && it.done);
+  }
+  // "Today 4:00pm", "Tomorrow 9:00am", "Mon 9:00am", "Nov 20, 9:00am".
+  function reminderClock(d) {
+    var h = d.getHours(), m = d.getMinutes();
+    return ((h % 12) || 12) + ':' + String(m).padStart(2, '0') + (h < 12 ? 'am' : 'pm');
+  }
+  function reminderWhenText(d) {
+    if (!d) return '';
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var day = new Date(d); day.setHours(0, 0, 0, 0);
+    var diff = Math.round((day - today) / 86400000);
+    var lead = diff === 0 ? 'Today' : diff === 1 ? 'Tomorrow' : diff === -1 ? 'Yesterday'
+      : (diff > 1 && diff < 7) ? d.toLocaleDateString('en-US', { weekday: 'short' })
+      : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ',';
+    return lead + ' ' + reminderClock(d);
+  }
+  // What a reminder is about, in words: the note, else the step, else the task.
+  function reminderSubject(r) {
+    var t = reminderTask(r), it = reminderItem(r);
+    var step = it ? it.text : (r.itemId ? r.label : '');
+    var about = step ? step + (t ? ' · ' + t.name : '') : (t ? t.name : (r.label || ''));
+    return { text: r.note || about || 'Reminder', about: r.note ? about : '' };
+  }
+  function myPendingReminderFor(taskId, itemId) {
+    return myReminders().find(function (r) { return r.taskId === taskId && (r.itemId || null) === (itemId || null); }) || null;
+  }
+
+  function saveMyReminders(change) {
+    var me = myPersonDoc();
+    if (!me) return Promise.reject(new Error('Not signed in yet'));
+    return getDoc(doc(peopleCol, me.id)).then(function (snap) {
+      var fresh = snap.exists() && Array.isArray(snap.data().reminders) ? snap.data().reminders : [];
+      var next = change(fresh.slice()).slice(-REMINDER_MAX);
+      return setDoc(doc(peopleCol, me.id), { reminders: next }, { merge: true });
+    });
+  }
+
+  /* ---------- Going off ---------- */
+  function checkReminders() {
+    var me = myPersonDoc();
+    var name = auth.currentUser ? (auth.currentUser.displayName || auth.currentUser.email) : '';
+    if (!me || !name) return;
+    // Your list changed (saved here, on another device, or one went off): refresh the marks in an
+    // open task window. Not while a step is being edited, which a redraw would close.
+    var sig = JSON.stringify(myReminders());
+    if (sig !== lastReminderSig) {
+      lastReminderSig = sig;
+      syncTaskRemindBtn();
+      if (!taskModal.classList.contains('hidden') && checklistEditIndex === null) renderChecklistEditor();
+    }
+    var now = new Date();
+    var due = [], drop = [];
+    myReminders().forEach(function (r) {
+      if (reminderFiring[r.id]) return;
+      if (reminderObsolete(r)) { drop.push(r.id); return; }
+      var when = reminderTime(r);
+      if (when && when <= now) due.push(r);
+    });
+    if (!due.length && !drop.length) { renderReminderList(); return; }
+    due.concat(drop.map(function (id) { return { id: id }; })).forEach(function (r) { reminderFiring[r.id] = true; });
+    var dueIds = due.map(function (r) { return r.id; });
+    var sendNow = [];
+    getDoc(doc(peopleCol, me.id)).then(function (snap) {
+      var fresh = snap.exists() && Array.isArray(snap.data().reminders) ? snap.data().reminders : [];
+      // Only the ones still on the server list go off: another tab may already have sent them.
+      sendNow = due.filter(function (r) { return fresh.some(function (f) { return f && f.id === r.id; }); });
+      var gone = dueIds.concat(drop);
+      var keep = fresh.filter(function (f) { return f && gone.indexOf(f.id) === -1; });
+      if (keep.length === fresh.length) return null;
+      return setDoc(doc(peopleCol, me.id), { reminders: keep }, { merge: true });
+    }).then(function () {
+      return Promise.all(sendNow.map(function (r) {
+        var t = reminderTask(r), when = reminderTime(r) || now;
+        var subj = reminderSubject(r);
+        var missed = now - when > REMINDER_MISSED_MS;
+        return setDoc(doc(notificationsCol, 'reminder-' + me.id + '-' + r.id), {
+          recipient: name,
+          type: 'reminder',
+          taskId: r.taskId || null,
+          taskName: t ? t.name : '',
+          itemId: r.itemId || null,
+          chatProject: null,
+          author: 'Project Manager',
+          snippet: (missed ? 'Missed at ' + reminderWhenText(when) + ': ' : '') + subj.text + (subj.about ? ' (' + subj.about + ')' : ''),
+          how: r.how || 'popup',
+          note: r.note || '',
+          remindAt: when.toISOString(),
+          missed: missed,
+          at: now.toISOString(),
+          read: false
+        });
+      }));
+    }).catch(function (e) {
+      console.error('reminder failed', e);
+      due.concat(drop.map(function (id) { return { id: id }; })).forEach(function (r) { delete reminderFiring[r.id]; });
+    });
+  }
+  setInterval(checkReminders, 30 * 1000);
+  document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'visible') checkReminders(); });
+
+  /* ---------- The pop-up card (and the desktop popup when chosen) ---------- */
+  var reminderAlertsShown = {};
+  function reminderAlertsEl() {
+    var el = document.getElementById('reminder-alerts');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'reminder-alerts';
+      el.className = 'fixed right-4 top-20 z-[65] flex flex-col gap-2 w-[min(22rem,calc(100vw-2rem))]';
+      el.setAttribute('aria-live', 'polite');
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+  function showReminderAlert(n) {
+    if (!n || n.read || reminderAlertsShown[n.id] || n.how === 'bell') return;
+    if (n.how === 'desktop' && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+      reminderAlertsShown[n.id] = true;
+      var dn = new Notification('Reminder', { body: notificationSnippetText(n, 160), icon: 'favicon.png', tag: n.id, requireInteraction: true });
+      dn.onclick = function () { window.focus(); openReminderTarget(n); dn.close(); };
+      return;
+    }
+    reminderAlertsShown[n.id] = true;
+    var card = document.createElement('div');
+    card.className = 'reminder-card float-panel panel-pop-in rounded-xl border border-zinc-200 dark:border-zinc-600 border-l-4 border-l-brand-500 bg-white dark:bg-zinc-800 shadow-pop p-3';
+    card.setAttribute('data-reminder-alert', n.id);
+    card.setAttribute('role', 'alert');
+    var when = n.remindAt ? new Date(n.remindAt) : null;
+    card.innerHTML =
+      '<div class="flex items-start gap-2.5">' +
+        '<span class="shrink-0 mt-0.5 w-7 h-7 rounded-lg bg-brand-50 dark:bg-brand-500/15 text-brand-700 dark:text-brand-300 flex items-center justify-center">' + svgIcon('alarm', 'w-4 h-4') + '</span>' +
+        '<div class="min-w-0 flex-1">' +
+          '<p class="text-xs font-bold text-zinc-800 dark:text-zinc-100">' + (n.missed ? 'Missed reminder' : 'Reminder') +
+            (when ? ' <span class="font-medium text-zinc-500 dark:text-zinc-400">· ' + escapeHtml(reminderWhenText(when)) + '</span>' : '') + '</p>' +
+          '<p class="text-sm text-zinc-700 dark:text-zinc-200 mt-0.5 break-words">' + escapeHtml(String(n.snippet || '').replace(/^Missed at [^:]+:\d\d[ap]m: /, '')) + '</p>' +
+        '</div>' +
+      '</div>' +
+      '<div class="reminder-card-actions flex items-center justify-end gap-1.5 mt-2.5">' +
+        (n.taskId ? '<button type="button" data-reminder-act="open" class="text-xs font-semibold px-2.5 py-1 rounded-md text-brand-800 dark:text-brand-300 hover:bg-brand-50 dark:hover:bg-brand-500/10">Open</button>' : '') +
+        '<button type="button" data-reminder-act="snooze" class="text-xs font-semibold px-2.5 py-1 rounded-md text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700">Snooze</button>' +
+        '<button type="button" data-reminder-act="done" class="text-xs font-semibold px-2.5 py-1 rounded-md bg-brand-600 text-white hover:bg-brand-700">Done</button>' +
+      '</div>' +
+      '<div class="reminder-card-snooze hidden flex-wrap items-center justify-end gap-1.5 mt-2.5">' +
+        '<span class="text-xs text-zinc-500 dark:text-zinc-400 mr-auto">Snooze for</span>' +
+        [['10m', '10 min'], ['1h', '1 hour'], ['tomorrow', 'Tomorrow 9am']].map(function (s) {
+          return '<button type="button" data-reminder-snooze="' + s[0] + '" class="text-xs font-semibold px-2.5 py-1 rounded-md border border-zinc-200 dark:border-zinc-600 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700">' + s[1] + '</button>';
+        }).join('') +
+      '</div>';
+    card.addEventListener('click', function (e) {
+      var act = e.target.closest('[data-reminder-act]');
+      var sn = e.target.closest('[data-reminder-snooze]');
+      if (act && act.getAttribute('data-reminder-act') === 'snooze') {
+        card.querySelector('.reminder-card-actions').classList.add('hidden');
+        var row = card.querySelector('.reminder-card-snooze');
+        row.classList.remove('hidden'); row.classList.add('flex');
+        return;
+      }
+      if (act) {
+        markReminderNotifRead(n.id);
+        if (act.getAttribute('data-reminder-act') === 'open') openReminderTarget(n);
+        return;
+      }
+      if (sn) snoozeReminder(n, sn.getAttribute('data-reminder-snooze'));
+    });
+    reminderAlertsEl().appendChild(card);
+  }
+  function removeReminderAlert(id) {
+    var card = document.querySelector('[data-reminder-alert="' + id + '"]');
+    if (card) card.remove();
+  }
+  function markReminderNotifRead(id) {
+    removeReminderAlert(id);
+    updateDoc(doc(notificationsCol, id), { read: true }).catch(function () {});
+  }
+  // A card whose notification was read elsewhere (another tab, the bell, the phone) goes too.
+  function syncReminderAlerts() {
+    document.querySelectorAll('[data-reminder-alert]').forEach(function (card) {
+      var id = card.getAttribute('data-reminder-alert');
+      var n = myNotifications.find(function (x) { return x.id === id; });
+      if (!n || n.read) card.remove();
+    });
+  }
+  function snoozeReminder(n, kind) {
+    var at = new Date();
+    if (kind === '10m') at = new Date(at.getTime() + 10 * 60000);
+    else if (kind === '1h') at = new Date(at.getTime() + 60 * 60000);
+    else { at = workingDayOnOrAfter(addDays(at, 1)); at.setHours(9, 0, 0, 0); }
+    var r = { id: uid(), at: at.toISOString(), before: null, taskId: n.taskId || null, itemId: n.itemId || null,
+      label: '', note: n.note || '', how: n.how || 'popup', createdAt: new Date().toISOString() };
+    if (!n.note && !n.taskId) r.note = String(n.snippet || '').replace(/^Missed at [^:]+:\d\d[ap]m: /, '');
+    var it = n.taskId && n.itemId ? reminderItem(r) : null;
+    if (it) r.label = it.text;
+    markReminderNotifRead(n.id);
+    saveMyReminders(function (list) { return list.concat([r]); }).then(function () {
+      showToast('Snoozed until ' + reminderWhenText(at), 'info');
+    }).catch(function () { showToast('Couldn\x27t snooze that reminder', 'error'); });
+  }
+  // Opens the task, and the step it's about, flashed.
+  function openReminderTarget(n) {
+    if (!n) return;
+    if (!n.read) markReminderNotifRead(n.id);
+    var t = n.taskId ? tasks.find(function (x) { return x.id === n.taskId; }) : null;
+    if (!t) { if (n.taskId) showToast('That task is no longer on the board', 'info'); return; }
+    openTaskModal(t);
+    if (!n.itemId) return;
+    setTimeout(function () {
+      var row = document.querySelector('#task-checklist-editor [data-flip="' + (window.CSS && CSS.escape ? CSS.escape(n.itemId) : n.itemId) + '"]');
+      if (!row) return;
+      row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      row.classList.add('chat-message-jump-flash');
+      setTimeout(function () { row.classList.remove('chat-message-jump-flash'); }, 1600);
+    }, 250);
+  }
+
+  /* ---------- Your reminders, at the top of the bell panel ---------- */
+  function renderReminderList() {
+    var el = document.getElementById('reminder-list');
+    if (!el) return;
+    var list = myReminders().filter(function (r) { return !reminderObsolete(r); }).map(function (r) { return { r: r, when: reminderTime(r) }; })
+      .sort(function (a, b) { return (a.when || 0) - (b.when || 0); });
+    el.classList.toggle('hidden', !list.length);
+    if (!list.length) { el.innerHTML = ''; return; }
+    el.innerHTML =
+      '<p class="px-3.5 pt-2.5 pb-1 text-[11px] font-bold text-zinc-500 dark:text-zinc-400">Your reminders · ' + list.length + '</p>' +
+      list.map(function (x) {
+        var subj = reminderSubject(x.r);
+        return '<div class="group flex items-center gap-2 px-3.5 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-700/50">' +
+          '<button type="button" data-reminder-edit="' + escapeHtml(x.r.id) + '" title="' + escapeHtml(subj.text + (subj.about ? ' · ' + subj.about : '') + ' (click to change)') + '" class="min-w-0 flex-1 flex items-start gap-2 text-left">' +
+            '<span class="shrink-0 mt-0.5 text-brand-700 dark:text-brand-300">' + svgIcon('alarm', 'w-3.5 h-3.5') + '</span>' +
+            '<span class="min-w-0 flex-1"><span class="block text-xs font-semibold text-zinc-800 dark:text-zinc-100">' + escapeHtml(reminderWhenText(x.when)) + '</span>' +
+            '<span class="block text-xs text-zinc-500 dark:text-zinc-400 truncate">' + escapeHtml(subj.text + (subj.about ? ' · ' + subj.about : '')) + '</span></span>' +
+          '</button>' +
+          '<button type="button" data-reminder-delete="' + escapeHtml(x.r.id) + '" title="Delete reminder" aria-label="Delete reminder" class="shrink-0 p-1 rounded text-zinc-400 hover:text-rose-500 dark:hover:text-rose-400">' + svgIcon('x', 'w-3 h-3') + '</button>' +
+        '</div>';
+      }).join('');
+  }
+  document.getElementById('reminder-list').addEventListener('click', function (e) {
+    e.stopPropagation();
+    var del = e.target.closest('[data-reminder-delete]');
+    if (del) { deleteReminder(del.getAttribute('data-reminder-delete')); return; }
+    var ed = e.target.closest('[data-reminder-edit]');
+    if (ed) {
+      var r = myReminders().find(function (x) { return x.id === ed.getAttribute('data-reminder-edit'); });
+      notificationPanel.classList.add('hidden');
+      if (r) openReminderModal({ reminder: r });
+    }
+  });
+  function deleteReminder(id) {
+    var gone = myReminders().find(function (r) { return r.id === id; });
+    if (!gone) return;
+    saveMyReminders(function (list) { return list.filter(function (r) { return r && r.id !== id; }); }).then(function () {
+      showToast('Reminder deleted', 'info', { action: { label: 'Undo', onClick: function () {
+        saveMyReminders(function (list) { return list.concat([gone]); });
+      } } });
+    }).catch(function () { showToast('Couldn\x27t delete that reminder', 'error'); });
+  }
+
+  // Marks: the task window's alarm button is brand-coloured while you have a reminder on the
+  // task; a step with one of yours shows a small alarm before its pencil (only you see either).
+  function syncTaskRemindBtn() {
+    var btn = document.getElementById('task-remind-btn');
+    if (!btn) return;
+    var n = editingTaskId ? myReminders().filter(function (r) { return r.taskId === editingTaskId && !reminderObsolete(r); }).length : 0;
+    btn.classList.toggle('text-brand-600', !!n);
+    btn.classList.toggle('dark:text-brand-400', !!n);
+    btn.classList.toggle('text-zinc-400', !n);
+    btn.classList.toggle('dark:text-zinc-500', !n);
+    btn.title = n ? 'Remind me (you have ' + n + ' reminder' + (n === 1 ? '' : 's') + ' on this task)' : 'Remind me about this task';
+  }
+  function checklistReminderMarkHtml(item, i) {
+    if (!editingTaskId || !item || !item.id || item.done) return '';
+    var r = myPendingReminderFor(editingTaskId, item.id);
+    if (!r) return '';
+    return '<button type="button" class="checklist-reminder-mark tooltip-top shrink-0 p-1 rounded text-brand-600 dark:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-500/10" data-checklist-i="' + i + '" data-tooltip="Reminder: ' + escapeHtml(reminderWhenText(reminderTime(r))) + '" aria-label="Edit reminder">' + svgIcon('alarm', 'w-3.5 h-3.5') + '</button>';
+  }
+  document.getElementById('task-remind-btn').addEventListener('click', function () {
+    if (editingTaskId) openReminderModal({ taskId: editingTaskId, itemId: null });
+  });
+
+  /* ---------- The "Remind me" window ---------- */
+  var reminderModalState = null;
+  function reminderPicks(taskId, itemId) {
+    var now = new Date(), out = [];
+    var hour = new Date(now.getTime() + 60 * 60000);
+    hour.setMinutes(Math.ceil(hour.getMinutes() / 5) * 5, 0, 0);
+    // `sub` is the second line: only the time when the label already names the day.
+    out.push({ key: 'hour', label: 'In an hour', at: hour, sub: reminderClock(hour) });
+    var four = new Date(now); four.setHours(16, 0, 0, 0);
+    if (now.getHours() * 60 + now.getMinutes() < 15 * 60) out.push({ key: 'today', label: 'This afternoon', at: four, sub: reminderClock(four) });
+    var next = workingDayOnOrAfter(addDays(now, 1)); next.setHours(9, 0, 0, 0);
+    var isTomorrow = Math.round((new Date(next).setHours(0, 0, 0, 0) - new Date(now).setHours(0, 0, 0, 0)) / 86400000) === 1;
+    out.push({ key: 'next', label: isTomorrow ? 'Tomorrow morning' : 'Next working day', at: next, sub: isTomorrow ? reminderClock(next) : null });
+    var mon = addDays(now, ((8 - now.getDay()) % 7) || 7); mon = workingDayOnOrAfter(mon); mon.setHours(9, 0, 0, 0);
+    if (toDateInputValue(mon) !== toDateInputValue(next)) out.push({ key: 'monday', label: 'Next week', at: mon });
+    var due = taskId ? reminderDueDate(taskId, itemId) : '';
+    var before = reminderBeforeTime(due);
+    if (before && before > now) out.push({ key: 'before', label: 'A day before it\x27s due', at: before });
+    out.push({ key: 'custom', label: 'Pick a date & time', at: null });
+    return out;
+  }
+  function reminderModalEl() {
+    var el = document.getElementById('reminder-modal');
+    if (el) return el;
+    document.body.insertAdjacentHTML('beforeend',
+      '<div id="reminder-modal" class="fixed inset-0 z-[60] hidden items-center justify-center p-2 sm:p-4 modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="reminder-modal-title">' +
+        '<div class="bg-white dark:bg-zinc-800 w-full max-w-md rounded-2xl shadow-pop overflow-hidden max-h-[92vh] flex flex-col modal-pop-in">' +
+          '<div class="flex items-center justify-between px-5 py-4 border-b border-zinc-100 dark:border-zinc-700">' +
+            '<h3 id="reminder-modal-title" class="text-base font-bold text-zinc-900 dark:text-zinc-100">Remind me</h3>' +
+            '<button type="button" data-reminder-close class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500" aria-label="Close">' + svgIcon('x', 'w-4 h-4') + '</button>' +
+          '</div>' +
+          '<div id="reminder-modal-body" class="px-5 py-4 space-y-4 overflow-y-auto"></div>' +
+          '<div class="flex items-center gap-2 px-5 py-3 border-t border-zinc-100 dark:border-zinc-700">' +
+            '<button type="button" id="reminder-delete-btn" class="hidden text-sm font-semibold text-rose-600 dark:text-rose-400 hover:underline">Delete reminder</button>' +
+            '<span class="flex-1"></span>' +
+            '<button type="button" data-reminder-close class="text-sm font-semibold px-3.5 py-2 rounded-lg text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700">Cancel</button>' +
+            '<button type="button" id="reminder-save-btn" class="text-sm font-semibold px-3.5 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700 shadow-card">Save reminder</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>');
+    el = document.getElementById('reminder-modal');
+    el.addEventListener('click', onReminderModalClick);
+    el.addEventListener('change', onReminderModalChange);
+    el.addEventListener('keydown', trapFocus(el));
+    return el;
+  }
+  // opts: {taskId, itemId} for a new one, or {reminder} to edit one of yours.
+  function openReminderModal(opts) {
+    var r = opts.reminder || null;
+    var taskId = r ? r.taskId : opts.taskId;
+    var itemId = r ? (r.itemId || null) : (opts.itemId || null);
+    var how = r ? (r.how || 'popup') : reminderDefaultHow();
+    var pick = r ? (r.before ? 'before' : 'custom') : 'next';
+    var at = r ? reminderTime(r) : null;
+    reminderModalState = { id: r ? r.id : null, createdAt: r ? r.createdAt : null, taskId: taskId || null, itemId: itemId, how: how, pick: pick, label: r ? (r.label || '') : '' };
+    var el = reminderModalEl();
+    document.getElementById('reminder-modal-title').textContent = r ? 'Edit reminder' : 'Remind me';
+    document.getElementById('reminder-delete-btn').classList.toggle('hidden', !r);
+    renderReminderModal(r ? r.note || '' : '', at);
+    el.classList.remove('hidden');
+    el.classList.add('flex');
+    var first = el.querySelector('[data-reminder-pick].ring-2') || el.querySelector('[data-reminder-pick]');
+    if (first) first.focus();
+  }
+  function closeReminderModal() {
+    var el = document.getElementById('reminder-modal');
+    if (!el) return;
+    el.classList.add('hidden');
+    el.classList.remove('flex');
+    reminderModalState = null;
+  }
+  // The open steps of the task, from the open task window when it's this task (unsaved steps too).
+  function reminderStepChoices(taskId) {
+    var list = editingTaskId === taskId && !taskModal.classList.contains('hidden') ? currentChecklist
+      : ((tasks.find(function (t) { return t.id === taskId; }) || {}).checklist || []);
+    return list.filter(function (it) { return it && it.id && !it.done; });
+  }
+  function renderReminderModal(note, customAt) {
+    var s = reminderModalState;
+    var body = document.getElementById('reminder-modal-body');
+    var t = s.taskId ? tasks.find(function (x) { return x.id === s.taskId; }) : null;
+    var pillCls = function (on) {
+      return 'text-left px-3 py-2 rounded-lg border text-sm transition focus:outline-none focus:ring-2 focus:ring-brand-500/40 ' + (on
+        ? 'ring-2 ring-brand-500/40 border-brand-400 bg-brand-50 dark:bg-brand-500/10 text-brand-900 dark:text-brand-100'
+        : 'border-zinc-200 dark:border-zinc-600 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700');
+    };
+    var about = '';
+    if (t) {
+      var steps = reminderStepChoices(s.taskId);
+      var hasItem = s.itemId && steps.some(function (it) { return it.id === s.itemId; });
+      about =
+        '<div><label for="reminder-about" class="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-1">About</label>' +
+        (steps.length
+          ? '<select id="reminder-about" class="w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 px-2.5 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40">' +
+              '<option value="">The whole task: ' + escapeHtml(t.name) + '</option>' +
+              steps.map(function (it) { return '<option value="' + escapeHtml(it.id) + '"' + (it.id === s.itemId ? ' selected' : '') + '>Step: ' + escapeHtml(it.text) + '</option>'; }).join('') +
+              (s.itemId && !hasItem ? '<option value="' + escapeHtml(s.itemId) + '" selected>Step: ' + escapeHtml(s.label || 'a step') + '</option>' : '') +
+            '</select>'
+          : '<p class="text-sm text-zinc-700 dark:text-zinc-200">' + escapeHtml(t.name) + '</p>') +
+        '</div>';
+    }
+    var picks = reminderPicks(s.taskId, s.itemId);
+    if (!picks.some(function (p) { return p.key === s.pick; })) s.pick = 'next';
+    var customVal = customAt ? toDateInputValue(customAt) + 'T' + String(customAt.getHours()).padStart(2, '0') + ':' + String(customAt.getMinutes()).padStart(2, '0') : '';
+    var hows = [
+      ['popup', 'Pop-up', 'A card in the corner of Project Manager, with Snooze.'],
+      ['desktop', 'Desktop', 'Your computer\x27s own notification, even when the browser is behind other windows.'],
+      ['bell', 'Bell only', 'Quietly added to your notifications.'],
+      ['calendar', 'Google Calendar', 'Opens a ready-made event to save in your calendar. Works with this app closed; changes here won\x27t update it.']
+    ];
+    var howHint = (hows.find(function (h) { return h[0] === s.how; }) || hows[0])[2];
+    if (s.how === 'desktop' && typeof Notification !== 'undefined' && Notification.permission === 'denied') howHint = 'This browser blocks notifications from Project Manager, so it will show as a pop-up instead.';
+    body.innerHTML = about +
+      '<div><p class="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-1.5">When</p>' +
+        '<div class="grid grid-cols-2 gap-2">' +
+          picks.map(function (p) {
+            return '<button type="button" data-reminder-pick="' + p.key + '" aria-pressed="' + (p.key === s.pick) + '" class="' + pillCls(p.key === s.pick) + (p.key === 'custom' ? ' col-span-2' : '') + '">' +
+              '<span class="block font-semibold">' + escapeHtml(p.label) + '</span>' +
+              (p.at ? '<span class="block text-xs text-zinc-500 dark:text-zinc-400">' + escapeHtml(p.sub || reminderWhenText(p.at)) + '</span>' : '') +
+            '</button>';
+          }).join('') +
+        '</div>' +
+        '<input type="datetime-local" id="reminder-custom" aria-label="Reminder date and time" class="' + (s.pick === 'custom' ? '' : 'hidden ') + 'mt-2 w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 px-2.5 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40" value="' + customVal + '">' +
+      '</div>' +
+      '<div><label for="reminder-note" class="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-1">Note <span class="font-normal text-zinc-400">(optional)</span></label>' +
+        '<input type="text" id="reminder-note" maxlength="200" placeholder="' + (t ? 'e.g. Chase the client for feedback' : 'What should I remind you about?') + '" class="w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 px-2.5 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40" value="' + escapeHtml(note || '') + '"></div>' +
+      '<div><p class="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-1.5">How</p>' +
+        '<div class="flex flex-wrap gap-1.5" role="group" aria-label="How to remind you">' +
+          hows.filter(function (h) { return !(s.id && h[0] === 'calendar'); }).map(function (h) {
+            var on = h[0] === s.how;
+            return '<button type="button" data-reminder-how="' + h[0] + '" aria-pressed="' + on + '" class="text-xs font-semibold px-2.5 py-1.5 rounded-full border transition ' + (on
+              ? 'border-brand-400 bg-brand-50 dark:bg-brand-500/10 text-brand-800 dark:text-brand-200'
+              : 'border-zinc-200 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700') + '">' + h[1] + '</button>';
+          }).join('') +
+        '</div>' +
+        '<p id="reminder-how-hint" class="mt-1.5 text-xs text-zinc-500 dark:text-zinc-400">' + escapeHtml(howHint) + '</p>' +
+        '<p id="reminder-error" class="hidden mt-1.5 text-xs font-semibold text-rose-600 dark:text-rose-400"></p>' +
+      '</div>';
+    document.getElementById('reminder-save-btn').textContent = s.how === 'calendar' ? 'Open Google Calendar' : 'Save reminder';
+  }
+  function reminderModalKeep() {
+    var c = document.getElementById('reminder-custom');
+    var v = c && c.value ? new Date(c.value) : null;
+    return { note: (document.getElementById('reminder-note') || {}).value || '', custom: v && !isNaN(v.getTime()) ? v : null };
+  }
+  function onReminderModalClick(e) {
+    var s = reminderModalState;
+    if (!s) return;
+    if (e.target.closest('[data-reminder-close]')) { closeReminderModal(); return; }
+    var keep = reminderModalKeep();
+    var p = e.target.closest('[data-reminder-pick]');
+    if (p) {
+      s.pick = p.getAttribute('data-reminder-pick');
+      renderReminderModal(keep.note, keep.custom);
+      var again = document.querySelector('[data-reminder-pick="' + s.pick + '"]');
+      if (s.pick === 'custom') { var c = document.getElementById('reminder-custom'); c.focus(); if (c.showPicker) try { c.showPicker(); } catch (er) {} }
+      else if (again) again.focus();
+      return;
+    }
+    var h = e.target.closest('[data-reminder-how]');
+    if (h) {
+      s.how = h.getAttribute('data-reminder-how');
+      renderReminderModal(keep.note, keep.custom);
+      var hb = document.querySelector('[data-reminder-how="' + s.how + '"]'); if (hb) hb.focus();
+      return;
+    }
+    if (e.target.closest('#reminder-delete-btn')) { var id = s.id; closeReminderModal(); deleteReminder(id); return; }
+    if (e.target.closest('#reminder-save-btn')) saveReminderFromModal();
+  }
+  function onReminderModalChange(e) {
+    var s = reminderModalState;
+    if (!s || e.target.id !== 'reminder-about') return;
+    var keep = reminderModalKeep();
+    s.itemId = e.target.value || null;
+    var it = s.itemId ? reminderStepChoices(s.taskId).find(function (x) { return x.id === s.itemId; }) : null;
+    if (it) s.label = it.text;
+    renderReminderModal(keep.note, keep.custom);
+  }
+  function reminderModalError(msg) {
+    var el = document.getElementById('reminder-error');
+    el.textContent = msg;
+    el.classList.remove('hidden');
+  }
+  function saveReminderFromModal() {
+    var s = reminderModalState;
+    var keep = reminderModalKeep();
+    var pick = reminderPicks(s.taskId, s.itemId).find(function (p) { return p.key === s.pick; });
+    var at = s.pick === 'custom' ? keep.custom : (pick && pick.at);
+    if (!at) { reminderModalError('Pick a date and time.'); return; }
+    if (at <= new Date()) { reminderModalError('That time has already passed. Pick a later one.'); return; }
+    var note = keep.note.trim();
+    var t = s.taskId ? tasks.find(function (x) { return x.id === s.taskId; }) : null;
+    if (!t && !note) { reminderModalError('Add a note so the reminder says what it\x27s for.'); return; }
+    var it = s.itemId ? reminderStepChoices(s.taskId).find(function (x) { return x.id === s.itemId; }) : null;
+    if (it) s.label = it.text;
+    try { localStorage.setItem(REMINDER_HOW_KEY, s.how); } catch (er) {}
+    if (s.how === 'calendar') { openReminderInGoogleCalendar(at, note, t, s.label); closeReminderModal(); return; }
+    if (s.how === 'desktop' && typeof Notification !== 'undefined' && Notification.permission === 'default') {
+      try { Notification.requestPermission(); } catch (er) {}
+    }
+    var r = { id: s.id || uid(), at: at.toISOString(), before: s.pick === 'before' ? 1 : null, taskId: s.taskId, itemId: s.itemId || null,
+      label: s.itemId ? s.label : '', note: note, how: s.how, createdAt: s.createdAt || new Date().toISOString() };
+    var editing = !!s.id;
+    closeReminderModal();
+    saveMyReminders(function (list) {
+      var i = list.findIndex(function (x) { return x && x.id === r.id; });
+      if (i === -1) list.push(r); else list[i] = r;
+      return list;
+    }).then(function () {
+      showToast((editing ? 'Reminder moved to ' : 'I\x27ll remind you ') + reminderWhenText(at), 'success');
+    }).catch(function (er) { showToast('Couldn\x27t save the reminder: ' + er.message, 'error'); });
+  }
+  // A timed event (30 minutes) from a pre-filled link: no Google sign-in or API key, the person
+  // presses Save in Google Calendar. One-way, like openChecklistInGoogleCalendar.
+  function openReminderInGoogleCalendar(at, note, t, stepLabel) {
+    var fmt = function (d) {
+      return toDateInputValue(d).replace(/-/g, '') + 'T' + String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0') + '00';
+    };
+    var end = new Date(at.getTime() + 30 * 60000);
+    var title = note || (stepLabel ? stepLabel + (t ? ' · ' + t.name : '') : (t ? t.name : 'Reminder'));
+    var details = t ? (t.project ? t.project + ' · ' : '') + t.name + (stepLabel ? '\nStep: ' + stepLabel : '') + '\n' + location.origin + location.pathname + '#task=' + t.id : '';
+    var tz = '';
+    try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (er) {}
+    var url = 'https://calendar.google.com/calendar/render?action=TEMPLATE' +
+      '&text=' + encodeURIComponent('Reminder: ' + title) +
+      '&dates=' + fmt(at) + '/' + fmt(end) +
+      (tz ? '&ctz=' + encodeURIComponent(tz) : '') +
+      '&details=' + encodeURIComponent(details);
+    window.open(url, '_blank', 'noopener');
+    showToast('Press Save in Google Calendar to keep it', 'info');
+  }
+  // Escape closes only this window (it can sit over the task window); clicking outside never
+  // closes it, like every window you type in.
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Escape' || !reminderModalState) return;
+    if (e.defaultPrevented || selectMenuFor) return;   // an open dropdown list closes first
+    e.preventDefault(); e.stopPropagation();
+    closeReminderModal();
+  }, true);
+
   function personTaskRowHtml(t) {
     var pm = PRIORITY_META[t.priority] || PRIORITY_META.Medium;
     var urgency = dueUrgency(t);
@@ -18783,6 +19400,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-11-12a', date: '2026-11-12', items: [
+      { type: 'new', title: 'Reminders, for yourself', text: "Open a task and click the alarm clock at the top, or click a step's pencil and then Remind me. Pick when (in an hour, tomorrow morning, a day before it's due, or any date and time) and how: a pop-up in Project Manager with Snooze, your computer's own notification, the bell only, or a Google Calendar event. Only you see your reminders, listed at the top of the bell. A reminder on a step you've already ticked doesn't go off. Project Manager has to be open in a tab for it to remind you; if it wasn't, the reminder shows the next time you open it, so choose Google Calendar when that matters." }
+    ] },
     { id: '2026-11-04a', date: '2026-11-04', items: [
       { type: 'new', title: 'My Tasks: all your work on one page', text: "Click My Tasks at the top of the sidebar to see everything of yours in one list, grouped by when it's due: Overdue, Today, Tomorrow, the next 7 days and later, then what's in review and what has no date yet. Each row shows the project, status, due date and the next checklist step. Steps you're on in other people's tasks are listed too. Thanks, Arvind!", tourTarget: '[data-view-btn="mytasks"]' }
     ] },
@@ -22576,12 +23196,19 @@
             var data = Object.assign({ id: change.doc.id }, change.doc.data());
             if (data.read) return;
             fireDesktopNotification(data);
+            if (data.type === 'reminder') showReminderAlert(data);
             gotNewUnread = true;
           });
           // Once per snapshot, not once per new doc -- several notifications can land in the
           // same batch (e.g. one comment mentioning three people), and restarting the shake
           // animation mid-flight for each one is wasted work for something purely decorative.
           if (gotNewUnread) nudgeNotificationBell();
+        } else {
+          // A reminder that went off just before this listener's first snapshot (one missed while
+          // the app was closed fires on load, often before this arrives) still gets its card.
+          myNotifications.forEach(function (n) {
+            if (n.type === 'reminder' && !n.read && Date.now() - new Date(n.at).getTime() < REMINDER_MISSED_MS) showReminderAlert(n);
+          });
         }
         notifListenerReady = true;
         renderNotificationBell();
@@ -22658,6 +23285,7 @@
       maybeStartTour();
       checkWeeklyReminder();
       checkFridayHelpers();
+      checkReminders();
       // Full re-render (renderAll -> renderCurrentSecondaryView already covers the Chat tab's
       // online strip too, so a heartbeat write shows up there immediately, not just on the 30s
       // aging-out tick): this collection now carries personal leave as well as the roster, and
@@ -22787,6 +23415,8 @@
           '</button>';
         }).join('')
       : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-8">You\'re all caught up.</p>';
+    renderReminderList();
+    syncReminderAlerts();
     mRefresh();
   }
 
@@ -22835,6 +23465,7 @@
     var nType = item.getAttribute('data-notification-type');
     if (nType === 'suggestion_status' || nType === 'suggestion_fixed') { setView('suggestions'); return; }
     if (item.getAttribute('data-notification-type') === 'weekly_reminder') { openWeeklyFromReminder(); return; }
+    if (nType === 'reminder') { openReminderTarget(myNotifications.find(function (x) { return x.id === notifId; })); return; }
     var taskId = item.getAttribute('data-notification-task');
     var t = taskId ? tasks.find(function (x) { return x.id === taskId; }) : null;
     if (t) openTaskModal(t);
@@ -22953,7 +23584,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-11-04T10:56:50Z";
+  var CURRENT_BUILD_VERSION = "2026-11-12T02:20:55Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

@@ -3353,6 +3353,40 @@ Note this was a *code* removal — it can't delete tasks that button already cre
 were ever loaded on the live board, those documents are still there and have to be deleted from the
 board itself.
 
+### Reminders (2026-11-12)
+
+Asked: "a feature that is like a reminder. You get to choose ... a pop up or a notification (or others
+if you have ideas) ... set date and time ... whether to link to a specific checklist item". Plan agreed
+before building (ClickUp Reminders, Slack /remind): **for yourself only**, **pop-up by default**.
+REMINDERS in index.html.
+- **Stored on your own roster doc**, `people/{uid}.reminders` [{id, at, before, taskId, itemId, label,
+  note, how, createdAt}], so **no rules change** and nobody else sees them. `how`: popup | desktop |
+  bell. `before: 1` = the working day before the step's (else the task's) due date, 9am, worked out each
+  check so it **follows the date**; `at` is the fallback if the date is removed.
+- **Set from:** the alarm button in the task window header (`#task-remind-btn`, brand-coloured while
+  you have one on the task), "Remind me" in a step's pencil editor (`.checklist-remind`, existing tasks
+  only), and a step's alarm mark (`.checklist-reminder-mark`, only on steps with one of yours). The
+  window (`#reminder-modal`, built in JS, z-60 over the task window): About (whole task or an open
+  step), When (In an hour, This afternoon before 3pm, Tomorrow morning / Next working day, Next week,
+  A day before it's due, Pick a date & time), optional note, How. Escape closes only it; an outside
+  click doesn't (a window you type in). The last How chosen is remembered on that computer
+  (`flowboard_reminder_how`). Not on the phone layout yet.
+- **Google Calendar** is a fourth How that stores nothing: a pre-filled timed event link (30 min, `ctz`
+  set), **no sign-in or API key**; the person presses Save in Google. One-way, like the checklist's.
+- **Going off** (`checkReminders`: every 30s, on the people snapshot, and when a tab becomes visible):
+  no server, so only while some tab is open; missed ones go off on the next visit as "Missed at …".
+  It re-reads your doc, removes the reminder, then writes a notification with a fixed id
+  `reminder-<uid>-<reminderId>` (type `reminder`), so racing tabs/devices write one. The notification
+  is the bell entry and drives `showReminderAlert` in every open tab: a card top right (Open / Snooze 10
+  min, 1 hour, tomorrow 9am / Done), or a desktop notification for `desktop` when the browser allows
+  it (else the card), nothing extra for `bell`. Reading it anywhere clears the card everywhere
+  (`syncReminderAlerts`). `fireDesktopNotification` skips reminders (they choose their own way).
+- **Dropped quietly, never sent:** a reminder whose step is ticked or whose task is Done or off the
+  board. A step not yet in the saved task (added in an open window) keeps its reminder.
+- **Bell panel:** "Your reminders · N" above the notifications, soonest first, click to edit, x to
+  delete (Undo).
+- `tests/reminders.test.js`.
+
 ### Archived tasks open read-only (2026-10-19)
 
 Asked "can completed projects still be edited and accessed?". Archived task rows on a Completed
