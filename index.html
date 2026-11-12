@@ -16090,20 +16090,20 @@
       showToast((editing ? 'Reminder moved to ' : 'I\x27ll remind you ') + reminderWhenText(at), 'success');
     }).catch(function (er) { showToast('Couldn\x27t save the reminder: ' + er.message, 'error'); });
   }
-  // A timed event (30 minutes) from a pre-filled link: no Google sign-in or API key, the person
-  // presses Save in Google Calendar. One-way, like openChecklistInGoogleCalendar.
+  // A single moment (start = end) from a pre-filled link, not a block of time: asked "it should be
+  // a one time reminder. not a whole duration" (it was 30 minutes). No Google sign-in or API key,
+  // the person presses Save in Google Calendar. One-way, like openChecklistInGoogleCalendar.
   function openReminderInGoogleCalendar(at, note, t, stepLabel) {
     var fmt = function (d) {
       return toDateInputValue(d).replace(/-/g, '') + 'T' + String(d.getHours()).padStart(2, '0') + String(d.getMinutes()).padStart(2, '0') + '00';
     };
-    var end = new Date(at.getTime() + 30 * 60000);
     var title = note || (stepLabel ? stepLabel + (t ? ' · ' + t.name : '') : (t ? t.name : 'Reminder'));
     var details = t ? (t.project ? t.project + ' · ' : '') + t.name + (stepLabel ? '\nStep: ' + stepLabel : '') + '\n' + location.origin + location.pathname + '#task=' + t.id : '';
     var tz = '';
     try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch (er) {}
     var url = 'https://calendar.google.com/calendar/render?action=TEMPLATE' +
       '&text=' + encodeURIComponent('Reminder: ' + title) +
-      '&dates=' + fmt(at) + '/' + fmt(end) +
+      '&dates=' + fmt(at) + '/' + fmt(at) +
       (tz ? '&ctz=' + encodeURIComponent(tz) : '') +
       '&details=' + encodeURIComponent(details);
     window.open(url, '_blank', 'noopener');
@@ -23584,7 +23584,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-11-12T02:20:55Z";
+  var CURRENT_BUILD_VERSION = "2026-11-12T02:50:49Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

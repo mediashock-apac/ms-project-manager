@@ -207,7 +207,7 @@ const notifs = (page) => page.evaluate(() => Object.entries(window.__fb.data.not
   await page.click('#reminder-save-btn');
   await page.waitForTimeout(300);
   const url = (await page.evaluate(() => window.__opened))[0] || '';
-  check('opens a pre-filled Google Calendar event', /calendar\.google\.com\/calendar\/render\?action=TEMPLATE/.test(url) && /dates=20261116T143000%2F20261116T150000|dates=20261116T143000\/20261116T150000/.test(url) && /Reminder%3A%20Rough%20cut/.test(url), url);
+  check('opens a pre-filled Google Calendar event, one moment, not a block', /calendar\.google\.com\/calendar\/render\?action=TEMPLATE/.test(url) && /dates=20261116T143000(%2F|\/)20261116T143000/.test(url) && /Reminder%3A%20Rough%20cut/.test(url), url);
   check('calendar stores nothing here', (await mine(page)).length === 1);
   // A time in the past is refused
   await page.click('#task-remind-btn');

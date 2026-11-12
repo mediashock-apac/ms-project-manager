@@ -3371,8 +3371,8 @@ REMINDERS in index.html.
   A day before it's due, Pick a date & time), optional note, How. Escape closes only it; an outside
   click doesn't (a window you type in). The last How chosen is remembered on that computer
   (`flowboard_reminder_how`). Not on the phone layout yet.
-- **Google Calendar** is a fourth How that stores nothing: a pre-filled timed event link (30 min, `ctz`
-  set), **no sign-in or API key**; the person presses Save in Google. One-way, like the checklist's.
+- **Google Calendar** is a fourth How that stores nothing: a pre-filled event link at one moment
+  (start = end, `ctz` set; it was 30 minutes until asked "a one time reminder. not a whole duration"), **no sign-in or API key**; the person presses Save in Google. One-way, like the checklist's.
 - **Going off** (`checkReminders`: every 30s, on the people snapshot, and when a tab becomes visible):
   no server, so only while some tab is open; missed ones go off on the next visit as "Missed at …".
   It re-reads your doc, removes the reminder, then writes a notification with a fixed id
