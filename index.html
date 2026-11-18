@@ -12646,6 +12646,81 @@
   // Only ever called from the Archived view, so archivedTasks (not tasks) is where this task
   // actually lives right now -- ensureArchivedTasksListener has always already run by the time
   // someone can see a Restore button to click.
+  /* DUPLICATE A TASK (2026-11-18, asked from a Board row: "a way to duplicate tasks immediately
+     from this view ... after duplicating, I would just need to change numbering or some other
+     minor detail"). The copy button on a Board row's hover actions saves a copy straight away and
+     opens it with the number in its name selected, so typing replaces just that. Same work and
+     people, none of the history (like the next task of a repeat). */
+  // "Subtitles - Video #1" -> "Subtitles - Video #2": the LAST number in the name goes up, past any
+  // name already used by another task in the same project. No number: "<name> (copy)".
+  function duplicateTaskName(t) {
+    var name = String(t.name || '');
+    var m = name.match(/^([\s\S]*?)(\d+)(\D*)$/);
+    var taken = {};
+    tasks.forEach(function (x) { if (projectKey(x.project) === projectKey(t.project)) taken[String(x.name || '').trim().toLowerCase()] = true; });
+    if (!m) {
+      var base = name + ' (copy)', cand = base, k = 2;
+      while (taken[cand.trim().toLowerCase()] && k < 200) cand = name + ' (copy ' + k++ + ')';
+      return { name: cand.slice(0, 120), selStart: name.length, selEnd: cand.length };
+    }
+    var width = m[2].length, n = parseInt(m[2], 10), next, guard = 0;
+    do {
+      n++;
+      var num = String(n);
+      if (m[2].charAt(0) === '0' && num.length < width) num = ('0000000000' + num).slice(-width);
+      next = m[1] + num + m[3];
+    } while (taken[next.trim().toLowerCase()] && guard++ < 500);
+    return { name: next.slice(0, 120), selStart: m[1].length, selEnd: m[1].length + num.length };
+  }
+  function duplicateTaskData(t, newName) {
+    var now = new Date().toISOString();
+    var me = auth.currentUser ? (auth.currentUser.displayName || auth.currentUser.email) : null;
+    // A copy of finished or in-review work starts again; anything earlier keeps its stage.
+    var status = (t.status === 'Done' || t.status === 'Review') ? 'Pipeline' : (t.status || 'Pipeline');
+    return {
+      name: newName, project: t.project || '', assignee: t.assignee || '',
+      involved: Array.isArray(t.involved) ? t.involved.slice() : [],
+      priority: t.priority || 'Medium', status: status,
+      startDate: t.startDate || '', deadline: t.deadline || '',
+      driveLink: t.driveLink || '',
+      checklist: (t.checklist || []).filter(function (it) { return it && String(it.text || '').trim(); }).map(function (it) {
+        var c = deepCopy(it);
+        c.id = uid();
+        c.done = false;
+        return c;
+      }),
+      timeEntries: [], comments: [], statusUpdates: [], dependsOn: [], reviewAudience: null, reviewRounds: [],
+      completedAt: null, repeat: null,
+      createdAt: now, updatedAt: now, createdBy: me
+    };
+  }
+  function duplicateTask(id) {
+    var t = tasks.find(function (x) { return x.id === id; });
+    if (!t) return;
+    var nm = duplicateTaskName(t);
+    var newId = uid();
+    var data = duplicateTaskData(t, nm.name);
+    setDoc(doc(tasksCol, newId), data).then(function () {
+      logActivity('task_created', 'Duplicated "' + t.name + '" as "' + nm.name + '"', { taskId: newId });
+      notifyAssignment({ id: newId, name: nm.name, deadline: data.deadline }, data.assignee);
+      data.involved.forEach(function (p) { if (p !== data.assignee) notifyAssignment({ id: newId, name: nm.name, deadline: data.deadline }, p, true); });
+      notifyChecklistChanges({ id: newId, name: nm.name, assignee: data.assignee }, [], data.checklist);
+      showToast('Duplicated as "' + nm.name + '"', 'success', { action: { label: 'Undo', onClick: function () {
+        if (editingTaskId === newId) closeTaskModal();
+        deleteDoc(doc(tasksCol, newId)).catch(function (err) { showToast('Could not undo: ' + err.message, 'error'); });
+      } } });
+      var copy = tasks.find(function (x) { return x.id === newId; }) || Object.assign({ id: newId }, data);
+      openTaskModal(copy);
+      var input = document.getElementById('task-name');
+      if (input && !mActive()) {
+        setTimeout(function () {
+          input.focus();
+          try { input.setSelectionRange(nm.selStart, nm.selEnd); } catch (e) {}
+        }, 60);
+      }
+    }).catch(function (err) { showToast('Could not duplicate: ' + err.message, 'error'); });
+  }
+
   // Undo for an archive: puts the tasks back exactly as they were (`list` = the task objects from
   // before archiving), whoever archived them -- the rules allow the move back for anyone.
   // `summary` replaces the "Undid archiving ..." Activity line (Restore project uses it).
@@ -13126,8 +13201,9 @@
           '<div class="board-row-actions flex items-center gap-0.5 shrink-0">' +
             '<span draggable="true" data-drag-handle title="Drag to move" aria-label="Drag to move" role="button" class="hidden sm:flex w-6 h-6 items-center justify-center rounded-md cursor-grab active:cursor-grabbing text-zinc-400 dark:text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-700">' + svgIcon('grip', 'w-3.5 h-3.5') + '</span>' +
             // No pencil: clicking anywhere on the row opens the same task window, so it was a second
-            // control for one action. Drag/Archive/Delete show on row hover (see .board-row-actions).
+            // control for one action. Drag/Duplicate/Archive/Delete show on row hover (see .board-row-actions).
             (isDone ? '<button data-archive-task="' + t.id + '" title="Archive this task" aria-label="Archive this task" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400">' + svgIcon('archive', 'w-3.5 h-3.5') + '</button>' : '') +
+            '<button data-duplicate-task="' + t.id + '" title="Duplicate" aria-label="Duplicate task" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500 hover:text-brand-600 dark:hover:text-brand-400">' + svgIcon('copy', 'w-3.5 h-3.5') + '</button>' +
             '<button data-delete-task="' + t.id + '" title="Delete" aria-label="Delete task" class="w-6 h-6 flex items-center justify-center rounded-md hover:bg-rose-50 dark:hover:bg-rose-500/10 text-zinc-400 dark:text-zinc-500 hover:text-rose-500 dark:hover:text-rose-400">' + svgIcon('trash', 'w-3.5 h-3.5') + '</button>' +
           '</div>' +
         '</div>' +
@@ -19463,6 +19539,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-11-18c', date: '2026-11-18', items: [
+      { type: 'new', title: 'Duplicate a task from the Board', text: "Hover a task on the Board and click the copy icon beside the bin. A copy is made straight away with the number in its name moved up (Video #1 becomes Video #2), the same people, dates, link and steps (unticked), and opens so you can change any detail. Comments, time and status lines aren't copied. Changed your mind? Click Undo on the message. Thanks, Arvind!" }
+    ] },
     { id: '2026-11-18b', date: '2026-11-18', items: [
       { type: 'new', title: 'Closing reports no longer keep a project open', text: "Leave the closing report out of the checklist. When you archive a finished project on the Projects page, click Needs closing report on the message that appears. The project moves to Completed and is listed under Closing reports in WIP Meeting until the report is written. Missed it? On a Completed project, open the ⋯ menu and pick Needs closing report. Once the report is in, the same menu has Closing report done." }
     ] },
@@ -21198,6 +21277,11 @@
     if (archiveTaskBtn) {
       var idAT = archiveTaskBtn.getAttribute('data-archive-task');
       archiveTask(idAT);   // Undo on the toast instead of a confirm
+      return;
+    }
+    var duplicateBtn = e.target.closest('[data-duplicate-task]');
+    if (duplicateBtn) {
+      duplicateTask(duplicateBtn.getAttribute('data-duplicate-task'));
       return;
     }
     if (unarchiveBtn) {
@@ -23653,7 +23737,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-11-18T04:04:00Z";
+  var CURRENT_BUILD_VERSION = "2026-11-18T04:14:33Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

@@ -3036,6 +3036,22 @@ with your recommendations". Three things that remove work rather than add it:
 - Import keeps all the new fields. Verified in Chromium (`tests/repeat-copy-rounds.test.js`, 33 checks,
   light and dark screenshots).
 
+### Duplicate a task (2026-11-18)
+
+Asked from a Board row: "a way to duplicate tasks immediately from this view ... I would just need to
+change numbering or some other minor detail". DUPLICATE A TASK in index.html (`duplicateTask`,
+`duplicateTaskName`, `duplicateTaskData`). A copy icon in the Board row's hover actions
+(`data-duplicate-task`, between drag and archive/delete) **saves the copy at once** and opens it in
+the task window with the new number selected, so typing replaces only that.
+- **Name:** the LAST number in the name goes up (zero padding kept), past any name already used in
+  the same project (`#1` with `#2` taken gives `#3`); no number gives "<name> (copy)".
+- **Copied:** project, owner, involved, priority, dates, Drive link, steps (new ids, unticked, same
+  dates/people/links). Status kept, except Done or Review starts at Pipeline. **Not copied:**
+  comments, time, status lines, review rounds, repeat (like a repeat's next task).
+- Owner, involved and step people are notified as for a new task; logged as `task_created`; Undo on
+  the toast deletes the copy and closes its window. Desktop Board only.
+  `tests/task-duplicate.test.js`.
+
 ### Dropdowns and the project's Drive folder (2026-10-08)
 
 - **One dropdown list everywhere** (reported from a screenshot of the Repeat menu: "Drop down menus
