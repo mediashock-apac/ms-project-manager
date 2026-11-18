@@ -8498,6 +8498,10 @@
                       '<label class="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400"><input type="checkbox" class="checklist-tbd-input brand-checkbox w-3.5 h-3.5 rounded border border-zinc-300 dark:border-zinc-600"' + (item.dueTbd && !item.due ? ' checked' : '') + '> TBD</label>' +
                       '<button type="button" class="checklist-start-add ' + (!stepStart(item) && item.due ? '' : 'hidden ') + 'text-xs font-semibold text-brand-800 dark:text-brand-300 hover:underline" title="Make this a date range">+ Start</button>' +
                       (editingTaskId && item.id && !item.done ? '<button type="button" class="checklist-remind inline-flex items-center gap-1 text-xs font-semibold text-brand-800 dark:text-brand-300 hover:underline" data-checklist-i="' + i + '" title="Get a reminder about this step">' + svgIcon('alarm', 'w-3.5 h-3.5') + 'Remind me</button>' : '') +
+                      // Duplicate: saves this step, adds a copy right below it and opens the copy, for
+                      // repeat deliverables that differ by one detail (asked: "an option to duplicate it
+                      // once the first one has been written").
+                      '<button type="button" class="checklist-duplicate inline-flex items-center gap-1 text-xs font-semibold text-brand-800 dark:text-brand-300 hover:underline" data-checklist-i="' + i + '" title="Add a copy of this step below it">' + svgIcon('copy', 'w-3.5 h-3.5') + 'Duplicate</button>' +
                       '<button type="button" class="checklist-edit-done text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline">Done</button>' +
                     '</div>' +
                     checklistPeopleEditorHtml(stepPeople(item)) +
@@ -8681,6 +8685,26 @@
       return;
     }
     if (e.target.closest('.checklist-edit-done')) { commitChecklistEdit(); return; }
+    // Duplicate: save the open edit, put a copy (new id, not done) right below the original and
+    // open it with the cursor at the end of the name, ready for the one detail that differs.
+    // Same date, link and people, so it lands in the same date group. Its people are told on Save
+    // like any newly assigned step; reminders stay with the original.
+    var dupBtn = e.target.closest('.checklist-duplicate');
+    if (dupBtn) {
+      var dupIdx = parseInt(dupBtn.dataset.checklistI, 10);
+      commitChecklistEdit();
+      var orig = currentChecklist[dupIdx];
+      if (!orig) return;
+      var copy = JSON.parse(JSON.stringify(orig));
+      copy.id = uid();
+      copy.done = false;
+      currentChecklist.splice(dupIdx + 1, 0, copy);
+      checklistEditIndex = dupIdx + 1;
+      renderChecklistEditor();
+      var dupInput = document.querySelector('#task-checklist-editor .checklist-text-input');
+      if (dupInput) { var end = dupInput.value.length; dupInput.setSelectionRange(end, end); }
+      return;
+    }
     var startAdd = e.target.closest('.checklist-start-add');
     if (startAdd) {
       var sBox = startAdd.closest('[data-checklist-editor-i]');
@@ -19400,6 +19424,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-11-18a', date: '2026-11-18', items: [
+      { type: 'new', title: 'Duplicate a checklist step', text: "Writing steps that are nearly the same, like one per ad size? Click a step's name (or its pencil) and then Duplicate. A copy with the same date, link and people appears right below it, ready for you to change the one detail that's different. Thanks, Arvind!" }
+    ] },
     { id: '2026-11-12a', date: '2026-11-12', items: [
       { type: 'new', title: 'Reminders, for yourself', text: "Open a task and click the alarm clock at the top, or click a step's pencil and then Remind me. Pick when (in an hour, tomorrow morning, a day before it's due, or any date and time) and how: a pop-up in Project Manager with Snooze, your computer's own notification, the bell only, or a Google Calendar event. Only you see your reminders, listed at the top of the bell. A reminder on a step you've already ticked doesn't go off. Project Manager has to be open in a tab for it to remind you; if it wasn't, the reminder shows the next time you open it, so choose Google Calendar when that matters." }
     ] },
@@ -23584,7 +23611,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-11-12T02:50:49Z";
+  var CURRENT_BUILD_VERSION = "2026-11-18T02:57:32Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

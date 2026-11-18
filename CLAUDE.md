@@ -4844,6 +4844,13 @@ draws one Timeline diamond instead of six, and hides a late size inside the batc
   chosen over double-click (undiscoverable, poor on touch; Asana/Todoist and WIP's status lines use
   a single click). **Time entries got the same** (`.time-entry-edit-text` on the duration and note),
   so both lists in the task window behave alike. The pencils stay.
+- **Duplicate a step (2026-11-18)** (asked: "an option to duplicate it once the first one has been
+  written ... repetitive deliverables where only a minor adjustment is needed"). A "Duplicate" button
+  in the step's editor (pencil or click the name), beside Remind me / Done, not on the row at rest
+  (clutter rule). It saves the open edit, puts a copy right below the original (new `uid()`, not done,
+  same date/range/link/people, so it stays in the same date group) and opens the copy with the cursor
+  at the end of the name. The copy's people get the usual "assigned you" on Save; reminders stay with
+  the original. `tests/checklist-duplicate.test.js`.
 - The last three were found by a usability check the owner had to ask for before pushing ("I
   should not need to remind"): run that check before proposing any UI change.
 - Verified in Chromium, light and dark, and at phone width (12 checks: Add N label, Shift+Enter,
