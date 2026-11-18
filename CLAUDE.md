@@ -3422,6 +3422,15 @@ admins only, target wins with nothing lost. PROJECT ACTIONS in index.html.
   keep the old name.
 - **Admins only** because archived tasks can only be updated by their creator or an admin in
   `firestore.rules`, and a merge isn't a one-click undo. No rules change.
+- **Closing reports are a stage, not a checklist step (2026-11-18)**, asked: a "closing report"
+  step kept finished projects Ongoing for weeks or months. CLOSING REPORTS in index.html.
+  Archiving a finished project (Ready to archive, the deadline popup, or Archive project with
+  every task Done) adds **Needs closing report** to the toast beside Undo (`archivedToastActions`;
+  `showToast` takes `opts.actions` for two buttons, 10s). It sets `wipCategory: 'closing'`, so
+  the project is Completed on Projects and listed under Closing reports on WIP. Not offered when
+  the project is already there, or when it was archived unfinished. A Completed card's ⋯ row has
+  the same choice later, then **Closing report done**, which clears the category so it leaves WIP.
+  `setProjectWipCategory` now resolves true/false. `tests/closing-report.test.js`.
 - **WIP "Finished this week" now needs every task Done**, archived ones included, so a project
   archived unfinished (a cancelled job) isn't listed as finished.
 - `tests/project-actions.test.js`.

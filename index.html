@@ -3019,7 +3019,8 @@
       return updateDoc(doc(projectsCol, id), { wipCategory: key || null });
     }).then(function () {
       logActivity('project_category', key ? 'Moved ' + name + ' to ' + wipCategoryLabel(key) : 'Cleared the category of ' + name);
-    }).catch(function (err) { showToast('Could not save the category: ' + err.message, 'error'); });
+      return true;
+    }).catch(function (err) { showToast('Could not save the category: ' + err.message, 'error'); return false; });
   }
   // CLIENT COLOURS -- the "[Client]" part of a project name is highlighted, same client = same
   // colour (asked for directly: "these are client names"). Only the bracket is tinted, never the
@@ -7681,7 +7682,10 @@
   // to reverse. Permanent deletes keep their confirm.
   function showToast(message, type, opts) {
     type = type || 'success';
-    var action = opts && opts.action;
+    // opts.action = one button; opts.actions = several, left to right (the archive toast's
+    // "Needs closing report" + "Undo").
+    var actions = (opts && opts.actions) || (opts && opts.action ? [opts.action] : []);
+    var action = actions[0];
     var iconMap = { success: 'check', error: 'alertCircle', info: 'info', celebrate: 'sparkles' };
     var colorMap = {
       success: 'bg-emerald-600',
@@ -7705,19 +7709,19 @@
       el.style.transform = 'translateY(6px)';
       setTimeout(function () { el.remove(); }, 260);
     }
-    if (action) {
+    actions.forEach(function (a, i) {
       var b = document.createElement('button');
       b.type = 'button';
-      b.className = 'toast-action ml-2 -my-1 px-2 py-1 rounded-md font-bold text-white bg-white/15 hover:bg-white/25';
-      b.textContent = action.label;
-      b.addEventListener('click', function () { dismiss(); action.onClick(); });
+      b.className = 'toast-action ' + (i ? 'ml-1' : 'ml-2') + ' -my-1 px-2 py-1 rounded-md font-bold text-white bg-white/15 hover:bg-white/25 whitespace-nowrap';
+      b.textContent = a.label;
+      b.addEventListener('click', function () { dismiss(); a.onClick(); });
       el.appendChild(b);
-    }
+    });
     container.appendChild(el);
     // The celebration toast is reserved for finishing a whole project (see
     // celebrateProjectComplete) -- rare enough to earn a longer dwell than a routine save/delete
-    // confirmation.
-    setTimeout(dismiss, isCelebrate ? 5200 : action ? 7000 : 2800);
+    // confirmation. Two buttons take longer to read than one.
+    setTimeout(dismiss, isCelebrate ? 5200 : actions.length > 1 ? 10000 : action ? 7000 : 2800);
   }
 
   // Keeps Tab/Shift+Tab cycling within an open modal instead of escaping into the
@@ -10338,6 +10342,14 @@
     if (archiveAllBtn) { confirmArchiveWholeProject(archiveAllBtn.getAttribute('data-project')); return; }
     var restoreBtn = e.target.closest('.project-restore-btn');
     if (restoreBtn) { restoreWholeProject(restoreBtn.getAttribute('data-project')); return; }
+    var closingBtn = e.target.closest('.project-closing-btn');
+    if (closingBtn) {
+      var cName = closingBtn.getAttribute('data-project');
+      projectMenuOpen = null;
+      if (closingBtn.getAttribute('data-closing') === 'on') markNeedsClosingReport(cName);
+      else setProjectWipCategory(cName, null).then(function (ok) { if (ok) showToast('Closing report done -- off WIP Meeting', 'success'); });
+      return;
+    }
     var mergeStart = e.target.closest('.project-merge-start');
     if (mergeStart) {
       projectMergeFor = mergeStart.getAttribute('data-project');
@@ -11912,7 +11924,9 @@
       'Every task is done and the deadline (' + formatShortDate(deadline) + ') has passed. Archive all ' + projectTasks.length + ' task' + (projectTasks.length === 1 ? '' : 's') + ' to move this project into Completed? Nothing is deleted -- archived tasks can be restored any time.',
       function () {
         archiveProjectTasks(name).then(function (n) {
-          showToast('Archived ' + n + ' task' + (n === 1 ? '' : 's') + ' -- "' + name + '" moved to Completed', 'success');
+          var msg = 'Archived ' + n + ' task' + (n === 1 ? '' : 's') + ' -- "' + name + '" moved to Completed';
+          if (projectNeedsClosingOffer(name)) showToast(msg, 'success', { action: { label: 'Needs closing report', onClick: function () { markNeedsClosingReport(name); } } });
+          else showToast(msg, 'success');
         }).catch(function (err) {
           showToast('Could not archive project tasks: ' + err.message, 'error');
         }).finally(done);
@@ -11925,10 +11939,28 @@
   // same archiveProjectTasks call, but reachable any time every active task is Done (the
   // "Ready to archive" button on a project card), not gated on the project's deadline having
   // passed and not part of the once-per-session popup queue.
+  // CLOSING REPORTS (2026-11-18, asked: a "closing report" checklist step kept finished projects
+  // Ongoing for weeks or months). The report isn't project work, so it's not a step: archiving a
+  // finished project offers "Needs closing report" on the toast, which files it under WIP
+  // Meeting's Closing reports category (listed there with no open tasks, wipListsWithoutOpenTasks).
+  // The Completed card's ⋯ row has the same choice later, and "Closing report done" to clear it.
+  function projectNeedsClosingOffer(name) { return projectWipCategory(name) !== 'closing'; }
+  function markNeedsClosingReport(name) {
+    return setProjectWipCategory(name, 'closing').then(function (ok) {
+      if (ok) showToast('Listed under Closing reports in WIP Meeting', 'success');
+    });
+  }
+  function archivedToastActions(name, undo) {
+    var list = [];
+    if (projectNeedsClosingOffer(name)) list.push({ label: 'Needs closing report', onClick: function () { markNeedsClosingReport(name); } });
+    list.push({ label: 'Undo', onClick: undo });
+    return list;
+  }
+
   function confirmArchiveProject(name, count) {
     var before = activeTasks().filter(function (t) { return t.project === name && t.status === 'Done'; }).map(function (t) { return Object.assign({}, t); });
     archiveProjectTasks(name).then(function (n) {
-      showToast('"' + name + '" moved to Completed', 'success', { action: { label: 'Undo', onClick: function () { restoreArchivedTasks(before, 'Project'); } } });
+      showToast('"' + name + '" moved to Completed', 'success', { actions: archivedToastActions(name, function () { restoreArchivedTasks(before, 'Project'); }) });
     }).catch(function (err) {
       showToast('Could not archive project tasks: ' + err.message, 'error');
     });
@@ -11954,7 +11986,9 @@
       var before = list.map(function (t) { return Object.assign({}, t); });
       projectMenuOpen = null;
       archiveProjectTasks(name, true).then(function () {
-        showToast('"' + name + '" moved to Completed', 'success', { action: { label: 'Undo', onClick: function () { restoreArchivedTasks(before, 'Project'); } } });
+        var undo = function () { restoreArchivedTasks(before, 'Project'); };
+        // Archived unfinished (a cancelled job): no closing report offer, only Undo.
+        showToast('"' + name + '" moved to Completed', 'success', open ? { action: { label: 'Undo', onClick: undo } } : { actions: archivedToastActions(name, undo) });
       }).catch(function (err) { showToast('Could not archive project: ' + err.message, 'error'); });
     }
     if (!open) { go(); return; }
@@ -12101,7 +12135,12 @@
       '<button type="button" class="project-copy-link ' + WIP_ACT_BTN + '" data-project="' + escapeHtml(p.name) + '" title="Copy a link that opens this project in Project Manager">Copy link</button>' +
       '<span class="w-px h-4 mx-3 bg-zinc-200 dark:bg-zinc-600"></span>' +
       (isCompleted
-        ? '<button type="button" class="project-restore-btn ' + WIP_ACT_BTN + '" data-project="' + escapeHtml(p.name) + '" title="Put every task back on the board">Restore project</button>'
+        ? '<button type="button" class="project-restore-btn ' + WIP_ACT_BTN + '" data-project="' + escapeHtml(p.name) + '" title="Put every task back on the board">Restore project</button>' +
+          // See CLOSING REPORTS.
+          '<span class="w-px h-4 mx-3 bg-zinc-200 dark:bg-zinc-600"></span>' +
+          (projectNeedsClosingOffer(p.name)
+            ? '<button type="button" class="project-closing-btn ' + WIP_ACT_BTN + '" data-project="' + escapeHtml(p.name) + '" data-closing="on" title="List it under Closing reports in WIP Meeting until the report is written">Needs closing report</button>'
+            : '<button type="button" class="project-closing-btn ' + WIP_ACT_BTN + '" data-project="' + escapeHtml(p.name) + '" data-closing="off" title="Take it off Closing reports in WIP Meeting">Closing report done</button>')
         : '<button type="button" class="project-archive-all-btn ' + WIP_ACT_BTN + '" data-project="' + escapeHtml(p.name) + '" title="Archive every task, done or not, and move the project to Completed">Archive project</button>') +
       (isAdminUser()
         ? '<span class="w-px h-4 mx-3 bg-zinc-200 dark:bg-zinc-600"></span>' +
@@ -19424,6 +19463,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-11-18b', date: '2026-11-18', items: [
+      { type: 'new', title: 'Closing reports no longer keep a project open', text: "Leave the closing report out of the checklist. When you archive a finished project on the Projects page, click Needs closing report on the message that appears. The project moves to Completed and is listed under Closing reports in WIP Meeting until the report is written. Missed it? On a Completed project, open the ⋯ menu and pick Needs closing report. Once the report is in, the same menu has Closing report done." }
+    ] },
     { id: '2026-11-18a', date: '2026-11-18', items: [
       { type: 'new', title: 'Duplicate a checklist step', text: "Writing steps that are nearly the same, like one per ad size? Click a step's name (or its pencil) and then Duplicate. A copy with the same date, link and people appears right below it, ready for you to change the one detail that's different. Thanks, Arvind!" }
     ] },
@@ -23611,7 +23653,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-11-18T02:57:32Z";
+  var CURRENT_BUILD_VERSION = "2026-11-18T04:04:00Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
