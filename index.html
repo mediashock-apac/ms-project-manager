@@ -1303,6 +1303,11 @@
           <svg data-ic="upload" class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
           <span>Import board</span>
         </button>
+        <!-- Admins and Arvind only (RATES & CLOSING REPORT); shown on sign-in. -->
+        <button type="button" id="btn-rates" class="hidden w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-600">
+          <svg data-ic="clock" class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          <span>Rates &amp; roles</span>
+        </button>
         <div class="border-t border-zinc-100 dark:border-zinc-600 my-1"></div>
         <button type="button" id="btn-sign-out" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-rose-50 dark:hover:bg-rose-500/10 hover:text-rose-600 dark:hover:text-rose-400">
           <svg data-ic="logout" class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
@@ -10448,6 +10453,8 @@
     if (archiveAllBtn) { confirmArchiveWholeProject(archiveAllBtn.getAttribute('data-project')); return; }
     var closeProjBtn = e.target.closest('.project-close-btn');
     if (closeProjBtn) { openCloseProjectModal(closeProjBtn.getAttribute('data-project')); return; }
+    var reportBtn = e.target.closest('.project-report-btn');
+    if (reportBtn) { openClosingReportModal(reportBtn.getAttribute('data-project')); return; }
     var closedSummary = e.target.closest('#projects-closed-details > summary');
     if (closedSummary) { projectsClosedOpen = !closedSummary.parentNode.open; return; }
     var restoreBtn = e.target.closest('.project-restore-btn');
@@ -12288,6 +12295,557 @@
     });
   }
 
+  /* RATES & CLOSING REPORT (2026-11-19, asked: fill in the team's "End of Project Report" template
+     from what Project Manager knows, and "for the hours and rates, certain people have defined
+     rates, so maybe that can be fixed to calculate as well"). Then: a Google Doc in the exact same
+     format; rates seen and set by admins plus Arvind only.
+     - Rates live in finance/rates ({roles: [{key, label, rate}], people: [{name, role}]}), which
+       firestore.rules lets only finance people read or write. Not in this file: the repo is public.
+       The role NAMES below are not secret; the rates are typed in once in "Rates & roles".
+     - The report fills templates/closing-report.docx (the team's template with its example numbers
+       removed and {{MARKERS}} put in) with JSZip, and uploads it to Drive as a Google Doc (Drive
+       converts it, keeping the layout). Needs the drive.file permission, asked for on first use.
+       Finance numbers (budget, external spend) stay blank: they come from the Transaction Report.
+       Internal spend = billable hours x each person's role rate. Overtime is charged at the same rate. */
+  // Admins plus these addresses. Keep identical to isFinance() in firestore.rules.
+  var FINANCE_EXTRA_EMAILS = ['arvind@mediashock.com.sg'];
+  var FINANCE_EMAILS = ADMIN_EMAILS.concat(FINANCE_EXTRA_EMAILS);
+  var FINANCE_ROLES = [
+    { key: 'ad', label: 'Account director' },
+    { key: 'am', label: 'Account manager | Content strat' },
+    { key: 'ae', label: 'Account executive' },
+    { key: 'ac', label: 'Account coordinator' },
+    { key: 'creative', label: 'Creative' },
+    { key: 'post', label: 'Post production' },
+    { key: 'intern', label: 'Intern' }
+  ];
+  // First-time suggestion only (by first name), until someone saves Rates & roles.
+  var FINANCE_ROLE_SEED = { mychelle: 'ad', arvind: 'am', aqila: 'creative', deane: 'creative', harin: 'post', calcium: 'post', chloe: 'intern', zenon: 'intern' };
+  var financeDocRef = doc(db, 'finance', 'rates');
+  var financeRates = null;   // last loaded finance/rates, or null
+
+  function isFinanceUser() {
+    var u = auth.currentUser;
+    return !!(u && u.email && FINANCE_EMAILS.indexOf(u.email.toLowerCase()) !== -1);
+  }
+  function loadFinanceRates() {
+    return getDoc(financeDocRef).then(function (s) {
+      financeRates = s.exists() ? s.data() : null;
+      return financeRates;
+    });
+  }
+  // The roles with their saved rates, in FINANCE_ROLES order (an unknown saved key is dropped).
+  function financeRoleList(fr) {
+    var saved = {};
+    ((fr && fr.roles) || []).forEach(function (r) { if (r && r.key) saved[r.key] = r; });
+    return FINANCE_ROLES.map(function (r) {
+      var rate = Number((saved[r.key] || {}).rate);
+      return { key: r.key, label: r.label, rate: isFinite(rate) && rate > 0 ? rate : null };
+    });
+  }
+  function financeRoleOf(fr, name) {
+    var hit = ((fr && fr.people) || []).find(function (p) { return p && p.name === name; });
+    if (hit) return hit.role || '';
+    if (fr && !fr.useSeed) return '';
+    var first = String(name || '').split(' ')[0].toLowerCase();
+    return FINANCE_ROLE_SEED[first] || '';
+  }
+
+  // ---- Rates & roles window (profile menu > Data) ----
+  var FIN_INPUT = 'text-sm rounded-lg border border-zinc-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400';
+  function ratesModalEl() {
+    var el = document.getElementById('rates-modal');
+    if (el) return el;
+    document.body.insertAdjacentHTML('beforeend',
+      '<div id="rates-modal" class="fixed inset-0 z-[60] hidden items-center justify-center p-2 sm:p-4 modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="rates-title">' +
+        '<div class="bg-white dark:bg-zinc-800 w-full max-w-lg rounded-2xl shadow-pop overflow-hidden max-h-[92vh] flex flex-col modal-pop-in">' +
+          '<div class="flex items-center justify-between gap-3 px-5 py-4 border-b border-zinc-100 dark:border-zinc-700">' +
+            '<div><h3 id="rates-title" class="text-base font-bold text-zinc-900 dark:text-zinc-100">Rates &amp; roles</h3>' +
+            '<p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">Used for hours and internal spend in closing reports. Only admins and Arvind can see this.</p></div>' +
+            '<button type="button" data-rates-cancel class="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500" aria-label="Close">' + svgIcon('x', 'w-4 h-4') + '</button>' +
+          '</div>' +
+          '<div id="rates-body" class="px-5 py-4 space-y-5 overflow-y-auto"></div>' +
+          '<div class="flex items-center justify-end gap-2 px-5 py-3 border-t border-zinc-100 dark:border-zinc-700">' +
+            '<button type="button" data-rates-cancel class="text-sm font-semibold px-3.5 py-2 rounded-lg text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700">Cancel</button>' +
+            '<button type="button" id="rates-save" class="text-sm font-semibold px-3.5 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700 shadow-card disabled:opacity-50">Save</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>');
+    el = document.getElementById('rates-modal');
+    el.addEventListener('click', function (e) {
+      if (e.target.closest('[data-rates-cancel]')) { closeRatesModal(); return; }
+      if (e.target.closest('#rates-save')) saveRates();
+    });
+    el.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeRatesModal(); }
+    });
+    el.addEventListener('keydown', trapFocus(el));
+    return el;
+  }
+  function openRatesModal() {
+    if (!isFinanceUser()) return;
+    var el = ratesModalEl();
+    var body = document.getElementById('rates-body');
+    body.innerHTML = '<p class="text-sm text-zinc-500 dark:text-zinc-400">Loading…</p>';
+    document.getElementById('rates-save').disabled = true;
+    el.classList.remove('hidden'); el.classList.add('flex');
+    loadFinanceRates().then(function (fr) {
+      var roles = financeRoleList(fr);
+      body.innerHTML =
+        '<section><h4 class="text-xs font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400 mb-2">Hourly rates (SGD)</h4>' +
+          '<div class="grid grid-cols-[minmax(0,1fr)_7rem] gap-x-3 gap-y-1.5 items-center">' +
+          roles.map(function (r) {
+            return '<label for="rate-' + r.key + '" class="text-sm text-zinc-700 dark:text-zinc-200">' + escapeHtml(r.label) + '</label>' +
+              '<div class="flex items-center gap-1"><span class="text-sm text-zinc-400">$</span><input id="rate-' + r.key + '" data-rate-key="' + r.key + '" type="number" min="0" step="1" inputmode="decimal" class="w-full min-w-0 ' + FIN_INPUT + '" value="' + (r.rate == null ? '' : r.rate) + '"></div>';
+          }).join('') + '</div></section>' +
+        '<section><h4 class="text-xs font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400 mb-2">People</h4>' +
+          (fr ? '' : '<p class="text-xs text-zinc-500 dark:text-zinc-400 mb-2">Roles are suggested. Check them, then save.</p>') +
+          '<div class="grid grid-cols-[minmax(0,1fr)_13rem] gap-x-3 gap-y-1.5 items-center">' +
+          teamRoster().map(function (n, i) {
+            var cur = financeRoleOf(fr, n);
+            return '<label for="rate-person-' + i + '" class="text-sm text-zinc-700 dark:text-zinc-200 truncate" title="' + escapeHtml(n) + '">' + escapeHtml(n) + '</label>' +
+              '<select id="rate-person-' + i + '" data-rate-person="' + escapeHtml(n) + '" class="' + FIN_INPUT + '">' +
+                '<option value="">No rate</option>' +
+                FINANCE_ROLES.map(function (r) { return '<option value="' + r.key + '"' + (r.key === cur ? ' selected' : '') + '>' + escapeHtml(r.label) + '</option>'; }).join('') +
+              '</select>';
+          }).join('') + '</div></section>';
+      document.getElementById('rates-save').disabled = false;
+      var first = body.querySelector('input');
+      if (first) first.focus();
+    }).catch(function (err) {
+      body.innerHTML = financeBlocked(err)
+        ? '<p class="text-sm text-zinc-700 dark:text-zinc-200">Rates can\'t be saved yet: the database rules for them haven\'t been published in Firebase.</p>' +
+          '<p class="text-sm text-zinc-500 dark:text-zinc-400 mt-2">Until then, type the rates in the closing report window when you make a report. They\'re used for that report only.</p>'
+        : '<p class="text-sm text-rose-600 dark:text-rose-400">Could not load rates: ' + escapeHtml(err.message) + '</p>';
+      el.querySelector('[data-rates-cancel]').focus();   // so Escape closes it
+    });
+  }
+  // The finance rules not yet published (or no access): the database refuses the read.
+  function financeBlocked(err) { return !!err && (err.code === 'permission-denied' || /insufficient permissions/i.test(err.message || '')); }
+  // Rates typed in the closing report window while finance/rates can't be read: kept for this
+  // visit only (never saved), so a second report doesn't need them typed again.
+  var reportRatesDraft = { rates: {}, people: {} };
+  function reportRatesFormHtml(peopleNames) {
+    var label = 'block text-xs font-semibold text-zinc-600 dark:text-zinc-400';
+    return '<section id="closing-report-rates" class="space-y-3 rounded-lg border border-zinc-200 dark:border-zinc-600 px-3 py-3">' +
+      '<p class="text-xs text-zinc-600 dark:text-zinc-300">Rates can\'t be saved until the database rules are published, so type them here. They\'re used for this report only.</p>' +
+      '<div><p class="' + label + ' mb-1.5">Hourly rates (SGD)</p><div class="grid grid-cols-[minmax(0,1fr)_6rem] gap-x-3 gap-y-1 items-center">' +
+        FINANCE_ROLES.map(function (r) {
+          var v = reportRatesDraft.rates[r.key];
+          return '<label for="rr-rate-' + r.key + '" class="text-sm text-zinc-700 dark:text-zinc-200">' + escapeHtml(r.label) + '</label>' +
+            '<div class="flex items-center gap-1"><span class="text-sm text-zinc-400">$</span><input id="rr-rate-' + r.key + '" data-rr-rate="' + r.key + '" type="number" min="0" step="1" inputmode="decimal" class="w-full min-w-0 ' + FIN_INPUT + ' py-1" value="' + (v == null ? '' : v) + '"></div>';
+        }).join('') + '</div></div>' +
+      (peopleNames.length ? '<div><p class="' + label + ' mb-1.5">People on this project</p><div class="grid grid-cols-[minmax(0,1fr)_12rem] gap-x-3 gap-y-1 items-center">' +
+        peopleNames.map(function (n, i) {
+          var cur = reportRatesDraft.people[n] != null ? reportRatesDraft.people[n] : financeRoleOf(null, n);
+          return '<label for="rr-person-' + i + '" class="text-sm text-zinc-700 dark:text-zinc-200 truncate" title="' + escapeHtml(n) + '">' + escapeHtml(n) + '</label>' +
+            '<select id="rr-person-' + i + '" data-rr-person="' + escapeHtml(n) + '" class="' + FIN_INPUT + ' py-1"><option value="">No rate</option>' +
+            FINANCE_ROLES.map(function (r) { return '<option value="' + r.key + '"' + (r.key === cur ? ' selected' : '') + '>' + escapeHtml(r.label) + '</option>'; }).join('') +
+            '</select>';
+        }).join('') + '</div></div>' : '') +
+    '</section>';
+  }
+  // The typed rates as a finance/rates-shaped object. People not in the form (e.g. a compared
+  // project's) fall back to the suggested role (useSeed).
+  function reportRatesFromForm() {
+    var el = document.getElementById('closing-report-rates');
+    if (!el) return null;
+    var roles = FINANCE_ROLES.map(function (r) {
+      var inp = el.querySelector('[data-rr-rate="' + r.key + '"]');
+      var v = inp && inp.value !== '' ? Number(inp.value) : NaN;
+      var rate = isFinite(v) && v > 0 ? v : null;
+      reportRatesDraft.rates[r.key] = rate;
+      return { key: r.key, label: r.label, rate: rate };
+    });
+    var people = [];
+    el.querySelectorAll('[data-rr-person]').forEach(function (s) {
+      var n = s.getAttribute('data-rr-person');
+      reportRatesDraft.people[n] = s.value;
+      people.push({ name: n, role: s.value });
+    });
+    Object.keys(reportRatesDraft.people).forEach(function (n) {
+      if (!people.some(function (p) { return p.name === n; })) people.push({ name: n, role: reportRatesDraft.people[n] });
+    });
+    return { roles: roles, people: people, useSeed: true };
+  }
+  function closeRatesModal() {
+    var el = document.getElementById('rates-modal');
+    if (el) { el.classList.add('hidden'); el.classList.remove('flex'); }
+  }
+  function saveRates() {
+    var el = document.getElementById('rates-modal');
+    var roles = FINANCE_ROLES.map(function (r) {
+      var inp = el.querySelector('[data-rate-key="' + r.key + '"]');
+      var v = inp && inp.value !== '' ? Number(inp.value) : NaN;
+      return { key: r.key, label: r.label, rate: isFinite(v) && v > 0 ? v : null };
+    });
+    var people = [], shown = {};
+    el.querySelectorAll('[data-rate-person]').forEach(function (s) {
+      var n = s.getAttribute('data-rate-person');
+      shown[n] = true;
+      if (s.value) people.push({ name: n, role: s.value });
+    });
+    // Someone no longer on the roster keeps their saved role: their old hours still need it.
+    ((financeRates && financeRates.people) || []).forEach(function (p) { if (p && p.name && !shown[p.name]) people.push(p); });
+    var data = { roles: roles, people: people, updatedAt: new Date().toISOString(), updatedBy: myDisplayName() };
+    setDoc(financeDocRef, data).then(function () {
+      financeRates = data;
+      closeRatesModal();
+      showToast('Rates saved', 'success');
+    }).catch(function (err) { showToast('Could not save rates: ' + err.message, 'error'); });
+  }
+
+  // ---- The report's numbers ----
+  function projectTasksAll(name) {
+    var key = projectKey(name);
+    return tasks.concat(archivedTasks || []).filter(function (t) { return t && projectKey(t.project) === key; });
+  }
+  function finHours(min) { return (Math.round(min / 60 * 100) / 100).toFixed(2); }
+  function finMoney(v) {
+    if (!v) return '$ -';
+    return '$ ' + v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  function finPct(cur, prev) {
+    if (!prev) return 'N.A.';
+    return ((cur - prev) / prev * 100).toFixed(2) + '%';
+  }
+  function finLongDate(d) { return d.getDate() + ' ' + d.toLocaleString('en-US', { month: 'long' }) + ' ' + d.getFullYear(); }
+  // Hours and amounts for one project, active and archived tasks. Amounts use each entry author's
+  // role rate; someone with no rate shows "No rate set", never $0.
+  function closingReportNumbers(name, fr) {
+    var rateOf = {};
+    var roles = financeRoleList(fr);
+    roles.forEach(function (r) { rateOf[r.key] = r.rate; });
+    var entries = [], people = {}, byRole = {}, noRate = {};
+    projectTasksAll(name).forEach(function (t) {
+      (t.timeEntries || []).forEach(function (e) {
+        if (!e || !e.minutes) return;
+        var who = e.author || 'Unknown';
+        var role = financeRoleOf(fr, who), rate = role ? rateOf[role] : null;
+        var amount = rate == null ? 0 : e.minutes / 60 * rate;
+        entries.push({ who: who, date: e.date || null, billable: !!e.billable, overtime: !!e.overtime, minutes: e.minutes, task: t.name || '', note: e.note || '' });
+        var p = people[who] || (people[who] = { name: who, bMin: 0, uMin: 0, bAmt: 0, uAmt: 0, hasRate: rate != null });
+        if (e.billable) { p.bMin += e.minutes; p.bAmt += amount; } else { p.uMin += e.minutes; p.uAmt += amount; }
+        if (!e.billable) return;
+        if (rate != null) { var r = byRole[role] || (byRole[role] = { min: 0, amt: 0 }); r.min += e.minutes; r.amt += amount; }
+        else noRate[who] = (noRate[who] || 0) + e.minutes;
+      });
+    });
+    var list = Object.keys(people).map(function (k) { return people[k]; })
+      .sort(function (a, b) { return (b.bMin + b.uMin) - (a.bMin + a.uMin) || a.name.localeCompare(b.name); });
+    var sum = function (f) { return list.reduce(function (s, p) { return s + p[f]; }, 0); };
+    entries.sort(function (a, b) { return String(a.date || '').localeCompare(String(b.date || '')); });
+    return {
+      roles: roles, people: list, entries: entries, byRole: byRole, noRate: noRate,
+      bMin: sum('bMin'), uMin: sum('uMin'), bAmt: sum('bAmt'), uAmt: sum('uAmt'),
+      missingRates: list.filter(function (p) { return !p.hasRate; }).map(function (p) { return p.name; })
+    };
+  }
+  // Facts to react to under "What went well?" / "What didn't?": dates, review rounds, overtime.
+  // The opinions stay with people.
+  function closingReportFacts(name) {
+    var list = projectTasksAll(name), well = [], didnt = [];
+    var dated = list.filter(function (t) { return t.completedAt && t.deadline; });
+    var late = dated.filter(function (t) { return localDateOf(t.completedAt) > t.deadline; });
+    if (dated.length) well.push((dated.length - late.length) + ' of ' + dated.length + ' deliverable' + (dated.length === 1 ? '' : 's') + ' finished on or before the deadline');
+    late.slice(0, 5).forEach(function (t) {
+      var days = Math.round((parseDate(localDateOf(t.completedAt)) - parseDate(t.deadline)) / 86400000);
+      didnt.push(t.name + ' finished ' + days + ' day' + (days === 1 ? '' : 's') + ' after its deadline (' + formatShortDate(t.deadline) + ')');
+    });
+    if (late.length > 5) didnt.push((late.length - 5) + ' more deliverables finished late');
+    var reviewed = list.filter(function (t) { return reviewRoundCount(t, 'client') > 0; });
+    var many = reviewed.filter(function (t) { return reviewRoundCount(t, 'client') >= 2; });
+    if (reviewed.length && !many.length) well.push('Every deliverable sent to the client was approved in one review round');
+    many.slice(0, 5).forEach(function (t) { didnt.push(t.name + ' went through ' + reviewRoundCount(t, 'client') + ' client review rounds'); });
+    var ot = timeByPerson(list).filter(function (x) { return x.ot; });
+    if (ot.length) {
+      var otMin = ot.reduce(function (s, x) { return s + x.ot; }, 0);
+      didnt.push(formatDuration(otMin) + ' of overtime (' + ot.map(function (x) { return x.name.split(' ')[0] + ' ' + formatDuration(x.ot); }).join(', ') + ')');
+    }
+    var unfinished = list.filter(function (t) { return t.archivedAt && t.status !== 'Done'; });
+    if (unfinished.length) didnt.push(unfinished.length + ' task' + (unfinished.length === 1 ? ' was' : 's were') + ' archived without being finished');
+    return { well: well, didnt: didnt };
+  }
+
+  // ---- Filling the template ----
+  var JSZIP_URL = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+  var DOCX_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  function ensureJsZip() {
+    if (window.JSZip) return Promise.resolve(window.JSZip);
+    return new Promise(function (resolve, reject) {
+      var s = document.createElement('script');
+      s.src = JSZIP_URL;
+      s.onload = function () { window.JSZip ? resolve(window.JSZip) : reject(new Error('JSZip did not load')); };
+      s.onerror = function () { reject(new Error('Could not load the document builder')); };
+      document.head.appendChild(s);
+    });
+  }
+  var W_NS = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  // Replaces {{X}} in every text run under `node` (each marker sits in one run of the template).
+  function fillMarkers(node, map) {
+    var ts = node.getElementsByTagNameNS(W_NS, 't');
+    for (var i = 0; i < ts.length; i++) {
+      var t = ts[i];
+      if (t.textContent.indexOf('{{') === -1) continue;
+      t.textContent = t.textContent.replace(/\{\{(\w+)\}\}/g, function (m, k) { return map[k] == null ? '' : String(map[k]); });
+      t.setAttributeNS('http://www.w3.org/XML/1998/namespace', 'xml:space', 'preserve');
+    }
+  }
+  function firstWithMarker(xml, tag, k) {
+    var els = xml.getElementsByTagNameNS(W_NS, tag);
+    for (var i = 0; i < els.length; i++) if (els[i].textContent.indexOf('{{' + k + '}}') !== -1) return els[i];
+    return null;
+  }
+  // The table row holding {{key}} becomes one row per item (fn(item) gives its markers).
+  function repeatRow(xml, key, items, fn) {
+    var tpl = firstWithMarker(xml, 'tr', key);
+    if (!tpl) return;
+    items.forEach(function (it) {
+      var c = tpl.cloneNode(true);
+      fillMarkers(c, fn(it));
+      tpl.parentNode.insertBefore(c, tpl);
+    });
+    tpl.parentNode.removeChild(tpl);
+  }
+  // The bullet holding {{key}} becomes one bullet per line, plus one empty bullet for people's own.
+  function repeatBullet(xml, key, lines) {
+    var tpl = firstWithMarker(xml, 'p', key);
+    if (!tpl) return;
+    lines.forEach(function (line) {
+      var c = tpl.cloneNode(true), m = {};
+      m[key] = line;
+      fillMarkers(c, m);
+      tpl.parentNode.insertBefore(c, tpl);
+    });
+    var blank = {}; blank[key] = '';
+    fillMarkers(tpl, blank);
+  }
+  // `typedRates`: rates typed in the report window (finance/rates not readable yet); else loaded.
+  function buildClosingReportDocx(name, prevName, typedRates) {
+    return Promise.all([ensureJsZip(), typedRates || loadFinanceRates(), fetch('templates/closing-report.docx').then(function (r) {
+      if (!r.ok) throw new Error('Could not load the report template');
+      return r.arrayBuffer();
+    })]).then(function (res) {
+      var fr = res[1];
+      return res[0].loadAsync(res[2]).then(function (zip) {
+        return zip.file('word/document.xml').async('string').then(function (src) {
+          var xml = new DOMParser().parseFromString(src, 'application/xml');
+          var n = closingReportNumbers(name, fr);
+          var prev = prevName ? closingReportNumbers(prevName, fr) : null;
+          var facts = closingReportFacts(name);
+          var entryDate = function (iso) { var d = new Date(iso); return isNaN(d) ? '' : d.toLocaleString('en-US', { month: 'long' }) + ' ' + d.getDate() + ', ' + d.getFullYear(); };
+          var amountCell = function (min, amt, hasRate) { return hasRate || !min ? finMoney(amt) : 'No rate set'; };
+          repeatBullet(xml, 'WELL', facts.well);
+          repeatBullet(xml, 'DIDNT', facts.didnt);
+          repeatRow(xml, 'BN', n.people, function (p) { return { BN: p.name, BH: finHours(p.bMin), BA: amountCell(p.bMin, p.bAmt, p.hasRate) }; });
+          repeatRow(xml, 'UN', n.people, function (p) { return { UN: p.name, UH: finHours(p.uMin), UA: amountCell(p.uMin, p.uAmt, p.hasRate) }; });
+          var roleRows = n.roles.map(function (r) {
+            var cur = n.byRole[r.key] || { min: 0, amt: 0 };
+            var pr = prev ? (prev.byRole[r.key] || { min: 0 }) : null;
+            return {
+              RN: r.label + (r.rate != null ? ' (' + r.rate + '/hr)' : ' (no rate set)'),
+              RH: finHours(cur.min), RA: finMoney(cur.amt),
+              RP: pr ? finHours(pr.min) : '', RD: pr ? finPct(cur.min, pr.min) : ''
+            };
+          });
+          var noRateNames = Object.keys(n.noRate);
+          if (noRateNames.length) {
+            var nrMin = noRateNames.reduce(function (s, k) { return s + n.noRate[k]; }, 0);
+            roleRows.push({ RN: 'No rate set (' + noRateNames.map(function (x) { return x.split(' ')[0]; }).join(', ') + ')', RH: finHours(nrMin), RA: '', RP: '', RD: '' });
+          }
+          repeatRow(xml, 'RN', roleRows, function (r) { return r; });
+          repeatRow(xml, 'DP', n.entries, function (e) {
+            return { DP: e.who, DD: e.date ? entryDate(e.date) : '', DT: (e.billable ? 'Billable' : 'Unbillable') + (e.overtime ? ' (OT)' : ''), DH: finHours(e.minutes), DK: e.task, DN: e.note };
+          });
+          fillMarkers(xml.documentElement, {
+            PROJECT: name, AUTHOR: myDisplayName(), DATE: finLongDate(new Date()),
+            INT_A: finMoney(n.bAmt),
+            PREV_INT: prev ? finMoney(prev.bAmt) : '', PREV_INT_D: prev ? finPct(n.bAmt, prev.bAmt) : '',
+            TOT_H: finHours(n.bMin + n.uMin), TOT_A: finMoney(n.bAmt + n.uAmt),
+            BILL_H: finHours(n.bMin), BILL_A: finMoney(n.bAmt),
+            UNB_H: finHours(n.uMin), UNB_A: finMoney(n.uAmt),
+            PREV_HDR: prev ? 'Last round hours' : '',
+            DTOT: finHours(n.bMin + n.uMin)
+          });
+          zip.file('word/document.xml', new XMLSerializer().serializeToString(xml));
+          return zip.generateAsync({ type: 'blob', mimeType: DOCX_TYPE });
+        });
+      });
+    });
+  }
+  function closingReportFileName(name) { return String(name).replace(/[\\/:*?"<>|]/g, ' ').trim() + '_End of Project Report'; }
+  function downloadBlob(blob, fileName) {
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+
+  // ---- Saving to Google Drive ----
+  // drive.file: the app may create files and see only the ones it made. Asked for on first use by
+  // whoever makes a report, not at sign-in for everyone. Kept 50 minutes (Google's tokens last 60).
+  var driveWriteToken = null, driveWriteTokenAt = 0;
+  function getDriveWriteToken() {
+    if (driveWriteToken && Date.now() - driveWriteTokenAt < 50 * 60000) return Promise.resolve(driveWriteToken);
+    var p = new GoogleAuthProvider();
+    p.setCustomParameters({ hd: ALLOWED_EMAIL_DOMAIN });
+    p.addScope('https://www.googleapis.com/auth/drive.readonly');
+    p.addScope('https://www.googleapis.com/auth/drive.file');
+    return signInWithPopup(auth, p).then(function (result) {
+      var cred = result ? GoogleAuthProvider.credentialFromResult(result) : null;
+      driveWriteToken = cred ? cred.accessToken : null;
+      driveWriteTokenAt = Date.now();
+      if (driveWriteToken) driveAccessToken = driveWriteToken;   // still good for the Drive picker
+      return driveWriteToken;
+    });
+  }
+  function driveFolderId(url) {
+    var m = /\/folders\/([\w-]+)/.exec(url || '') || /[?&]id=([\w-]+)/.exec(url || '');
+    return m ? m[1] : null;
+  }
+  function uploadDocxAsGoogleDoc(token, blob, fileName, folderId) {
+    var meta = { name: fileName, mimeType: 'application/vnd.google-apps.document' };
+    if (folderId) meta.parents = [folderId];
+    var b = 'pm' + Date.now();
+    var body = new Blob(['--' + b + '\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n' + JSON.stringify(meta) +
+      '\r\n--' + b + '\r\nContent-Type: ' + DOCX_TYPE + '\r\n\r\n', blob, '\r\n--' + b + '--'], { type: 'multipart/related; boundary=' + b });
+    return fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,webViewLink', {
+      method: 'POST', headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'multipart/related; boundary=' + b }, body: body
+    }).then(function (r) {
+      return r.json().catch(function () { return {}; }).then(function (j) {
+        if (!r.ok) { var err = new Error((j.error && j.error.message) || ('Drive said ' + r.status)); err.status = r.status; throw err; }
+        return j;
+      });
+    });
+  }
+
+  // ---- The Closing report window ----
+  var closingReportState = null;   // {name}
+  function closingReportModalEl() {
+    var el = document.getElementById('closing-report-modal');
+    if (el) return el;
+    document.body.insertAdjacentHTML('beforeend',
+      '<div id="closing-report-modal" class="fixed inset-0 z-[60] hidden items-center justify-center p-2 sm:p-4 modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="closing-report-title">' +
+        '<div class="bg-white dark:bg-zinc-800 w-full max-w-md rounded-2xl shadow-pop overflow-hidden max-h-[92vh] flex flex-col modal-pop-in">' +
+          '<div class="flex items-center justify-between gap-3 px-5 py-4 border-b border-zinc-100 dark:border-zinc-700">' +
+            '<h3 id="closing-report-title" class="text-base font-bold text-zinc-900 dark:text-zinc-100">Closing report</h3>' +
+            '<button type="button" data-closing-report-cancel class="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500" aria-label="Close">' + svgIcon('x', 'w-4 h-4') + '</button>' +
+          '</div>' +
+          '<div id="closing-report-body" class="px-5 py-4 space-y-4 overflow-y-auto"></div>' +
+          '<div class="flex items-center justify-between gap-2 px-5 py-3 border-t border-zinc-100 dark:border-zinc-700">' +
+            '<button type="button" id="closing-report-download" class="text-xs font-semibold text-zinc-500 dark:text-zinc-400 hover:text-brand-600 dark:hover:text-brand-400">Download .docx instead</button>' +
+            '<button type="button" id="closing-report-ok" class="text-sm font-semibold px-3.5 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700 shadow-card disabled:opacity-50 disabled:cursor-not-allowed">Create Google Doc</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>');
+    el = document.getElementById('closing-report-modal');
+    el.addEventListener('click', function (e) {
+      if (e.target.closest('[data-closing-report-cancel]')) { closeClosingReportModal(); return; }
+      if (e.target.closest('[data-open-rates]')) { closeClosingReportModal(); openRatesModal(); return; }
+      if (e.target.closest('#closing-report-ok')) { makeClosingReport(true); return; }
+      if (e.target.closest('#closing-report-download')) makeClosingReport(false);
+    });
+    el.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeClosingReportModal(); }
+    });
+    el.addEventListener('keydown', trapFocus(el));
+    return el;
+  }
+  function openClosingReportModal(name) {
+    if (!name || !isFinanceUser()) return;
+    projectMenuOpen = null;
+    wipCategoryPicking = null;
+    closingReportState = { name: name };
+    var el = closingReportModalEl();
+    var body = document.getElementById('closing-report-body');
+    body.innerHTML = '<p class="text-sm text-zinc-500 dark:text-zinc-400">Loading…</p>';
+    document.getElementById('closing-report-ok').disabled = true;
+    el.classList.remove('hidden'); el.classList.add('flex');
+    if (currentView === 'wip') renderWipView(); else renderProjects();
+    withArchivedTasksReady(function () {
+      // Rates not readable yet (rules unpublished): type them in this window instead.
+      loadFinanceRates().then(function (fr) { return { fr: fr, blocked: false }; }, function (err) {
+        if (financeBlocked(err)) return { fr: null, blocked: true };
+        throw err;
+      }).then(function (got) {
+        if (!closingReportState || closingReportState.name !== name) return;
+        var fr = got.fr;
+        closingReportState.blocked = got.blocked;
+        var n = closingReportNumbers(name, got.blocked ? { useSeed: true } : fr);
+        var noRates = !got.blocked && !financeRoleList(fr).some(function (r) { return r.rate != null; });
+        var others = {};
+        allProjectNames().concat((archivedTasks || []).map(function (t) { return t.project; })).forEach(function (p) {
+          if (p && projectKey(p) !== projectKey(name)) others[p] = true;
+        });
+        var warn = got.blocked ? ''
+          : noRates ? 'No rates are set yet, so amounts will be blank. <button type="button" data-open-rates class="font-semibold underline">Set rates</button>'
+          : n.missingRates.length ? 'No rate for ' + escapeHtml(n.missingRates.join(', ')) + ': their hours are listed without an amount. <button type="button" data-open-rates class="font-semibold underline">Rates &amp; roles</button>'
+          : '';
+        body.innerHTML =
+          '<p class="text-sm font-semibold text-zinc-800 dark:text-zinc-100 break-words">' + projectNameHtml(name) + '</p>' +
+          '<p id="closing-report-summary" class="text-sm text-zinc-600 dark:text-zinc-300"></p>' +
+          (warn ? '<p class="text-xs rounded-lg px-3 py-2 bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">' + warn + '</p>' : '') +
+          (got.blocked ? reportRatesFormHtml(n.people.map(function (p) { return p.name; })) : '') +
+          '<div><label for="closing-report-prev" class="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-1">Compare with last round <span class="font-normal text-zinc-400 dark:text-zinc-500">(optional, for recurring projects)</span></label>' +
+            '<select id="closing-report-prev" class="w-full ' + FIN_INPUT + '"><option value="">Don\'t compare</option>' +
+            Object.keys(others).sort(function (a, b) { return a.localeCompare(b); }).map(function (p) { return '<option value="' + escapeHtml(p) + '">' + escapeHtml(p) + '</option>'; }).join('') +
+            '</select></div>' +
+          '<p class="text-xs text-zinc-500 dark:text-zinc-400">Fills in your report template: hours, internal spend and facts for the learnings. Budget and external spend stay blank for the Transaction Report. Saved to the project\'s Drive folder, or your own Drive.</p>';
+        var showSummary = function () {
+          var m = got.blocked ? closingReportNumbers(name, reportRatesFromForm()) : n;
+          document.getElementById('closing-report-summary').textContent = m.entries.length + ' time entr' + (m.entries.length === 1 ? 'y' : 'ies') + ', ' +
+            finHours(m.bMin + m.uMin) + ' hours' + (m.bAmt ? ', internal spend ' + finMoney(m.bAmt) : '') + '.';
+        };
+        showSummary();
+        var rr = document.getElementById('closing-report-rates');
+        if (rr) { rr.addEventListener('input', showSummary); rr.addEventListener('change', showSummary); }
+        document.getElementById('closing-report-ok').disabled = false;
+        (rr ? rr.querySelector('input') : document.getElementById('closing-report-ok')).focus();
+      }).catch(function (err) {
+        body.innerHTML = '<p class="text-sm text-rose-600 dark:text-rose-400">Could not load rates: ' + escapeHtml(err.message) + '</p>';
+      });
+    });
+  }
+  function closeClosingReportModal() {
+    var el = document.getElementById('closing-report-modal');
+    if (el) { el.classList.add('hidden'); el.classList.remove('flex'); }
+    closingReportState = null;
+  }
+  function makeClosingReport(toDrive) {
+    var s = closingReportState;
+    if (!s) return;
+    var name = s.name;
+    var prevName = (document.getElementById('closing-report-prev') || {}).value || '';
+    var fileName = closingReportFileName(name);
+    // The Google permission pop-up has to open straight from the click, before any waiting.
+    var tokenP = toDrive ? getDriveWriteToken().catch(function () { return null; }) : Promise.resolve(null);
+    var built = buildClosingReportDocx(name, prevName, s.blocked ? reportRatesFromForm() : undefined);
+    closeClosingReportModal();
+    showToast(toDrive ? 'Making the closing report…' : 'Making the .docx…', 'info');
+    Promise.all([tokenP, built]).then(function (res) {
+      var token = res[0], blob = res[1];
+      var offerDownload = { action: { label: 'Download .docx', onClick: function () { downloadBlob(blob, fileName + '.docx'); } } };
+      if (!toDrive) { downloadBlob(blob, fileName + '.docx'); return; }
+      if (!token) { showToast("Couldn't get permission to save to Google Drive", 'error', offerDownload); return; }
+      var folder = driveFolderId(projectFolderFor(name));
+      var where = folder ? "the project's Drive folder" : 'your Google Drive';
+      return uploadDocxAsGoogleDoc(token, blob, fileName, folder).catch(function (err) {
+        if (!folder || err.status === 401) throw err;
+        // This permission can't reach that folder: put it in their own Drive instead.
+        where = 'your Google Drive';
+        return uploadDocxAsGoogleDoc(token, blob, fileName, null);
+      }).then(function (file) {
+        logActivity('project_report', 'Made the closing report for ' + name);
+        showToast('Closing report saved to ' + where, 'success', { action: { label: 'Open', onClick: function () { window.open(file.webViewLink, '_blank', 'noopener'); } } });
+      }).catch(function (err) {
+        if (err.status === 401) driveWriteToken = null;
+        showToast('Could not save to Drive: ' + err.message, 'error', offerDownload);
+      });
+    }).catch(function (err) { showToast('Could not make the report: ' + err.message, 'error'); });
+  }
+
   // Every other project, plus WIP-only entries (leads), filtered by the typed words.
   function projectMergeTargets(fromName, q) {
     var fk = projectKey(fromName), names = {};
@@ -12429,6 +12987,8 @@
           (projectNeedsClosingOffer(p.name)
             ? '<button type="button" class="project-closing-btn ' + WIP_ACT_BTN + '" data-project="' + escapeHtml(p.name) + '" data-closing="on" title="List it under Closing reports in WIP Meeting until the report is written">Needs closing report</button>'
             : '<button type="button" class="project-closing-btn ' + WIP_ACT_BTN + '" data-project="' + escapeHtml(p.name) + '" data-closing="off" title="Take it off Closing reports in WIP Meeting">Closing report done</button>') +
+          // See RATES & CLOSING REPORT.
+          (isFinanceUser() ? sep + '<button type="button" class="project-report-btn ' + WIP_ACT_BTN + '" data-project="' + escapeHtml(p.name) + '" title="Fill in the end of project report template as a Google Doc">Make closing report…</button>' : '') +
           sep + closeBtn
         : '<button type="button" class="project-archive-all-btn ' + WIP_ACT_BTN + '" data-project="' + escapeHtml(p.name) + '" title="Archive every task, done or not, and move the project to Completed">Archive project</button>' +
           sep + closeBtn) +
@@ -17621,7 +18181,7 @@
     board_imported: 'upload', board_seeded: 'download',
     board_archived: 'download', task_archived: 'download', task_unarchived: 'upload',
     leave_changed: 'calendar', project_departments: 'dashboard', project_renamed: 'pencil',
-    project_merged: 'arrowRight', project_closed: 'archive'
+    project_merged: 'arrowRight', project_closed: 'archive', project_report: 'checklist'
   };
   var ACTIVITY_ICON_CLASS = {
     task_created: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400',
@@ -19667,6 +20227,8 @@
             }).join('') +
             (!pdoc.wipNote ? '<span class="w-px h-4 mx-2 bg-zinc-200 dark:bg-zinc-600"></span><button type="button" data-wip-act="edit-note" data-project="' + escapeHtml(name) + '" class="' + WIP_ACT_BTN + '">+ Notes</button>' : '') +
             detailsMenuBtn +
+            // See RATES & CLOSING REPORT.
+            (cat === 'closing' && isFinanceUser() ? '<span class="w-px h-4 mx-2 bg-zinc-200 dark:bg-zinc-600"></span><button type="button" data-wip-act="closing-report" data-project="' + escapeHtml(name) + '" class="' + WIP_ACT_BTN + '">Make closing report…</button>' : '') +
             // See LOST OR CANCELLED: a lead that wasn't won leaves WIP but stays on record.
             '<span class="w-px h-4 mx-2 bg-zinc-200 dark:bg-zinc-600"></span><button type="button" data-wip-act="close-project" data-project="' + escapeHtml(name) + '" class="' + WIP_ACT_BTN + '" title="A pitch that wasn&#39;t won or a job that stopped: take it off WIP without counting it as done">Lost or cancelled…</button>' +
           '</div>'
@@ -19781,6 +20343,7 @@
       if (kind === 'add-entry') { wipDraft = {}; wipEdit = { project: '', kind: 'entry' }; renderWipView(); return; }
       if (kind === 'edit-note') { wipDraft = {}; wipCategoryPicking = null; wipEdit = { project: proj, kind: 'note' }; renderWipView(); return; }
       if (kind === 'close-project') { openCloseProjectModal(proj); return; }
+      if (kind === 'closing-report') { openClosingReportModal(proj); return; }
       if (kind === 'pick-category') { wipCategoryPicking = wipCategoryPicking === proj ? null : proj; renderWipView(); return; }
       if (kind === 'toggle-finished') { wipFinishedOpen = !wipFinishedOpen; if (wipFinishedOpen) markJustOpened('wipfinished'); renderWipView(); return; }
       if (kind === 'open-project') { cmdkOpenProject(proj); return; }
@@ -21862,6 +22425,10 @@
   /* =========================================================
      EXPORT / IMPORT
   ========================================================= */
+  document.getElementById('btn-rates').addEventListener('click', function () {
+    document.getElementById('user-menu-panel').classList.add('hidden');
+    openRatesModal();
+  });
   document.getElementById('btn-export').addEventListener('click', function () {
     document.getElementById('user-menu-panel').classList.add('hidden');
     // Archived tasks live in a separate collection now and aren't loaded by default -- without
@@ -24157,6 +24724,7 @@
     registerPresence(user);
     startListeners();
     startPresenceHeartbeat();
+    document.getElementById('btn-rates').classList.toggle('hidden', !isFinanceUser());   // see RATES & CLOSING REPORT
   });
 
   /* =========================================================
@@ -24210,7 +24778,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-11-19T05:02:02Z";
+  var CURRENT_BUILD_VERSION = "2026-11-19T08:50:48Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

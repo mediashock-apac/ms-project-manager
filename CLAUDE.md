@@ -3502,6 +3502,52 @@ admins only, target wins with nothing lost. PROJECT ACTIONS in index.html.
   - `tests/project-lost.test.js`.
 - `tests/project-actions.test.js`.
 
+### Closing report document and rates (2026-11-19)
+
+Asked: fill in the team's "End of Project Report" template from what the app knows, "for the hours
+and rates, certain people have defined rates, so maybe that can be fixed to calculate as well", as a
+Google Doc in the exact same format; rates seen and set by admins plus Arvind only. RATES & CLOSING
+REPORT in index.html.
+- **Rates & roles** (profile menu > Data, `#btn-rates`, only for `isFinanceUser()`): an hourly rate
+  per role (`FINANCE_ROLES`: Account director, Account manager | Content strat, Account executive,
+  Account coordinator, Creative, Post production, Intern) and a role per person. Stored in
+  `finance/rates` `{roles: [{key, label, rate}], people: [{name, role}]}`, keyed by display name like
+  time entries' `author`. **Rates are never in index.html** (the repo is public); only role names
+  and a first-time suggested role per first name (`FINANCE_ROLE_SEED`) are. Overtime is charged at
+  the normal rate. Someone with no role shows "No rate set", never $0.
+- **Who:** `firestore.rules` `isFinance()` = admins plus `financeExtra()`, and index.html
+  `FINANCE_EMAILS` = `ADMIN_EMAILS` plus `FINANCE_EXTRA_EMAILS`. **Keep the two extra lists
+  identical.** Arvind's address goes in both (added by hand: tooling here refuses to write it).
+  `finance` needs the rules deployed. **Until then (as of 2026-11-19 nobody with Firebase access had
+  published them; Arvind has none):** Rates & roles says the rules aren't published, and the Closing
+  report window shows the rate boxes and a role picker for each person on that project instead
+  (`reportRatesFormHtml`, `reportRatesFromForm`, `financeBlocked`). Typed rates are used for that
+  report only, never saved, and kept in memory for the rest of the visit (`reportRatesDraft`). Once
+  the rules are published this switches to the saved rates on its own.
+- **Make closing report…**: in a Completed project's ⋯ row on Projects, and WIP's ⋯ row for a project
+  under Closing reports; finance people only. A small window shows entries, hours and internal spend,
+  warns about anyone without a rate, offers "Compare with last round" (any other project, for
+  recurring jobs), then **Create Google Doc** or "Download .docx instead".
+- **How:** `templates/closing-report.docx` is the team's template with its example numbers removed
+  (they looked like real client figures) and `{{MARKERS}}` put in single runs; it was built by a
+  one-off script from the original, so a new template version needs the same treatment.
+  `buildClosingReportDocx` fills it with JSZip (cdnjs 3.10.1, loaded on first use): name, author,
+  date; "Project hours report" dropdown chip set to Complete; facts under "What went well?" / "What
+  didn't?" (`closingReportFacts`: on-time vs late deliverables, 2+ client review rounds, overtime,
+  tasks archived unfinished), each list ending in an empty bullet; internal spend (billable hours x
+  rate); hours summary per person (billable and unbillable); role table (billable hours, plus a "No
+  rate set (names)" row); every time entry (the Project column became Task). Budget, external spend,
+  margins, observations and key takeaways stay blank; the external spend example table is gone, its
+  instruction kept.
+- **Saving:** `getDriveWriteToken` asks Google for `drive.file` (create files, see only its own) in a
+  pop-up on the first report per session, straight from the click. Uploaded as multipart with
+  `mimeType: application/vnd.google-apps.document` so Drive converts it to a Google Doc. Tries the
+  project's Drive folder, then the person's own Drive if refused (drive.file may not reach a folder
+  the app didn't create; **not yet confirmed on the live site**). Toast with Open; no permission or a
+  failed upload offers the .docx. Logged to Activity (`project_report`).
+- `tests/closing-report-doc.test.js` (rates window, every section of the filled document read back,
+  the upload and its fallback, hidden for others).
+
 ### "Did you mean?" for similar project names (2026-11-19)
 
 From Ming Song's Suggestion (16 Nov): "261112[Lark]PitchDemoDay_Jakarta_Tokyo" and

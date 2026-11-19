@@ -252,6 +252,20 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Hourly rates and who has which role (RATES & CLOSING REPORT in index.html): admins plus
+    // the addresses in financeExtra(), which must match FINANCE_EXTRA_EMAILS in index.html.
+    // Not readable by the rest of the team, and not stored in index.html (the repo is public).
+    function financeExtra() {
+      return ['arvind@mediashock.com.sg'];
+    }
+    function isFinance() {
+      return isMediashock() && (isAdmin() || request.auth.token.email.lower() in financeExtra());
+    }
+    match /finance/{docId} {
+      allow read, create, update: if isFinance();
+      allow delete: if false;
+    }
+
     // Suggestions are a shared feedback board, same "whole team edits everything" model as
     // tasks -- anyone can post one, reply, or remove one (replies live as an embedded array
     // on the doc, not a subcollection, so there's nothing further to scope here).
