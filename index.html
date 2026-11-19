@@ -10385,6 +10385,7 @@
   // local by name, so a live snapshot re-rendering the grid doesn't snap an open card shut.
   var projectExpanded = {};
   var projectsCompletedOpen = false;
+  var projectsClosedOpen = false;   // "Lost & cancelled" (see LOST OR CANCELLED)
 
   // All handlers here are delegated: renderProjects() replaces the grid's innerHTML on every
   // snapshot, so anything bound directly to a card would be thrown away.
@@ -10445,6 +10446,10 @@
     if (copyLinkBtn) { copyAppLink('project', copyLinkBtn.getAttribute('data-project'), 'this project'); return; }
     var archiveAllBtn = e.target.closest('.project-archive-all-btn');
     if (archiveAllBtn) { confirmArchiveWholeProject(archiveAllBtn.getAttribute('data-project')); return; }
+    var closeProjBtn = e.target.closest('.project-close-btn');
+    if (closeProjBtn) { openCloseProjectModal(closeProjBtn.getAttribute('data-project')); return; }
+    var closedSummary = e.target.closest('#projects-closed-details > summary');
+    if (closedSummary) { projectsClosedOpen = !closedSummary.parentNode.open; return; }
     var restoreBtn = e.target.closest('.project-restore-btn');
     if (restoreBtn) { restoreWholeProject(restoreBtn.getAttribute('data-project')); return; }
     var closingBtn = e.target.closest('.project-closing-btn');
@@ -11970,7 +11975,8 @@
   // time (not just trusting the caller's earlier check) in case someone added a new, not-done
   // task to this project in the few seconds the popup was open on screen.
   // `includeOpen` archives every task, done or not ("Archive project" in the card's ⋯ row).
-  function archiveProjectTasks(name, includeOpen) {
+  // `quiet` skips the Activity line (Close as lost or cancelled writes its own).
+  function archiveProjectTasks(name, includeOpen, quiet) {
     var toArchive = activeTasks().filter(function (t) { return t.project === name && (includeOpen || t.status === 'Done'); });
     if (!toArchive.length) return Promise.resolve(0);
     var now = new Date().toISOString();
@@ -11990,6 +11996,7 @@
       });
     });
     return chain.then(function () {
+      if (quiet) return toArchive.length;
       logActivity('board_archived', includeOpen
         ? 'Archived project "' + name + '" (' + toArchive.length + ' task' + (toArchive.length === 1 ? '' : 's') + ')'
         : 'Archived ' + toArchive.length + ' task' + (toArchive.length === 1 ? '' : 's') + ' from "' + name + '" (marked complete)');
@@ -12103,11 +12110,181 @@
   }
 
   function restoreWholeProject(name) {
+    if (projectOutcome(name)) { reopenProject(name); return; }
     withArchivedTasksReady(function () {
       var list = archivedTasks.filter(function (t) { return t.project === name; });
       if (!list.length) return;
       projectMenuOpen = null;
       restoreArchivedTasks(list, 'Project', 'Restored project "' + name + '" (' + list.length + ' task' + (list.length === 1 ? '' : 's') + ')');
+    });
+  }
+
+  /* LOST OR CANCELLED (2026-11-19, from Zenon's Suggestion: "For a project that has been cancelled
+     or lost or not won there should be an option to put it in that category so that we still have
+     archive of it but it's not marked as 'done'"). Archiving an unfinished project already worked,
+     but it then sat under Completed in the same green as delivered work. Deal tools (HubSpot,
+     Pipedrive: Won / Lost with a reason; Asana: "Dropped") keep a lost outcome apart from done.
+     "Lost or cancelled…" (project ⋯ row on Projects, and WIP's ⋯ row, so leads with no tasks can be
+     closed too) opens one small window: Lost or Cancelled, an optional reason, Close project. Its
+     tasks are archived (not marked Done), it leaves WIP, and Projects lists it in a folded
+     "Lost & cancelled" section with a grey tag. Stored on the project doc as `outcome`
+     {kind, reason, at, by, wipCategory (to put back on reopen)}. Reopen project brings it all back.
+     A project only counts as closed while it has no active task and no WIP category: work added to
+     it again, or a category set again (e.g. "+ Add entry" with the same name), reopens it without
+     anyone having to clear anything. No rules change: `projects` update only guards `chat`. */
+  var PROJECT_OUTCOMES = [
+    { key: 'lost', label: 'Lost', hint: "A pitch or lead that wasn't won" },
+    { key: 'cancelled', label: 'Cancelled', hint: 'A job that stopped before it was finished' }
+  ];
+  function projectOutcomeLabel(kind) {
+    var o = PROJECT_OUTCOMES.find(function (x) { return x.key === kind; });
+    return o ? o.label : '';
+  }
+  function projectOutcome(name) {
+    var pd = name ? projectDeadlineDoc(name) : null;
+    var o = pd && pd.outcome;
+    if (!o || !projectOutcomeLabel(o.kind) || pd.wipCategory) return null;
+    var key = projectKey(name);
+    if (tasks.some(function (t) { return t.project && projectKey(t.project) === key; })) return null;
+    return o;
+  }
+  // WIP-only entries (leads with no tasks ever) that were closed: Projects lists them too.
+  function closedProjectDocNames() {
+    var have = {};
+    allProjectNames().forEach(function (n) { have[projectKey(n)] = true; });
+    return projectDocs.filter(function (p) { return p && p.name && !have[projectKey(p.name)] && projectOutcome(p.name); })
+      .map(function (p) { return p.name; });
+  }
+  function projectOutcomeTagHtml(o) {
+    return '<span class="text-[11px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded bg-zinc-200 text-zinc-700 dark:bg-zinc-700 dark:text-zinc-200" data-project-outcome="' + escapeHtml(o.kind) + '">' + escapeHtml(projectOutcomeLabel(o.kind)) + '</span>';
+  }
+  function projectOutcomeDetailHtml(o) {
+    var when = o.at ? formatShortDate(toDateInputValue(new Date(o.at))) : '';
+    var by = o.by ? String(o.by).split(' ')[0] : '';
+    return '<p class="text-xs text-zinc-500 dark:text-zinc-400 mt-1">' +
+      (o.reason ? '<span class="text-zinc-700 dark:text-zinc-200">' + escapeHtml(o.reason) + '</span> · ' : '') +
+      'Closed' + (when ? ' ' + escapeHtml(when) : '') + (by ? ' by ' + escapeHtml(by) : '') + '</p>';
+  }
+
+  var closeProjectState = null;   // {name, kind}
+  function closeProjectModalEl() {
+    var el = document.getElementById('close-project-modal');
+    if (el) return el;
+    document.body.insertAdjacentHTML('beforeend',
+      '<div id="close-project-modal" class="fixed inset-0 z-[60] hidden items-center justify-center p-2 sm:p-4 modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="close-project-title">' +
+        '<div class="bg-white dark:bg-zinc-800 w-full max-w-md rounded-2xl shadow-pop overflow-hidden max-h-[92vh] flex flex-col modal-pop-in">' +
+          '<div class="flex items-center justify-between gap-3 px-5 py-4 border-b border-zinc-100 dark:border-zinc-700">' +
+            '<h3 id="close-project-title" class="text-base font-bold text-zinc-900 dark:text-zinc-100">Close as lost or cancelled</h3>' +
+            '<button type="button" data-close-project-cancel class="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500" aria-label="Close">' + svgIcon('x', 'w-4 h-4') + '</button>' +
+          '</div>' +
+          '<div id="close-project-body" class="px-5 py-4 space-y-4 overflow-y-auto"></div>' +
+          '<div class="flex items-center justify-end gap-2 px-5 py-3 border-t border-zinc-100 dark:border-zinc-700">' +
+            '<button type="button" data-close-project-cancel class="text-sm font-semibold px-3.5 py-2 rounded-lg text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700">Cancel</button>' +
+            '<button type="button" id="close-project-ok" class="text-sm font-semibold px-3.5 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700 shadow-card disabled:opacity-50 disabled:cursor-not-allowed">Close project</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>');
+    el = document.getElementById('close-project-modal');
+    el.addEventListener('click', function (e) {
+      if (e.target.closest('[data-close-project-cancel]')) { closeCloseProjectModal(); return; }
+      var pick = e.target.closest('[data-close-kind]');
+      if (pick) {
+        closeProjectState.kind = pick.getAttribute('data-close-kind');
+        el.querySelectorAll('[data-close-kind]').forEach(function (b) { setCloseKindPill(b, b === pick); });
+        document.getElementById('close-project-ok').disabled = false;
+        document.getElementById('close-project-reason').focus();
+        return;
+      }
+      if (e.target.closest('#close-project-ok')) submitCloseProject();
+    });
+    el.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeCloseProjectModal(); return; }
+      if (e.key === 'Enter' && e.target.id === 'close-project-reason') { e.preventDefault(); submitCloseProject(); }
+    });
+    el.addEventListener('keydown', trapFocus(el));
+    return el;
+  }
+  function setCloseKindPill(b, on) {
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    b.className = 'text-left px-3 py-2 rounded-lg border text-sm transition focus:outline-none focus:ring-2 focus:ring-brand-500/40 ' + (on
+      ? 'ring-2 ring-brand-500/40 border-brand-400 bg-brand-50 dark:bg-brand-500/10 text-brand-900 dark:text-brand-100'
+      : 'border-zinc-200 dark:border-zinc-600 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700');
+  }
+  function openCloseProjectModal(name) {
+    if (!name) return;
+    projectMenuOpen = null;
+    wipCategoryPicking = null;
+    var cat = projectWipCategory(name);
+    // A pitch or lead is usually lost; anything else, ask.
+    var kind = ['pitch', 'hot', 'cold'].indexOf(cat) !== -1 ? 'lost' : null;
+    closeProjectState = { name: name, kind: kind };
+    var open = activeTasks().filter(function (t) { return t.project === name; }).length;
+    var el = closeProjectModalEl();
+    document.getElementById('close-project-body').innerHTML =
+      '<p class="text-sm font-semibold text-zinc-800 dark:text-zinc-100 break-words">' + projectNameHtml(name) + '</p>' +
+      '<div class="grid grid-cols-2 gap-2">' + PROJECT_OUTCOMES.map(function (o) {
+        return '<button type="button" data-close-kind="' + o.key + '"><span class="block font-semibold">' + escapeHtml(o.label) + '</span>' +
+          '<span class="block text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">' + escapeHtml(o.hint) + '</span></button>';
+      }).join('') + '</div>' +
+      '<div><label for="close-project-reason" class="block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-1">Reason <span class="font-normal text-zinc-400 dark:text-zinc-500">(optional)</span></label>' +
+        '<input id="close-project-reason" type="text" maxlength="200" autocomplete="off" placeholder="e.g. Client went with another agency" class="w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400"></div>' +
+      '<p class="text-xs text-zinc-500 dark:text-zinc-400">' +
+        (open ? (open === 1 ? 'Its 1 task comes' : 'Its ' + open + ' tasks come') + ' off everyone\'s board without being marked done. ' : '') +
+        (cat ? 'It leaves WIP Meeting. ' : '') +
+        'It\'s kept under Lost &amp; cancelled on Projects, and you can reopen it any time.</p>';
+    el.querySelectorAll('[data-close-kind]').forEach(function (b) { setCloseKindPill(b, b.getAttribute('data-close-kind') === kind); });
+    document.getElementById('close-project-ok').disabled = !kind;
+    el.classList.remove('hidden');
+    el.classList.add('flex');
+    if (currentView === 'wip') renderWipView(); else renderProjects();
+    var first = el.querySelector('[data-close-kind][aria-pressed="true"]') || el.querySelector('[data-close-kind]');
+    if (first) first.focus();
+  }
+  function closeCloseProjectModal() {
+    var el = document.getElementById('close-project-modal');
+    if (el) { el.classList.add('hidden'); el.classList.remove('flex'); }
+    closeProjectState = null;
+  }
+  function submitCloseProject() {
+    var s = closeProjectState;
+    if (!s || !s.kind) return;
+    var reason = String((document.getElementById('close-project-reason') || {}).value || '').trim().slice(0, 200);
+    closeCloseProjectModal();
+    closeProjectAs(s.name, s.kind, reason);
+  }
+  function closeProjectAs(name, kind, reason) {
+    var before = activeTasks().filter(function (t) { return t.project === name; }).map(function (t) { return Object.assign({}, t); });
+    var prevCat = projectWipCategory(name) || null;
+    var outcome = { kind: kind, reason: reason || '', at: new Date().toISOString(), by: myDisplayName(), wipCategory: prevCat };
+    var docId = null;
+    archiveProjectTasks(name, true, true).then(function () {
+      return ensureProjectDoc(name);
+    }).then(function (id) {
+      docId = id;
+      return updateDoc(doc(projectsCol, id), { outcome: outcome, wipCategory: null });
+    }).then(function () {
+      var label = projectOutcomeLabel(kind).toLowerCase();
+      logActivity('project_closed', 'Closed project ' + name + ' as ' + label + (reason ? ' (' + reason + ')' : '') +
+        (before.length ? ', archived ' + before.length + ' task' + (before.length === 1 ? '' : 's') : ''));
+      showToast('"' + name + '" closed as ' + label, 'success', { action: { label: 'Undo', onClick: function () {
+        if (before.length) restoreArchivedTasks(before, 'Project');
+        updateDoc(doc(projectsCol, docId), { outcome: deleteField(), wipCategory: prevCat })
+          .catch(function (err) { showToast('Could not undo: ' + err.message, 'error'); });
+      } } });
+    }).catch(function (err) { showToast('Could not close the project: ' + err.message, 'error'); });
+  }
+  // Puts the tasks back, clears the outcome and puts its WIP category back.
+  function reopenProject(name) {
+    projectMenuOpen = null;
+    withArchivedTasksReady(function () {
+      var pd = projectDeadlineDoc(name);
+      var o = (pd && pd.outcome) || {};
+      var list = archivedTasks.filter(function (t) { return t.project === name; });
+      var undoDoc = pd ? updateDoc(doc(projectsCol, pd.id), { outcome: deleteField(), wipCategory: o.wipCategory || null }) : Promise.resolve();
+      undoDoc.then(function () {
+        if (list.length) restoreArchivedTasks(list, 'Project', 'Reopened project "' + name + '" (' + list.length + ' task' + (list.length === 1 ? '' : 's') + ')');
+        else { logActivity('project_closed', 'Reopened project ' + name); showToast('"' + name + '" reopened', 'success'); }
+      }).catch(function (err) { showToast('Could not reopen: ' + err.message, 'error'); });
     });
   }
 
@@ -12236,17 +12413,25 @@
         '</div>' +
       '</div>';
     }
+    var sep = '<span class="w-px h-4 mx-3 bg-zinc-200 dark:bg-zinc-600"></span>';
+    // See LOST OR CANCELLED.
+    var closeBtn = '<button type="button" class="project-close-btn ' + WIP_ACT_BTN + '" data-project="' + escapeHtml(p.name) + '" title="A pitch that wasn\'t won or a job that stopped: archive it without counting it as done">Lost or cancelled…</button>';
+    var closed = p.outcome;
     return wrap + '<div class="flex items-center flex-wrap gap-y-1">' +
       '<button type="button" class="project-copy-link ' + WIP_ACT_BTN + '" data-project="' + escapeHtml(p.name) + '" title="Copy a link that opens this project in Project Manager">Copy link</button>' +
-      '<span class="w-px h-4 mx-3 bg-zinc-200 dark:bg-zinc-600"></span>' +
-      (isCompleted
+      sep +
+      (closed
+        ? '<button type="button" class="project-restore-btn ' + WIP_ACT_BTN + '" data-project="' + escapeHtml(p.name) + '" title="Put its tasks back on the board and its WIP category back">Reopen project</button>'
+        : isCompleted
         ? '<button type="button" class="project-restore-btn ' + WIP_ACT_BTN + '" data-project="' + escapeHtml(p.name) + '" title="Put every task back on the board">Restore project</button>' +
           // See CLOSING REPORTS.
           '<span class="w-px h-4 mx-3 bg-zinc-200 dark:bg-zinc-600"></span>' +
           (projectNeedsClosingOffer(p.name)
             ? '<button type="button" class="project-closing-btn ' + WIP_ACT_BTN + '" data-project="' + escapeHtml(p.name) + '" data-closing="on" title="List it under Closing reports in WIP Meeting until the report is written">Needs closing report</button>'
-            : '<button type="button" class="project-closing-btn ' + WIP_ACT_BTN + '" data-project="' + escapeHtml(p.name) + '" data-closing="off" title="Take it off Closing reports in WIP Meeting">Closing report done</button>')
-        : '<button type="button" class="project-archive-all-btn ' + WIP_ACT_BTN + '" data-project="' + escapeHtml(p.name) + '" title="Archive every task, done or not, and move the project to Completed">Archive project</button>') +
+            : '<button type="button" class="project-closing-btn ' + WIP_ACT_BTN + '" data-project="' + escapeHtml(p.name) + '" data-closing="off" title="Take it off Closing reports in WIP Meeting">Closing report done</button>') +
+          sep + closeBtn
+        : '<button type="button" class="project-archive-all-btn ' + WIP_ACT_BTN + '" data-project="' + escapeHtml(p.name) + '" title="Archive every task, done or not, and move the project to Completed">Archive project</button>' +
+          sep + closeBtn) +
       (isAdminUser()
         ? '<span class="w-px h-4 mx-3 bg-zinc-200 dark:bg-zinc-600"></span>' +
           '<button type="button" class="project-merge-start ' + WIP_ACT_BTN + '" data-project="' + escapeHtml(p.name) + '" title="For a duplicate created by accident: move everything into another project">Merge into another project…</button>'
@@ -17197,7 +17382,9 @@
     // (The Group chat open/create button that used to sit here was removed on request -- chats are
     // opened and started from the Chat tab, including its own "New chat" picker.)
     var readyToArchive = p.activeCount > 0 && p.openCount === 0;
-    var taskCountLabel = readyToArchive
+    var taskCountLabel = p.outcome
+      ? projectOutcomeTagHtml(p.outcome) + (p.rows.length ? '<span class="text-xs text-zinc-400 dark:text-zinc-500">' + p.rows.length + ' task' + (p.rows.length === 1 ? '' : 's') + ' archived</span>' : '')
+      : readyToArchive
       ? '<span class="text-xs font-semibold text-emerald-600 dark:text-emerald-400">All ' + p.activeCount + ' task' + (p.activeCount === 1 ? '' : 's') + ' done</span>'
       : (p.openCount === p.activeCount
         ? '<span class="text-xs text-zinc-400 dark:text-zinc-500">' + p.activeCount + ' active task' + (p.activeCount === 1 ? '' : 's') + '</span>'
@@ -17207,7 +17394,8 @@
     var expanded = !!projectExpanded[p.name] || !!p.searchHit;
     // A Completed project (every task archived) gets the same emerald wash a Done row gets on the
     // Board (boardTaskRowHtml's rowBg), on its header -- one colour for "finished" everywhere.
-    var isCompleted = p.activeCount === 0;
+    // A lost or cancelled one is neutral, never the "finished" green (see LOST OR CANCELLED).
+    var isCompleted = p.activeCount === 0 && !p.outcome;
     var menuOpen = projectMenuOpen === p.name;
     return (
       '<div class="bg-white dark:bg-zinc-800 border ' + (isCompleted ? 'border-emerald-200 dark:border-emerald-500/30' : 'border-zinc-200 dark:border-zinc-700') + ' rounded-xl shadow-card overflow-hidden flex flex-col">' +
@@ -17222,7 +17410,7 @@
               taskCountLabel +
               badges +
             '</div>' +
-            deadlineRow +
+            (p.outcome ? projectOutcomeDetailHtml(p.outcome) : deadlineRow) +
             briefCardRowHtml(p.name) +   // creative brief (see CREATIVE BRIEFS)
             projectFilesRowHtml(p.name) +   // see PROJECT FILES & LINKS
             (readyToArchive
@@ -17238,21 +17426,21 @@
                 (p.byPerson && p.byPerson.length ? ' data-tooltip="' + escapeHtml(timeByPersonText(p.byPerson)) + '"' : '') + '>' + (p.totalMinutes ? formatDuration(p.totalMinutes) : '—') + '</span>' +
               // See PROJECT ACTIONS: one quiet icon; the options only appear once it's clicked.
               '<button type="button" class="project-menu-toggle p-1 -mr-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-700 ' + (menuOpen ? 'text-brand-600 dark:text-brand-400' : 'text-zinc-500 dark:text-zinc-400 hover:text-brand-600 dark:hover:text-brand-400') + '" ' +
-                'data-project="' + escapeHtml(p.name) + '" aria-expanded="' + menuOpen + '" title="Archive, restore or merge" aria-label="Project actions">' + svgIcon('moreHorizontal', 'w-4 h-4') + '</button>' +
+                'data-project="' + escapeHtml(p.name) + '" aria-expanded="' + menuOpen + '" title="Archive, close, restore or merge" aria-label="Project actions">' + svgIcon('moreHorizontal', 'w-4 h-4') + '</button>' +
             '</div>' +
-            '<button type="button" class="project-expand-toggle inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-md border transition ' +
+            (!p.rows.length ? '' : '<button type="button" class="project-expand-toggle inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-md border transition ' +
               (expanded
                 ? 'border-brand-300 text-brand-700 bg-brand-50 hover:bg-brand-100 dark:border-brand-500/40 dark:text-brand-300 dark:bg-brand-500/10 dark:hover:bg-brand-500/20'
                 : 'border-zinc-300 text-zinc-600 hover:bg-zinc-50 hover:border-zinc-400 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-700') +
               '" data-project="' + escapeHtml(p.name) + '" aria-expanded="' + expanded + '">' +
               (expanded ? 'Hide tasks' : 'Show ' + p.rows.length + ' task' + (p.rows.length === 1 ? '' : 's')) +
               '<svg data-ic="chevronDown" class="w-3.5 h-3.5 transition-transform' + (expanded ? ' rotate-180' : '') + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg>' +
-            '</button>' +
+            '</button>') +
           '</div>' +
         '</div>' +
-        (menuOpen ? projectActionsRowHtml(p, isCompleted) : '') +
+        (menuOpen ? projectActionsRowHtml(p, p.activeCount === 0) : '') +
         (projectFilesOpen[p.name] ? projectFilesPanelHtml(p.name) : '') +
-        (expanded ? '<div class="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-700 flex-1' + openAnimClass('proj:' + p.name) + '">' +
+        (expanded && p.rows.length ? '<div class="flex flex-col divide-y divide-zinc-100 dark:divide-zinc-700 flex-1' + openAnimClass('proj:' + p.name) + '">' +
           (p.byPerson && p.byPerson.length
             ? '<div class="project-time-by-person flex flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-2.5 bg-zinc-50/70 dark:bg-zinc-900/30">' +
                 '<span class="text-[11px] font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">Time by person</span>' +
@@ -17277,8 +17465,14 @@
     var allTasks = tasks.concat(archivedTasks);
     var projectNames = {};
     allTasks.forEach(function (t) { if (t.project) projectNames[t.project] = true; });
+    // Leads closed as lost with no tasks ever are listed too (see LOST OR CANCELLED); with no
+    // people to place them in a teamspace, their WIP owner does, else they show under All only.
+    closedProjectDocNames().forEach(function (n) {
+      var owner = (projectDeadlineDoc(n) || {}).wipOwner;
+      if (currentTeamspace === 'all' || (owner && personInTeamspace(owner))) projectNames[n] = 'docOnly';
+    });
     var names = Object.keys(projectNames).sort(function (a, b) { return a.localeCompare(b); })
-      .filter(projectInTeamspace);
+      .filter(function (n) { return projectNames[n] === 'docOnly' || projectInTeamspace(n); });
 
     if (!names.length) {
       container.innerHTML = '<div class="col-span-full flex flex-col items-center gap-3 text-center py-12">' +
@@ -17296,6 +17490,8 @@
     if (q) {
       names = names.filter(function (name) {
         if (name.toLowerCase().indexOf(q) !== -1) return true;
+        var oc = projectOutcome(name);
+        if (oc && String(oc.reason || '').toLowerCase().indexOf(q) !== -1) return true;
         var hit = allTasks.some(function (t) { return t.project === name && taskMatchesSearch(t, q); });
         if (hit) rowMatch[name] = true;
         return hit;
@@ -17339,12 +17535,15 @@
       return {
         name: name, rows: rows, totalMinutes: totalMinutes, byPerson: byPerson, billableMinutes: billableMinutes,
         overtimeMinutes: overtimeMinutes, activeCount: activeCount, openCount: openCount,
-        nextDeadline: nextDeadline, lastArchivedAt: lastArchivedAt, searchHit: !!rowMatch[name]
+        nextDeadline: nextDeadline, lastArchivedAt: lastArchivedAt, searchHit: !!rowMatch[name],
+        outcome: activeCount === 0 ? projectOutcome(name) : null
       };
     });
 
     var ongoing = summaries.filter(function (p) { return p.activeCount > 0; });
-    var completed = summaries.filter(function (p) { return p.activeCount === 0; });
+    var completed = summaries.filter(function (p) { return p.activeCount === 0 && !p.outcome; });
+    var closed = summaries.filter(function (p) { return p.activeCount === 0 && p.outcome; });
+    closed.sort(function (a, b) { return String(b.outcome.at || '').localeCompare(String(a.outcome.at || '')); });
 
     // Ongoing: soonest upcoming deadline first (what needs attention next); no-deadline
     // projects sort last rather than dropping out of the list.
@@ -17387,6 +17586,18 @@
         : '<p class="text-sm text-zinc-400 dark:text-zinc-500 text-center py-6">No completed projects yet.</p>') +
     '</details>';
 
+    // Lost & cancelled (see LOST OR CANCELLED): folded like Completed, only when there is one.
+    // Opens while searching, or while one of its cards is open (a link or Ctrl K opened it).
+    var closedOpen = projectsClosedOpen || !!q || closed.some(function (p) { return projectExpanded[p.name] || projectMenuOpen === p.name; });
+    var closedHtml = !closed.length ? '' :
+      '<details id="projects-closed-details"' + (closedOpen ? ' open' : '') + '>' +
+        '<summary class="flex items-center gap-2 cursor-pointer select-none text-lg font-bold text-zinc-800 dark:text-zinc-100 hover:text-brand-600 dark:hover:text-brand-400 mb-3">' +
+          '<svg data-ic="chevronRight" class="disclosure-chevron w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9 6 15 12 9 18"></polyline></svg>' +
+          'Lost &amp; cancelled' + projectSectionCount(closed.length) +
+        '</summary>' +
+        '<div class="' + cardGrid + '">' + closed.map(projectCardHtml).join('') + '</div>' +
+      '</details>';
+
     // Stacked, Ongoing first (asked for directly). They used to sit side by side so Completed's
     // growth couldn't push Ongoing down -- with Ongoing on top that can't happen anyway, and now
     // that cards collapse to a header, Ongoing stays short enough that Completed is in reach.
@@ -17397,6 +17608,7 @@
           ongoingHtml +
         '</div>' +
         '<div>' + completedHtml + '</div>' +
+        closedHtml +
       '</div>';
   }
 
@@ -17409,7 +17621,7 @@
     board_imported: 'upload', board_seeded: 'download',
     board_archived: 'download', task_archived: 'download', task_unarchived: 'upload',
     leave_changed: 'calendar', project_departments: 'dashboard', project_renamed: 'pencil',
-    project_merged: 'arrowRight'
+    project_merged: 'arrowRight', project_closed: 'archive'
   };
   var ACTIVITY_ICON_CLASS = {
     task_created: 'bg-emerald-100 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-400',
@@ -19455,6 +19667,8 @@
             }).join('') +
             (!pdoc.wipNote ? '<span class="w-px h-4 mx-2 bg-zinc-200 dark:bg-zinc-600"></span><button type="button" data-wip-act="edit-note" data-project="' + escapeHtml(name) + '" class="' + WIP_ACT_BTN + '">+ Notes</button>' : '') +
             detailsMenuBtn +
+            // See LOST OR CANCELLED: a lead that wasn't won leaves WIP but stays on record.
+            '<span class="w-px h-4 mx-2 bg-zinc-200 dark:bg-zinc-600"></span><button type="button" data-wip-act="close-project" data-project="' + escapeHtml(name) + '" class="' + WIP_ACT_BTN + '" title="A pitch that wasn&#39;t won or a job that stopped: take it off WIP without counting it as done">Lost or cancelled…</button>' +
           '</div>'
         : '';
       // Text deliverables (WIP entries without tasks), after any task rows.
@@ -19566,6 +19780,7 @@
       if (kind === 'entry-cat') { wipDraft.cat = aid; renderWipView(); return; }
       if (kind === 'add-entry') { wipDraft = {}; wipEdit = { project: '', kind: 'entry' }; renderWipView(); return; }
       if (kind === 'edit-note') { wipDraft = {}; wipCategoryPicking = null; wipEdit = { project: proj, kind: 'note' }; renderWipView(); return; }
+      if (kind === 'close-project') { openCloseProjectModal(proj); return; }
       if (kind === 'pick-category') { wipCategoryPicking = wipCategoryPicking === proj ? null : proj; renderWipView(); return; }
       if (kind === 'toggle-finished') { wipFinishedOpen = !wipFinishedOpen; if (wipFinishedOpen) markJustOpened('wipfinished'); renderWipView(); return; }
       if (kind === 'open-project') { cmdkOpenProject(proj); return; }
@@ -19782,6 +19997,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-11-19c', date: '2026-11-19', items: [
+      { type: 'new', title: 'Close a project as lost or cancelled', text: "A pitch that wasn't won, or a job that got cancelled? On Projects, open the project's ⋯ menu (or the ⋯ on its WIP Meeting row) and pick Lost or cancelled. Choose which, add a reason if you like, and click Close project. Its tasks come off the board without being counted as done, it leaves WIP Meeting, and it's kept under a new Lost & cancelled section at the bottom of Projects. Changed your mind? Reopen project in the same menu puts everything back. Thanks, Zenon!" }
+    ] },
     { id: '2026-11-19b', date: '2026-11-19', items: [
       { type: 'new', title: 'Start a new round of a task', text: "Scope changed after sign-off, or the client wants another pass? Open a task that's In Review or Completed and click \"Start round 2\" at the top of the task window. You get a fresh copy named \"(Round 2)\" with the same people and steps (unticked), starting today, ready for a new deadline. Round 1 stays exactly as it was, and both rounds link to each other under \"Created by\". Thanks, Zenon!" }
     ] },
@@ -23094,7 +23312,9 @@
     var deadline = projectDeadlineFor(name);
     var folder = projectDriveLink(name);
     var hasChat = Array.isArray(pd.chat);
-    var html = (cat ? '<div class="m-eyebrow" style="padding-top:14px">' + escapeHtml(wipCategoryLabel(cat)) + '</div>' : '<div style="height:14px"></div>') +
+    var outc = projectOutcome(name);   // see LOST OR CANCELLED
+    var eyebrow = outc ? projectOutcomeLabel(outc.kind) + (outc.reason ? ' · ' + outc.reason : '') : (cat ? wipCategoryLabel(cat) : '');
+    var html = (eyebrow ? '<div class="m-eyebrow" style="padding-top:14px">' + escapeHtml(eyebrow) + '</div>' : '<div style="height:14px"></div>') +
       '<h1 class="m-title m-text">' + projectNameHtml(name) + '</h1>' +
       '<div class="m-chips">' + (deadline ? '<span class="m-chip ' + mDue(deadline).cls + '">' + mIcon('clock', 'w-3.5 h-3.5') + 'Due ' + escapeHtml(formatShortDate(deadline)) + '</span>' : '') +
         (pd.wipOwner ? '<span class="m-chip">' + escapeHtml(pd.wipOwner) + '</span>' : '') +
@@ -23990,7 +24210,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-11-19T03:19:47Z";
+  var CURRENT_BUILD_VERSION = "2026-11-19T05:02:02Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

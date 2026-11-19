@@ -3475,6 +3475,31 @@ admins only, target wins with nothing lost. PROJECT ACTIONS in index.html.
   `setProjectWipCategory` now resolves true/false. `tests/closing-report.test.js`.
 - **WIP "Finished this week" now needs every task Done**, archived ones included, so a project
   archived unfinished (a cancelled job) isn't listed as finished.
+- **Lost or cancelled (2026-11-19)**, from Zenon's Suggestion: a lost pitch or cancelled job should
+  stay on record "but it's not marked as 'done'". Archive project already worked, but put it under
+  Completed in the finished green. LOST OR CANCELLED in index.html (HubSpot/Pipedrive Won/Lost with
+  a reason; Asana "Dropped"). This reverses the earlier "Lost Jobs stay in the sheet" decision, on
+  the owner's go-ahead.
+  - **"Lost or cancelled…"** in the project ⋯ row (Ongoing and Completed cards) and in WIP's ⋯ row
+    (so leads with no tasks can be closed) opens one window (`#close-project-modal`, z-60, no
+    close on outside click): Lost / Cancelled (a pitch or lead defaults to Lost), optional reason,
+    Close project. Escape cancels, Enter in the reason closes.
+  - `closeProjectAs`: archives every active task as-is (`archiveProjectTasks(name, true, true)`,
+    quiet, so one Activity line `project_closed`), then sets `projects/{id}.outcome` = {kind,
+    reason, at, by, wipCategory (the old one)} and clears `wipCategory`, so it leaves WIP. Undo on
+    the toast.
+  - **Closed is derived** (`projectOutcome`): an outcome AND no active task AND no WIP category.
+    New work on the project, or a category set again ("+ Add entry" with the same name), reopens
+    it with nothing to clear.
+  - **Projects:** a folded "Lost & cancelled · N" section after Completed (`projectsClosedOpen`;
+    only when non-empty; opens on search or when one of its cards is open). Neutral card, grey
+    Lost/Cancelled tag, the reason and "Closed Nov 19 by Zenon" in place of the deadline line.
+    Leads with no tasks are listed too (`closedProjectDocNames`; under All, or the teamspace of
+    their WIP owner). Search matches the reason. The phone's project page names the outcome.
+  - **Reopen project** (the ⋯ row of a closed card; `restoreWholeProject` hands off to
+    `reopenProject`) restores its archived tasks, clears the outcome and puts the WIP category back.
+  - No rules change. No win/loss counts (not asked for; the stored outcome allows it later).
+  - `tests/project-lost.test.js`.
 - `tests/project-actions.test.js`.
 
 ### "Did you mean?" for similar project names (2026-11-19)
