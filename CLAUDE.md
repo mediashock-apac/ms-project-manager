@@ -3463,6 +3463,13 @@ From Ming Song's Suggestion (16 Nov): "261112[Lark]PitchDemoDay_Jakarta_Tokyo" a
   ignored, or one remainder containing the other), shows one line under the field: "Did you mean
   <name>?". Clicking the name puts it in the field; "It's new" hides it for that name this visit.
   Best match only. Never blocks Save. Nothing at rest.
+- **Only after leaving the field, and never for a name the browser already suggests** (same day,
+  reported from a screenshot of both at once: "it already has this popup. it seems redundant").
+  The Project field's `<datalist>` suggests names containing what's typed, so while typing it covers
+  the case. The line appears on `change` (leaving the field), hides on the next keystroke, and skips
+  any project whose name contains the typed text. What's left is the real gap: a fully typed name
+  that differs mid-way ("Pitch" vs "Innovation"), which the datalist stops showing. Chosen over
+  removing it.
 - Date + client is the house naming convention, so it is close to a unique key; names without it get
   no hint. Not on phone quick add or WIP "+ Add entry" yet.
 - **Merge is admin-only and the question came from a non-admin**: Merge sits in a project card's ⋯

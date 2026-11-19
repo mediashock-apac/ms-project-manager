@@ -1,7 +1,8 @@
 // project-similar -- "Did you mean?" under the task window's Project field: a NEW name sharing an
 // existing project's date and [Client] with similar words offers that project (click to use it, or
 // "It's new" to hide it). Nothing for existing names, other dates/clients, unlike words, or the task's
-// own saved project. Browser test against index.html with Firebase stubbed (see tests/README.md).
+// own saved project. Shown only after leaving the field, and never for a project the browser's own
+// suggestion list already offers (its name contains what was typed). Browser test against index.html with Firebase stubbed (see tests/README.md).
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
@@ -73,11 +74,15 @@ async function skipTours(page) {
   await page.waitForSelector('#app:not(.hidden)', { timeout: 15000 });
   await page.waitForTimeout(1500); await skipTours(page);
   const sim = () => page.evaluate(() => { const el = document.getElementById('task-project-similar'); return el.classList.contains('hidden') ? null : el.textContent; });
-  const type = async (v) => { await page.fill('#task-project', v); await page.waitForTimeout(150); };
+  // Typing alone (input) never shows it; leaving the field (Tab: change) does.
+  const typeOnly = async (v) => { await page.fill('#task-project', v); await page.waitForTimeout(150); };
+  const type = async (v) => { await page.fill('#task-project', v); await page.focus('#task-project'); await page.keyboard.press('Tab'); await page.waitForTimeout(150); };
   await page.click('#btn-add-task'); await page.waitForTimeout(500);
   check('nothing at rest on a new task', (await sim()) === null);
   await type('261112[Lark]PitchDemoDay_Jakarta_Tokyo');
   check('no hint for a name already in use', (await sim()) === null);
+  await typeOnly('261112[Lark]Innovation Demo Day Tokyo');
+  check('nothing while still typing', (await sim()) === null);
   await type('261112[Lark]Innovation Demo Day Tokyo');
   const s1 = await sim();
   check('new similar name offers the existing project', s1 && s1.includes('261112[Lark]InnovationDemoDay_Jakarta_Tokyo') && !s1.includes('PitchDemoDay'), s1);
@@ -88,6 +93,12 @@ async function skipTours(page) {
   await page.locator('#task-project').locator('xpath=../..').screenshot({ path: path.join(OUT, 'project-similar-field.png') });
   await page.click('[data-similar-use]'); await page.waitForTimeout(150);
   check('clicking the name uses it and hides the line', (await page.inputValue('#task-project')) === '261112[Lark]InnovationDemoDay_Jakarta_Tokyo' && (await sim()) === null);
+  await type('261112[Lark]Innovation Demo Day Tokyo');
+  const shownAgain = !!(await sim());
+  await typeOnly('261112[Lark]Innovation Demo Day Tokyo x');
+  check('typing again hides it straight away', shownAgain && (await sim()) === null);
+  await type('261112[Lark]PitchDemoDay_J');
+  check("no hint when the browser's list already offers the name (typed text is part of it)", (await sim()) === null, await sim());
   await type('261112[Lark]Closing Party Singapore');
   check('unlike words: no hint', (await sim()) === null);
   await type('261113[Lark]InnovationDemoDay_Jakarta');

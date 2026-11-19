@@ -8270,6 +8270,9 @@
      AND [Client], with similar words after it, gets one quiet line under the field: "Did you mean <name>?"
      (click to use it) or "It's new" (hides it for this visit). Only while the name is new: not the
      task's own saved project, and not a name any other task or project already uses. Never blocks Save.
+     Shown only once the person LEAVES the field (change), hidden again as soon as they type, and a
+     project whose name contains what was typed is skipped: the browser's own suggestion list already
+     offers that one while typing (reported: the two showed the same name at once, "seems redundant").
      Merging duplicates that already exist stays with admins (PROJECT ACTIONS). */
   var projectOnOpen = '', similarDismissed = {};
   var PROJECT_PREFIX_RE = /^(\d{6})\s*\[([^\]]+)\]\s*(.*)$/;
@@ -8299,10 +8302,12 @@
     });
     projectDocs.forEach(function (p) { if (p.name) names.push(p.name); });
     if (names.some(function (n) { return projectKey(n) === key; })) return null;   // not a new name
+    var typedLower = stripZwsp(String(typed)).trim().toLowerCase();
     var best = null, bestScore = 0;
     names.forEach(function (n) {
       var k = projectKey(n);
       if (seen[k]) return;
+      if (stripZwsp(n).toLowerCase().indexOf(typedLower) !== -1) return;   // the browser's list already shows it
       seen[k] = 1;
       var p = projectNameParts(n);
       if (!p || p.date !== parts.date || p.client !== parts.client) return;
@@ -8325,7 +8330,13 @@
       '<button type="button" data-similar-dismiss class="ml-auto shrink-0 font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-100">It\'s new</button>';
     el.querySelector('[data-similar-use]').setAttribute('data-name', hit);
   }
-  document.getElementById('task-project').addEventListener('input', syncSimilarProject);
+  document.getElementById('task-project').addEventListener('input', function () {
+    var el = document.getElementById('task-project-similar');
+    el.classList.add('hidden');
+    el.classList.remove('flex');
+    el.innerHTML = '';
+  });
+  document.getElementById('task-project').addEventListener('change', syncSimilarProject);
   document.getElementById('task-project-similar').addEventListener('click', function (e) {
     var input = document.getElementById('task-project');
     var use = e.target.closest('[data-similar-use]');
@@ -19624,7 +19635,7 @@
   ========================================================= */
   var CHANGELOG = [
     { id: '2026-11-19a', date: '2026-11-19', items: [
-      { type: 'new', title: "\"Did you mean?\" for project names", text: "Typing a new project name in a task that looks like one already on the board (same date and [Client], similar words)? A line under the Project field asks \"Did you mean ...?\". Click the name to use it, or \"It's new\" if it really is a different project. It helps stop one job ending up as two projects. Already have a duplicate? Ask an admin to merge it from the project card's ... menu. Thanks, Ming Song!" }
+      { type: 'new', title: "\"Did you mean?\" for project names", text: "Typing a new project name in a task that looks like one already on the board (same date and [Client], similar words)? When you move on from the Project field, a line under it asks \"Did you mean ...?\". Click the name to use it, or \"It's new\" if it really is a different project. It helps stop one job ending up as two projects. Already have a duplicate? Ask an admin to merge it from the project card's ... menu. Thanks, Ming Song!" }
     ] },
     { id: '2026-11-18c', date: '2026-11-18', items: [
       { type: 'new', title: 'Duplicate a task from the Board', text: "Hover a task on the Board and click the copy icon beside the bin. A copy is made straight away with the number in its name moved up (Video #1 becomes Video #2), the same people, dates, link and steps (unticked), and opens so you can change any detail. Comments, time and status lines aren't copied. Changed your mind? Click Undo on the message. Thanks, Arvind!" }
@@ -23824,7 +23835,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-11-19T02:42:53Z";
+  var CURRENT_BUILD_VERSION = "2026-11-19T02:57:50Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
