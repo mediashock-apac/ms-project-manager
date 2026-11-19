@@ -3439,8 +3439,31 @@ comments. Nothing to type into. **Restore to edit** runs `unarchiveTask` (now re
 true/false) and opens the normal task window once the task is back. The Archived page's task names
 and Activity rows for archived tasks open it too (Activity used to jump to an Archived search).
 Its own window on purpose: the task window writes on open (step ids, comment threading) and follows
-the live `tasks` list. **Archived tasks stay uneditable in place** (recommended, agreed): editing
+the live `tasks` list. **Archived tasks stay uneditable in place, apart from logging missed time** (see the next section; recommended, agreed): editing
 would need a rules change and lets finished work change unnoticed; Restore leaves an Activity record.
+
+### Logging time on an archived task (2026-11-19)
+
+Asked: "make it possible to add hours for a project after it has been completed, in case some who
+forget to add earlier on". LOG TIME ON AN ARCHIVED TASK in index.html. The archived task window
+(any archived row on a Completed project's card, the Archived page, Activity) has **"+ Log time"**
+beside "Time logged"; it opens a small form (hours, For: roster with you picked, what for with the
+task's steps suggested and linked by name, Billable/Overtime, Cancel/Log). This is the one edit an
+archived task allows: **the task stays archived** (archivedAt unchanged), so the project stays
+Completed and the hours count on its card, Time by person and the closing report. Chosen over
+"restore, log, archive again", which puts finished work back on the board and is easy to leave there.
+- Entry shape as in the task window (`author` = who it's for, `loggedBy` when someone else entered
+  it, `date` = when logged). Activity `task_updated` ("Logged 1h 30m on archived ..."). Undo on the
+  toast removes that entry. While the form is open an outside click doesn't close the window and
+  Escape closes only the form.
+- **Saving:** `saveArchivedTimeEntries` tries `updateDoc` on `archivedTasks/{id}`. The live rules
+  allow that only for admins and the task's creator, so for everyone else it falls back to moving
+  the task out of the archive and back (two batches, each a move anyone may make), keeping
+  `archivedAt` on it throughout so `activeTasks()` never shows it on the board. A Completed card can
+  flicker once while it moves. **`firestore.rules` now also allows an `archivedTasks` update that
+  touches only `timeEntries`**; once someone with Firebase access publishes it, the direct write
+  works for everyone and the move is never used (not yet published as of 2026-11-19).
+- `tests/archived-time.test.js` (including the fallback, via the stub's new `denyUpdate`).
 
 ### Archive, restore and merge a whole project (2026-10-21)
 

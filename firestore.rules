@@ -139,7 +139,10 @@ service cloud.firestore {
     // trick lets anyone restore something out of the archive while a permanent delete from
     // the archive stays with the creator (or assignee, for pre-createdBy tasks) and admins.
     // Update is deliberately tighter than on `tasks`: there is no reason to comment on or
-    // re-status an archived task, so nothing needs the collaborative carve-out here.
+    // re-status an archived task, so nothing needs the collaborative carve-out here. The one
+    // exception is time: anyone may log hours someone forgot on a finished task ("Log time" in the
+    // archived task window), so an update touching only timeEntries is open to the team, as all
+    // of a live task is. Until this is published the app moves the task out and back instead.
     match /archivedTasks/{taskId} {
       allow read: if isMediashock();
       allow create: if isMediashock();
@@ -147,6 +150,7 @@ service cloud.firestore {
         isAdmin()
         || isCreator(resource.data)
         || (resource.data.createdBy == null && isAssignee(resource.data))
+        || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['timeEntries'])
       );
       allow delete: if isMediashock() && (
         isAdmin()

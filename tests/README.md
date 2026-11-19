@@ -19,7 +19,8 @@ printed as `PASS`/`FAIL`. `run.mjs` fails a suite on any FAIL, a crash, or an er
 page. Screenshots go to `tests/.out/` (ignored by git). Times are Singapore time (`TZ`).
 
 `fbstub.js` has `window.__fb.remote(fn)` to change data "from another client" and fire snapshots,
-which is how the sync tests simulate a teammate's edit.
+which is how the sync tests simulate a teammate's edit. `window.__fb.denyUpdate = { <collection>: true }` makes `updateDoc` on that
+collection fail with permission-denied, to test what happens where the live rules refuse a write.
 
 **When a New Updates item gets a `tourTarget`**, add its tour id (`cl-<release id>`) to the
 `toursSeen` list in every suite's seed, or that one-step tour covers the page and blocks the clicks.
