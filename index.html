@@ -1985,8 +1985,14 @@
              task now. Hidden on a fresh "Add Task" and on any task saved before createdBy
              existed, rather than showing a misleading blank/placeholder name. -->
         <p id="task-created-by" class="hidden text-xs text-zinc-400 dark:text-zinc-500"></p>
+        <!-- TASK ROUNDS: "Round 1 · Round 2", only on a task that has been re-done. -->
+        <p id="task-rounds" class="hidden mt-0.5 text-xs text-zinc-500 dark:text-zinc-400"></p>
       </div>
       <div class="flex items-center gap-1">
+        <button id="task-new-round-btn" type="button" class="hidden items-center gap-1.5 h-8 px-2.5 mr-1 rounded-lg border border-zinc-200 dark:border-zinc-600 text-xs font-semibold text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 hover:text-brand-700 dark:hover:text-brand-300">
+          <svg data-ic="copy" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+          <span id="task-new-round-label">Start round 2</span>
+        </button>
         <button id="task-remind-btn" type="button" class="hidden w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500" title="Remind me about this task" aria-label="Remind me about this task">
           <svg data-ic="alarm" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="13" r="8"></circle><path d="M12 9v4l2 2"></path><path d="M5 3 2 6"></path><path d="m22 6-3-3"></path></svg>
         </button>
@@ -8062,6 +8068,10 @@
     document.getElementById('task-delete-btn').classList.toggle('hidden', !task);
     document.getElementById('task-copy-link-btn').classList.toggle('hidden', !task);
     document.getElementById('task-remind-btn').classList.toggle('hidden', !task);
+    renderTaskRounds();
+    // Round 1 of a series is often archived by the time round 2 is open: load the archive so the
+    // round links can include it (renderCurrentSecondaryView redraws the line when it arrives).
+    if (task && task.roundOf && ROUNDS_ENABLED) ensureArchivedTasksListener();
     syncTaskRemindBtn();
     // Makes every open task shareable via the address bar for free, not just through the
     // explicit Copy-link button -- replaceState so opening/closing tasks doesn't spam browser
@@ -12816,6 +12826,142 @@
     }).catch(function (err) { showToast('Could not duplicate: ' + err.message, 'error'); });
   }
 
+  /* TASK ROUNDS (2026-11-19, from Zenon's Suggestion: costs approved, then the scope changed and
+     they had to be approved again -- "create a 'Round 2' ... so that the first task still remains").
+     Made general: any task in Review or Done can start a new round, a copy that links back. Each
+     round is an ordinary task (own dates, owner, time, comments, status), so every view works
+     unchanged; round 1 is never touched. The series is DERIVED: round 1 has no fields, later rounds
+     carry `roundOf` (round 1's id) and `round` (2, 3...). Shown as one line under "Created by" in the
+     task window (and a Rounds fact in the archived window), nothing on Board rows.
+     To revert: set ROUNDS_ENABLED = false (the button and the line disappear), or git revert. */
+  var ROUNDS_ENABLED = true;
+  function roundRootId(t) { return (t && t.roundOf) || (t && t.id); }
+  function roundNumber(t) { return (t && Number.isInteger(t.round) && t.round > 1) ? t.round : 1; }
+  // Every round of t's series that this browser has (active, plus archived once loaded), in order.
+  // Only a real series (2+ rounds) is returned; a task never re-done gives [].
+  function taskRounds(t) {
+    if (!t) return [];
+    var root = roundRootId(t), seen = {}, list = [];
+    tasks.concat(archivedTasksReady ? archivedTasks : []).forEach(function (x) {
+      if (!x || seen[x.id] || roundRootId(x) !== root) return;
+      seen[x.id] = true;
+      list.push(x);
+    });
+    if (!seen[t.id]) list.push(t);
+    list.sort(function (a, b) { return roundNumber(a) - roundNumber(b) || String(a.createdAt || '').localeCompare(String(b.createdAt || '')); });
+    return list.length > 1 ? list : [];
+  }
+  function nextRoundNumber(t) {
+    var list = taskRounds(t);
+    var max = roundNumber(t);
+    list.forEach(function (x) { max = Math.max(max, roundNumber(x)); });
+    return max + 1;
+  }
+  // A new round is offered only on finished or in-review work, and only on the latest round.
+  function canStartNewRound(t) {
+    if (!ROUNDS_ENABLED || !t || (t.status !== 'Review' && t.status !== 'Done')) return false;
+    return !taskRounds(t).some(function (x) { return roundNumber(x) > roundNumber(t); });
+  }
+  // "Cost approval" -> "Cost approval (Round 2)"; a name already saying "Round 1" / "R1" gets the
+  // number changed instead of a second label.
+  function roundTaskName(name, n) {
+    name = String(name || '');
+    var re = /(\bround\s*|\bR)(\d+)\b/i;
+    if (re.test(name)) return name.replace(re, function (all, word) { return word + n; }).slice(0, 120);
+    return (name + ' (Round ' + n + ')').slice(0, 120);
+  }
+  // "Round 1 · Round 2 · Round 3", the open one bold and plain, the others links.
+  function roundLinksHtml(t, list) {
+    list = list || taskRounds(t);
+    return list.map(function (x) {
+      var label = 'Round ' + roundNumber(x);
+      if (x.id === t.id) return '<span class="font-semibold text-zinc-700 dark:text-zinc-200">' + label + '</span>';
+      var done = x.status === 'Done' || x.archivedAt || archivedTasks.some(function (a) { return a.id === x.id; });
+      return '<button type="button" data-open-round="' + escapeHtml(x.id) + '" title="' + escapeHtml(x.name || '') + (done ? ' (finished)' : '') + '" class="text-brand-700 dark:text-brand-300 hover:underline">' + label + '</button>';
+    }).join('<span class="text-zinc-300 dark:text-zinc-600"> · </span>');
+  }
+  function renderTaskRounds() {
+    var line = document.getElementById('task-rounds');
+    var btn = document.getElementById('task-new-round-btn');
+    if (!line || !btn) return;
+    var t = editingTaskId && tasks.find(function (x) { return x.id === editingTaskId; });
+    var list = (ROUNDS_ENABLED && t) ? taskRounds(t) : [];
+    line.innerHTML = list.length ? roundLinksHtml(t, list) : '';
+    line.classList.toggle('hidden', !list.length);
+    var show = !!t && canStartNewRound(t) && !mActive();
+    btn.classList.toggle('hidden', !show);
+    btn.classList.toggle('flex', show);
+    if (show) {
+      var n = nextRoundNumber(t);
+      document.getElementById('task-new-round-label').textContent = 'Start round ' + n;
+      btn.title = 'Copy this task as round ' + n + ' (scope changed, new feedback, a re-quote). Round ' + roundNumber(t) + ' stays as it is.';
+    }
+  }
+  // Round 2's data: Duplicate's copy (steps unticked, no history), starting now. Old deadlines and
+  // step dates already past are cleared rather than making the new round overdue on day one.
+  function newRoundData(t, n) {
+    var data = duplicateTaskData(t, roundTaskName(t.name, n));
+    var today = toDateInputValue(todayMidnight());
+    data.status = 'In Progress';
+    data.startDate = today;
+    if (!data.deadline || data.deadline < today) data.deadline = '';
+    data.checklist.forEach(function (it) {
+      if (it.due && it.due < today) { delete it.due; delete it.start; }
+      else if (it.start && it.start < today) delete it.start;
+    });
+    data.roundOf = roundRootId(t);
+    data.round = n;
+    return data;
+  }
+  function startNewRound(id) {
+    var t = tasks.find(function (x) { return x.id === id; });
+    if (!t || !canStartNewRound(t)) return;
+    var go = function () {
+      var n = nextRoundNumber(t);
+      var newId = uid();
+      var data = newRoundData(t, n);
+      setDoc(doc(tasksCol, newId), data).then(function () {
+        logActivity('task_created', 'Started round ' + n + ' of "' + t.name + '"', { taskId: newId });
+        notifyAssignment({ id: newId, name: data.name, deadline: data.deadline }, data.assignee);
+        data.involved.forEach(function (p) { if (p !== data.assignee) notifyAssignment({ id: newId, name: data.name, deadline: data.deadline }, p, true); });
+        notifyChecklistChanges({ id: newId, name: data.name, assignee: data.assignee }, [], data.checklist);
+        showToast('Round ' + n + ' started. Round ' + roundNumber(t) + ' is kept as it was.', 'success', { action: { label: 'Undo', onClick: function () {
+          if (editingTaskId === newId) closeTaskModal();
+          deleteDoc(doc(tasksCol, newId)).catch(function (err) { showToast('Could not undo: ' + err.message, 'error'); });
+        } } });
+        var copy = tasks.find(function (x) { return x.id === newId; }) || Object.assign({ id: newId }, data);
+        openTaskModal(copy);
+        // The name is already right; what a new round needs first is its deadline.
+        var dl = document.getElementById('task-deadline');
+        if (dl && !data.deadline && !mActive()) setTimeout(function () {
+          var tbd = document.getElementById('task-deadline-tbd');
+          if (tbd && tbd.checked) tbd.click();
+          dl.focus();
+        }, 60);
+      }).catch(function (err) { showToast('Could not start a new round: ' + err.message, 'error'); });
+    };
+    if (taskModalHasUnsavedChanges()) {
+      openConfirm('Discard your changes first?', 'Starting round ' + nextRoundNumber(t) + ' opens the new round. Anything you changed on this one since opening it will be lost.', go,
+        { tone: 'question', confirmText: 'Discard and start', cancelText: 'Keep editing' });
+    } else go();
+  }
+  document.getElementById('task-new-round-btn').addEventListener('click', function () {
+    if (editingTaskId) startNewRound(editingTaskId);
+  });
+  // A round link in the task window (asks first if there are unsaved changes) or the archived window.
+  document.addEventListener('click', function (e) {
+    var b = e.target.closest('[data-open-round]');
+    if (!b) return;
+    e.preventDefault();
+    var id = b.getAttribute('data-open-round');
+    if (!archivedTaskModal.classList.contains('hidden')) closeArchivedTask();
+    var go = function () { closeTaskModal(); openTaskOrArchived(id); };
+    if (taskModalHasUnsavedChanges()) {
+      openConfirm('Discard changes?', 'Anything you changed on this task since opening it will be lost.', go,
+        { tone: 'question', confirmText: 'Discard', cancelText: 'Keep editing' });
+    } else go();
+  });
+
   // Undo for an archive: puts the tasks back exactly as they were (`list` = the task objects from
   // before archiving), whoever archived them -- the rules allow the move back for anyone.
   // `summary` replaces the "Undid archiving ..." Activity line (Restore project uses it).
@@ -12883,6 +13029,8 @@
       ['Priority', escapeHtml(t.priority || '–')]
     ];
     if ((t.involved || []).length) facts.push(['Also involved', escapeHtml(t.involved.join(', '))]);
+    var rounds = ROUNDS_ENABLED ? taskRounds(t) : [];
+    if (rounds.length) facts.push(['Rounds', '<span>' + roundLinksHtml(t, rounds) + '</span>']);
     var html = '<div class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5">' + facts.map(function (f) {
       return '<div class="min-w-0"><p class="text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">' + f[0] + '</p>' +
         '<p class="mt-0.5 flex items-center gap-1.5 text-sm text-zinc-800 dark:text-zinc-100 break-words">' + f[1] + '</p></div>';
@@ -19634,6 +19782,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-11-19b', date: '2026-11-19', items: [
+      { type: 'new', title: 'Start a new round of a task', text: "Scope changed after sign-off, or the client wants another pass? Open a task that's In Review or Completed and click \"Start round 2\" at the top of the task window. You get a fresh copy named \"(Round 2)\" with the same people and steps (unticked), starting today, ready for a new deadline. Round 1 stays exactly as it was, and both rounds link to each other under \"Created by\". Thanks, Zenon!" }
+    ] },
     { id: '2026-11-19a', date: '2026-11-19', items: [
       { type: 'new', title: "\"Did you mean?\" for project names", text: "Typing a new project name in a task that looks like one already on the board (same date and [Client], similar words)? When you move on from the Project field, a line under it asks \"Did you mean ...?\". Click the name to use it, or \"It's new\" if it really is a different project. It helps stop one job ending up as two projects. Already have a duplicate? Ask an admin to merge it from the project card's ... menu. Thanks, Ming Song!" }
     ] },
@@ -21421,6 +21572,7 @@
      FILTER BAR EVENTS
   ========================================================= */
   function renderCurrentSecondaryView() {
+    if (editingTaskId) renderTaskRounds();   // TASK ROUNDS: a round started or archived elsewhere
     if (currentView === 'mytasks') renderMyTasks();
     if (currentView === 'gantt') renderGantt();
     if (currentView === 'calendar') {
@@ -21611,6 +21763,9 @@
               repeatRoot: typeof t.repeatRoot === 'string' ? t.repeatRoot.slice(0, 120) : null,
               repeatIndex: (Number.isInteger(t.repeatIndex) && t.repeatIndex > 0) ? t.repeatIndex : null,
               repeatDay: (Number.isInteger(t.repeatDay) && t.repeatDay >= 1 && t.repeatDay <= 31) ? t.repeatDay : null,
+              // TASK ROUNDS: keeps a round linked to round 1 across an export/import.
+              roundOf: typeof t.roundOf === 'string' ? t.roundOf.slice(0, 120) : null,
+              round: (Number.isInteger(t.round) && t.round > 1 && t.round < 1000) ? t.round : null,
               reviewRounds: Array.isArray(t.reviewRounds) ? t.reviewRounds.filter(function (r) { return r && !isNaN(new Date(r.at).getTime()); }).slice(-50).map(function (r) {
                 return { at: r.at, audience: (r.audience === 'client' || r.audience === 'internal') ? r.audience : null };
               }) : [],
@@ -23835,7 +23990,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-11-19T02:57:50Z";
+  var CURRENT_BUILD_VERSION = "2026-11-19T03:19:47Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

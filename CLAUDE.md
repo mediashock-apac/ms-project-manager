@@ -3052,6 +3052,32 @@ the task window with the new number selected, so typing replaces only that.
   the toast deletes the copy and closes its window. Desktop Board only.
   `tests/task-duplicate.test.js`.
 
+### Task rounds (2026-11-19, trial: may be reverted)
+
+From Zenon's Suggestion (16 Nov): costs were approved, the scope changed, they needed approving
+again: "create a 'Round 2' ... so that the first task still remains". Made general (re-quotes, a
+second edit, a re-shoot). Option A of two: **each round is its own task, linked**, rather than
+rounds inside one task (B would have touched completedAt, Done counts, confetti, repeats, time
+totals and review rounds). Frame.io / Ziflow / Filestage keep versions the same way. TASK ROUNDS
+in index.html.
+- **"Start round N"** pill in the task window header (`#task-new-round-btn`), only when the SAVED
+  status is Review or Done and the task is the latest round of its series (`canStartNewRound`).
+  Desktop only. Unsaved changes: asks "Discard your changes first?".
+- **The copy** (`newRoundData`, built on `duplicateTaskData`): name "<name> (Round 2)", or an
+  existing "Round 1"/"R1" bumped (`roundTaskName`); status In Progress; start today; a past
+  deadline and past step dates (and range starts) cleared, so it isn't overdue on day one; steps
+  unticked; no comments, time, status lines, review rounds. Opens with the deadline box focused.
+  Owner/involved/step people notified, `task_created` in Activity, Undo on the toast.
+- **Round 1 is never touched.** The series is derived: later rounds store `roundOf` (round 1's
+  id) and `round` (2, 3...); round 1 has neither (`taskRounds`, `roundNumber`). Kept on import.
+- **Shown:** one line under "Created by" (`#task-rounds`: "Round 1 · Round 2", the open one bold,
+  others links via `data-open-round`, asking before dropping unsaved changes) and a Rounds fact in
+  the archived window. Opening a task with `roundOf` loads the archive so an archived round 1 is
+  listed. Nothing on Board rows (the name already says "Round 2"). "Client round 2" (review
+  passes inside one task) is separate and starts fresh on each round.
+- **To revert:** `ROUNDS_ENABLED = false` hides the button and the line (saved `roundOf`/`round`
+  fields stay harmlessly), or `git revert` the commit. `tests/task-rounds.test.js`.
+
 ### Dropdowns and the project's Drive folder (2026-10-08)
 
 - **One dropdown list everywhere** (reported from a screenshot of the Repeat menu: "Drop down menus
