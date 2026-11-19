@@ -200,6 +200,117 @@ async function docText(page, file) {
   check('no page errors (upload)', up.errors.length === 0, up.errors.join(' || '));
   await up.ctx.close();
 
+  // ---- Budget and external spend from a QuickBooks export (CSV, dropped) ----
+  const q = await newPage(browser, '2026-11-19T11:00:00');
+  await skipTours(q.page);
+  const qbCsv = [
+    'Transaction Report,,,,,,', 'MEDIASHOCK PRODUCTIONS PTE. LTD.,,,,,,', 'All Dates,,,,,,', ',,,,,,',
+    ',Transaction date,Number,Name,Memo/Description,Amount,Customer',
+    'Post production,,,,,,', 'Contracted Post Production,,,,,,',
+    ',31/03/2026,DAK/INV/0326-01,DAK IT HUB GROUP,,"1,000.00",Client Co:Done Job',
+    ',01/04/2026,X-77,Someone Else,,500.00,Client Co:Other Job',
+    'Total for Contracted Post Production,,,,,"S$1,500.00",', 'Total for Post production,,,,,"S$1,500.00",',
+    'Computer Software Fees,,,,,,', 'Monthly subscriptions,,,,,,',
+    ',21/03/2026,INV346667750,Zoom Communications,"Plan, monthly",117.42,Client Co:Done Job',
+    ',26/03/2026,INV347346059,Zoom Communications,,71.73,Client Co:Done Job',
+    'Total for Monthly subscriptions,,,,,S$189.15,', 'Total for Computer Software Fees,,,,,S$189.15,',
+    'TOTAL,,,,,1689.15,', ',,,,,,', '"Tuesday, Apr 14, 2026 02:54:00 PM GMT+8 - Accrual Basis",,,,,,'
+  ].join('\r\n');
+  await openReport(q.page);
+  await q.page.click('#projects-grid .project-report-btn[data-project="Done Job"]'); await q.page.waitForTimeout(800);
+  check('report window has a drop zone', /Drop the QuickBooks Transaction Report here/.test(await q.page.textContent('#closing-report-drop')));
+  await q.page.evaluate((csv) => {
+    const dt = new DataTransfer();
+    dt.items.add(new File([csv], 'Done Job transactions.csv', { type: 'text/csv' }));
+    const dz = document.getElementById('closing-report-drop');
+    dz.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer: dt }));
+    dz.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer: dt }));
+  }, qbCsv);
+  await q.page.waitForTimeout(600);
+  const finBox = await q.page.textContent('#closing-report-fin');
+  check('dropped file: only this project\'s transactions', /Done Job transactions\.csv/.test(finBox) && /3 transactions, \$ 1,189\.15/.test(finBox) && /1 transaction for other projects left out/.test(finBox), finBox);
+  await q.page.fill('#closing-report-budget', '4,000');
+  await q.page.waitForTimeout(150);
+  const qs1 = await q.page.textContent('#closing-report-summary');
+  check('summary shows external spend and margins', /External spend \$ 1,189\.15\. Margin 70\.27%, 59\.65% including internal spend/.test(qs1), qs1);
+  await q.page.click('[data-fin-acc-add]'); await q.page.waitForTimeout(150);
+  await q.page.fill('[data-fin-acc="label"]', 'Courier');
+  await q.page.fill('[data-fin-acc="amount"]', '50');
+  await q.page.waitForTimeout(150);
+  check('an accrual adds to external spend', /External spend \$ 1,239\.15\. Margin 69\.02%, 58\.40%/.test(await q.page.textContent('#closing-report-summary')));
+  await q.page.screenshot({ path: path.join(OUT, 'closing-report-finance.png') });
+  const dl3 = q.page.waitForEvent('download', { timeout: 15000 });
+  await q.page.click('#closing-report-download');
+  const f3 = await docText(q.page, await (await dl3).path());
+  fs.writeFileSync(path.join(OUT, 'closing-report-finance.txt'), f3.text);
+  check('finance: no markers left', !/\{\{/.test(f3.xml));
+  check('finance summary filled', /Project total budget \| \$ 4,000\.00 \|  \| $/m.test(f3.text) && /Project external spend \| \$ 1,239\.15 \| N\.A\./.test(f3.text) &&
+    /tGross profit margin vs spending \| 69\.02% \| 30\.98%/.test(f3.text) && /Profit margin including internal spend \| 58\.40% \| N\.A\./.test(f3.text), (f3.text.match(/Project total budget[\s\S]{0,300}/) || [''])[0]);
+  check('finance note names the sources', /<Budget typed in Project Manager\. External spend from the QuickBooks Transaction Report \(Done Job transactions\.csv\)\. Internal spend is from Project Manager\.>/.test(f3.text));
+  check('expense table keeps QuickBooks\' layout', /^Post production \|/m.test(f3.text) && /^Contracted Post Production \|/m.test(f3.text) &&
+    / \| 31\/03\/2026 \| DAK\/INV\/0326-01 \| DAK IT HUB GROUP \|  \| 1,000\.00 \| Client Co:Done Job/.test(f3.text) &&
+    /Total for Contracted Post Production \|  \|  \|  \|  \| \$ 1,000\.00/.test(f3.text) && /Total for Post production \|  \|  \|  \|  \| \$ 1,000\.00/.test(f3.text) &&
+    /Zoom Communications \| Plan, monthly \| 117\.42/.test(f3.text) && /Total for Computer Software Fees \|  \|  \|  \|  \| \$ 189\.15/.test(f3.text), f3.text.slice(f3.text.indexOf('External spend report')).slice(0, 900));
+  check('other projects\' rows left out of the table', !/Someone Else/.test(f3.text) && /for other projects left out/.test(f3.text));
+  check('TOTAL, accrual and grand total', /TOTAL \|  \|  \|  \| \$ 1,189\.15/.test(f3.text) && /Courier \| 50\.00/.test(f3.text) && /^ \|  \|  \|  \|  \| \$ 1,239\.15 \| $/m.test(f3.text));
+  check('QuickBooks footer kept', /Tuesday, Apr 14, 2026 02:54:00 PM GMT\+8 - Accrual Basis/.test(f3.text));
+  check('finance never saved', await q.page.evaluate(() => !window.__fb.writes.some(w => /finance|projects/.test(w.col) && JSON.stringify(w).indexOf('1,189') !== -1) && !JSON.stringify(window.__fb.data).includes('DAK IT HUB')));
+
+  // The team's Transaction Report sheet, downloaded as Excel: Summary gives the budget, Expenses the rows
+  await q.page.click('#projects-grid .project-menu-toggle[data-project="Done Job"]'); await q.page.waitForTimeout(300);
+  await q.page.click('#projects-grid .project-report-btn[data-project="Done Job"]'); await q.page.waitForTimeout(800);
+  check('reopened window keeps the file for this visit', /Done Job transactions\.csv/.test(await q.page.textContent('#closing-report-fin')));
+  await q.page.click('[data-fin-remove]'); await q.page.waitForTimeout(200);
+  check('removing the file brings the drop zone back', !!(await q.page.$('#closing-report-drop')));
+  const xlsxB64 = await q.page.evaluate(async (sheets) => {
+    const z = new window.JSZip();
+    const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    const colName = i => String.fromCharCode(65 + i);
+    z.file('[Content_Types].xml', '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"/>');
+    z.file('xl/workbook.xml', '<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>' +
+      sheets.map((s, i) => '<sheet name="' + esc(s.name) + '" sheetId="' + (i + 1) + '" r:id="rId' + (i + 1) + '"/>').join('') + '</sheets></workbook>');
+    z.file('xl/_rels/workbook.xml.rels', '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      sheets.map((s, i) => '<Relationship Id="rId' + (i + 1) + '" Type="worksheet" Target="worksheets/sheet' + (i + 1) + '.xml"/>').join('') + '</Relationships>');
+    z.file('xl/sharedStrings.xml', '<?xml version="1.0"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><si><t>Project total budget</t></si></sst>');
+    sheets.forEach((s, i) => z.file('xl/worksheets/sheet' + (i + 1) + '.xml', '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>' +
+      s.rows.map((r, ri) => '<row r="' + (ri + 1) + '">' + r.map((v, ci) => v === '' || v == null ? ''
+        : v === '#S0' ? '<c r="' + colName(ci) + (ri + 1) + '" t="s"><v>0</v></c>'
+        : typeof v === 'number' ? '<c r="' + colName(ci) + (ri + 1) + '"><v>' + v + '</v></c>'
+        : '<c r="' + colName(ci) + (ri + 1) + '" t="inlineStr"><is><t>' + esc(v) + '</t></is></c>').join('') + '</row>').join('') + '</sheetData></worksheet>'));
+    return z.generateAsync({ type: 'base64' });
+  }, [
+    { name: 'Summary', rows: [[], ['', 'Finance summary'], ['', '', 'SGD', 'Other Currency (USD)', 'Exchange Rate'], ['', '#S0', 35560, 28000, 1.27]] },
+    { name: 'Expenses', rows: [['Done Job_Transaction Report'], [], ['', 'Transaction date', 'Number', 'Name', 'Memo/Description', 'Amount', 'Customer'],
+      ['Post production'], ['Contracted Post Production'], ['', 46112, 'DAK/INV/0326-01', 'DAK IT HUB GROUP', '', 15496.97, 'Google Asia Pacific Pte Ltd:Done Job'],
+      ['Total for Contracted Post Production', '', '', '', '', 'S$15,496.97'], ['Total for Post production', '', '', '', '', 'S$15,496.97'],
+      ['TOTAL', '', '', '', '', 15496.97], ['', '', '', '', 'Accrual item', 200], ['', '', '', '', '', 15696.97]] },
+    { name: 'Manhours', rows: [['', 'Personnel', 'Date', 'Type', 'Hours']] }
+  ]);
+  await q.page.setInputFiles('#closing-report-file', { name: 'Done Job_Transaction Report.xlsx', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', buffer: Buffer.from(xlsxB64, 'base64') });
+  await q.page.waitForTimeout(800);
+  const finBox2 = await q.page.textContent('#closing-report-fin');
+  check('Excel sheet: Expenses tab read', /1 transaction, \$ 15,496\.97/.test(finBox2), finBox2);
+  check('Excel sheet: budget, other currency and rate from the Summary tab', await q.page.inputValue('#closing-report-budget') === '35560' && await q.page.inputValue('#closing-report-other') === '28000' &&
+    await q.page.inputValue('#closing-report-rate') === '1.27' && await q.page.inputValue('#closing-report-cur') === 'USD');
+  check('Excel sheet: its accrual line comes in', await q.page.inputValue('[data-fin-acc="amount"]') === '200');
+  const dl4 = q.page.waitForEvent('download', { timeout: 15000 });
+  await q.page.click('#closing-report-download');
+  const f4 = (await docText(q.page, await (await dl4).path())).text;
+  check('Excel sheet: summary with other currency', /\| SGD \| Other Currency \(USD\) \| Exchange Rate/.test(f4) && /Project total budget \| \$ 35,560\.00 \| USD 28,000\.00 \| 1\.27/.test(f4) &&
+    /Project external spend \| \$ 15,696\.97/.test(f4) && /tGross profit margin vs spending \| 55\.86% \| 44\.14%/.test(f4), (f4.match(/Other Currency[\s\S]{0,300}/) || [''])[0]);
+  check('Excel sheet: date serial shown as a date', / \| 31\/03\/2026 \| DAK\/INV\/0326-01/.test(f4), (f4.match(/[^\n]*DAK\/INV[^\n]*/) || [''])[0]);
+  check('Excel sheet: note says the budget came from it', /Budget from the Summary tab of Done Job_Transaction Report\.xlsx/.test(f4));
+
+  // Something that isn't a transaction report
+  await q.page.click('#projects-grid .project-menu-toggle[data-project="Done Job"]'); await q.page.waitForTimeout(300);
+  await q.page.click('#projects-grid .project-report-btn[data-project="Done Job"]'); await q.page.waitForTimeout(800);
+  await q.page.click('[data-fin-remove]'); await q.page.waitForTimeout(200);
+  await q.page.setInputFiles('#closing-report-file', { name: 'notes.csv', mimeType: 'text/csv', buffer: Buffer.from('a,b\n1,2\n') });
+  await q.page.waitForTimeout(500);
+  check('a file that isn\'t a transaction report says so', /doesn't look like a QuickBooks Transaction Report/.test(await q.page.textContent('#closing-report-fin')));
+  check('no page errors (finance file)', q.errors.length === 0, q.errors.join(' || '));
+  await q.ctx.close();
+
   // ---- Not finance: nothing shows ----
   const z = await newPage(browser, '2026-11-19T11:00:00', 'zenon');
   await skipTours(z.page);

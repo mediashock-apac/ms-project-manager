@@ -3536,9 +3536,26 @@ REPORT in index.html.
   didn't?" (`closingReportFacts`: on-time vs late deliverables, 2+ client review rounds, overtime,
   tasks archived unfinished), each list ending in an empty bullet; internal spend (billable hours x
   rate); hours summary per person (billable and unbillable); role table (billable hours, plus a "No
-  rate set (names)" row); every time entry (the Project column became Task). Budget, external spend,
-  margins, observations and key takeaways stay blank; the external spend example table is gone, its
-  instruction kept.
+  rate set (names)" row); every time entry (the Project column became Task). Observations and key
+  takeaways stay blank. Budget, external spend and margins come from the file below, else stay blank.
+- **Budget and external spend from QuickBooks** (asked: "how can i get the transaction stuff included
+  ... make it seamless?", option 1 of 3; QUICKBOOKS TRANSACTIONS in index.html). Drop a file on the
+  report window (or "Choose a file"): QuickBooks' Transaction Report as CSV or Excel, or the team's
+  per-project Transaction Report sheet downloaded as Excel (its Expenses tab IS that export; its
+  Summary tab gives budget, other currency and exchange rate). The header row is found by Date +
+  Amount; label-only rows are account headings, "Total for ..." closes one, TOTAL ends the list,
+  amount lines after it are accruals, a text line is QuickBooks' footer. **The Customer column
+  ("Client:Project") keeps only this project's rows**, so a wider export works; no match keeps all
+  and says so. Budget (SGD) is typed if not in the file; "+ Billed in another currency" adds amount,
+  currency and rate (budget = amount x rate when blank); "+ Accrual" for costs not in QuickBooks yet.
+  Margins as the sheet works them: gross = (budget - external) / budget, the other-currency column
+  shows external / budget, including internal = (budget - external - internal) / budget. The
+  external spend table is rebuilt in QuickBooks' layout (headings, rows, "Total for", TOTAL,
+  accruals, grand total, footer) from template rows `{{EG}}`/`{{ED}}`/`{{ES}}`; no file, no table.
+  **Finance figures are never saved**: in memory for the visit (`reportFinance`, per project) and in
+  the Doc only. Not built: a direct QuickBooks connection (needs a server for Intuit's secret key,
+  so the Blaze plan) and a last-round finance comparison (that table still only compares internal
+  spend).
 - **Saving:** `getDriveWriteToken` asks Google for `drive.file` (create files, see only its own) in a
   pop-up on the first report per session, straight from the click. Uploaded as multipart with
   `mimeType: application/vnd.google-apps.document` so Drive converts it to a Google Doc. Tries the
@@ -3546,7 +3563,8 @@ REPORT in index.html.
   the app didn't create; **not yet confirmed on the live site**). Toast with Open; no permission or a
   failed upload offers the .docx. Logged to Activity (`project_report`).
 - `tests/closing-report-doc.test.js` (rates window, every section of the filled document read back,
-  the upload and its fallback, hidden for others).
+  the upload and its fallback, hidden for others, a dropped QuickBooks CSV and a Transaction Report
+  workbook read into the document).
 
 ### "Did you mean?" for similar project names (2026-11-19)
 

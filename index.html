@@ -12305,8 +12305,10 @@
      - The report fills templates/closing-report.docx (the team's template with its example numbers
        removed and {{MARKERS}} put in) with JSZip, and uploads it to Drive as a Google Doc (Drive
        converts it, keeping the layout). Needs the drive.file permission, asked for on first use.
-       Finance numbers (budget, external spend) stay blank: they come from the Transaction Report.
-       Internal spend = billable hours x each person's role rate. Overtime is charged at the same rate. */
+       Internal spend = billable hours x each person's role rate. Overtime is charged at the same rate.
+     - Budget and external spend (2026-11-19, "make it seamless"): drop the QuickBooks Transaction
+       Report (CSV or Excel) or the team's Transaction Report sheet (downloaded as Excel) on the
+       report window. See QUICKBOOKS TRANSACTIONS. Never saved anywhere but the Doc. */
   // Admins plus these addresses. Keep identical to isFinance() in firestore.rules.
   var FINANCE_EXTRA_EMAILS = ['arvind@mediashock.com.sg'];
   var FINANCE_EMAILS = ADMIN_EMAILS.concat(FINANCE_EXTRA_EMAILS);
@@ -12567,6 +12569,226 @@
     return { well: well, didnt: didnt };
   }
 
+  /* QUICKBOOKS TRANSACTIONS (2026-11-19, asked: "how can i get the transaction stuff included as
+     well ... make it seamless?", option 1 of 3: drop the export on the report window). Read in the
+     browser and kept in memory for the visit only (`reportFinance`); nothing is stored or sent
+     except into the Doc, so the numbers never touch Firestore or this public repo.
+     - Accepts QuickBooks' "Transaction Report" as CSV or Excel, or the team's per-project
+       "Transaction Report" sheet downloaded as Excel: its Expenses tab IS that export, and its
+       Summary tab gives the budget (other currency and exchange rate too).
+     - The header row is found by its Date + Amount columns. Rows with only a label are account
+       headings (nested), "Total for ..." closes one, TOTAL ends the list; lines after TOTAL with an
+       amount are accruals, a text-only line is QuickBooks' footer ("... Accrual Basis").
+     - Customer column ("Client:260331[Google]Project") keeps only this project's rows, so a wider
+       export works. If nothing matches, everything is kept and the window says so.
+     - Margins as in the Summary tab: gross = (budget - external) / budget, the other-currency column
+       = external / budget, and including internal = (budget - external - internal) / budget. */
+  var reportFinance = {};   // projectKey -> {file, tx, total, footer, accruals, budget, other, cur, rate, budgetFrom, matchNote}
+  function parseCsv(text) {
+    var rows = [], row = [], cell = '', q = false;
+    text = String(text).replace(/^﻿/, '');
+    for (var i = 0; i < text.length; i++) {
+      var ch = text[i];
+      if (q) {
+        if (ch === '"') { if (text[i + 1] === '"') { cell += '"'; i++; } else q = false; }
+        else cell += ch;
+      } else if (ch === '"') q = true;
+      else if (ch === ',') { row.push(cell); cell = ''; }
+      else if (ch === '\n' || ch === '\r') {
+        if (ch === '\r' && text[i + 1] === '\n') i++;
+        row.push(cell); rows.push(row); row = []; cell = '';
+      } else cell += ch;
+    }
+    if (cell || row.length) { row.push(cell); rows.push(row); }
+    return rows;
+  }
+  // Every sheet of an .xlsx as rows of strings (no formatting; dates stay Excel serial numbers).
+  function readXlsxSheets(buf) {
+    var dp = new DOMParser();
+    var all = function (node, tag) { return Array.prototype.slice.call(node.getElementsByTagName(tag)); };
+    return ensureJsZip().then(function (JSZip) { return JSZip.loadAsync(buf); }).then(function (zip) {
+      var get = function (p) { var f = zip.file(p); return f ? f.async('string') : Promise.resolve(''); };
+      return Promise.all([get('xl/workbook.xml'), get('xl/_rels/workbook.xml.rels'), get('xl/sharedStrings.xml')]).then(function (r) {
+        if (!r[0]) throw new Error("This isn't an Excel workbook");
+        var ss = r[2] ? all(dp.parseFromString(r[2], 'application/xml'), 'si').map(function (si) {
+          return all(si, 't').map(function (t) { return t.textContent; }).join('');
+        }) : [];
+        var target = {};
+        all(dp.parseFromString(r[1] || '<x/>', 'application/xml'), 'Relationship').forEach(function (x) { target[x.getAttribute('Id')] = x.getAttribute('Target') || ''; });
+        var sheets = all(dp.parseFromString(r[0], 'application/xml'), 'sheet').map(function (s) {
+          var t = target[s.getAttribute('r:id')] || '';
+          return { name: s.getAttribute('name') || '', path: t.charAt(0) === '/' ? t.slice(1) : 'xl/' + t };
+        });
+        return Promise.all(sheets.map(function (s) {
+          return get(s.path).then(function (x) { s.rows = x ? xlsxRows(dp.parseFromString(x, 'application/xml'), ss) : []; return s; });
+        }));
+      });
+    });
+  }
+  function xlsxRows(sheetDoc, ss) {
+    var out = [];
+    Array.prototype.forEach.call(sheetDoc.getElementsByTagName('row'), function (rowEl) {
+      var row = [];
+      Array.prototype.forEach.call(rowEl.getElementsByTagName('c'), function (c) {
+        var m = /^[A-Z]+/.exec(c.getAttribute('r') || ''), col = 0;
+        if (m) for (var i = 0; i < m[0].length; i++) col = col * 26 + m[0].charCodeAt(i) - 64;
+        col = col ? col - 1 : row.length;
+        var t = c.getAttribute('t'), v = c.getElementsByTagName('v')[0], val = v ? v.textContent : '';
+        if (t === 's') val = ss[+val] || '';
+        else if (t === 'inlineStr') val = Array.prototype.map.call(c.getElementsByTagName('t'), function (x) { return x.textContent; }).join('');
+        row[col] = val;
+      });
+      for (var i = 0; i < row.length; i++) if (row[i] == null) row[i] = '';
+      out[(+rowEl.getAttribute('r') || out.length + 1) - 1] = row;
+    });
+    for (var j = 0; j < out.length; j++) if (!out[j]) out[j] = [];
+    return out;
+  }
+  // "15,496.97", "S$15,496.97", "(12.00)", "-12" -> number; blank or "$ -" -> null.
+  function qbAmount(s) {
+    s = String(s == null ? '' : s).trim();
+    var digits = s.replace(/[^\d.]/g, '');
+    if (!digits || isNaN(+digits)) return null;
+    return /\(|-/.test(s) ? -digits : +digits;
+  }
+  function qbDate(s) {
+    s = String(s || '').trim();
+    if (/^\d{4,5}(\.\d+)?$/.test(s) && +s > 20000 && +s < 80000) {   // Excel date serial
+      var d = new Date(Date.UTC(1899, 11, 30) + Math.round(+s) * 86400000);
+      return String(d.getUTCDate()).padStart(2, '0') + '/' + String(d.getUTCMonth() + 1).padStart(2, '0') + '/' + d.getUTCFullYear();
+    }
+    return s;
+  }
+  function qbNum(v) { return (v || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function qbRound(v) { return Math.round(v * 100) / 100; }
+  function parseQbRows(rows) {
+    var h = -1, low = null;
+    for (var i = 0; i < Math.min(rows.length, 40) && h === -1; i++) {
+      low = (rows[i] || []).map(function (c) { return String(c || '').trim().toLowerCase(); });
+      if (low.indexOf('amount') !== -1 && (low.indexOf('transaction date') !== -1 || low.indexOf('date') !== -1)) h = i;
+    }
+    if (h === -1) return null;
+    var colOf = function (names) { for (var k = 0; k < names.length; k++) { var x = low.indexOf(names[k]); if (x !== -1) return x; } return -1; };
+    var col = {
+      date: colOf(['transaction date', 'date']), amt: low.indexOf('amount'),
+      num: colOf(['number', 'num', 'no.', 'ref no.', 'doc number']),
+      name: colOf(['name', 'payee', 'vendor', 'supplier']),
+      memo: colOf(['memo/description', 'line description', 'memo', 'description']),
+      cust: colOf(['customer', 'customer full name', 'customer name', 'customer/project'])
+    };
+    var cell = function (r, c) { return c === -1 ? '' : r[c] || ''; };
+    var stack = [], tx = [], accruals = [], total = null, footer = '';
+    for (var j = h + 1; j < rows.length; j++) {
+      var r = (rows[j] || []).map(function (c) { return String(c == null ? '' : c).trim(); });
+      var firstAt = -1;
+      for (var k = 0; k < r.length; k++) if (r[k]) { firstAt = k; break; }
+      if (firstAt === -1) continue;
+      var first = r[firstAt], amt = qbAmount(cell(r, col.amt));
+      if (total !== null) {   // after TOTAL: accrual lines, the grand total, QuickBooks' footer
+        if (amt === null) { if (!footer) footer = first; }
+        else if (firstAt !== col.amt) accruals.push({ label: cell(r, col.memo) || first, amount: amt });
+        continue;
+      }
+      if (/^total$/i.test(first)) { total = amt === null ? 0 : amt; continue; }
+      if (/^total for /i.test(first)) { var g = stack.pop(); if (g) g.totalLabel = first; continue; }
+      if (cell(r, col.date) && amt !== null) {
+        tx.push({ path: stack.slice(), date: qbDate(cell(r, col.date)), num: cell(r, col.num), name: cell(r, col.name), memo: cell(r, col.memo), amount: amt, cust: cell(r, col.cust) });
+      } else if (amt === null && firstAt < col.date) {
+        var grp = { label: first, totalLabel: 'Total for ' + first };
+        stack.push(grp);
+      }
+    }
+    return { tx: tx, accruals: accruals, total: total, footer: footer, hasCust: col.cust !== -1 };
+  }
+  // The team's Transaction Report sheet: "Project total budget | SGD | Other currency | Exchange rate".
+  function readSummaryBudget(rows) {
+    for (var i = 0; i < rows.length; i++) {
+      var r = (rows[i] || []).map(function (c) { return String(c == null ? '' : c).trim(); });
+      var at = r.map(function (c) { return c.toLowerCase(); }).indexOf('project total budget');
+      if (at === -1) continue;
+      var cur = '';
+      for (var u = Math.max(0, i - 3); u < i; u++) {
+        var m = /other currency\s*\((\w{3})\)/i.exec((rows[u] || []).join(' '));
+        if (m) cur = m[1].toUpperCase();
+      }
+      var rate = parseFloat(String(r[at + 3] || '').replace(/[^\d.]/g, ''));
+      return { budget: qbAmount(r[at + 1]), other: qbAmount(r[at + 2]), cur: cur, rate: isNaN(rate) ? null : rate };
+    }
+    return null;
+  }
+  function readFinanceFile(file) {
+    var name = file.name || 'file';
+    var p = /\.xlsx$/i.test(name) ? file.arrayBuffer().then(readXlsxSheets)
+      : /\.(csv|txt)$/i.test(name) ? file.text().then(function (t) { return [{ name: name, rows: parseCsv(t) }]; })
+      : Promise.reject(new Error('Use a CSV or Excel (.xlsx) file'));
+    return p.then(function (sheets) {
+      var parsed = null, summary = null;
+      // Prefer a sheet named Expenses, then any sheet with transactions in it.
+      sheets.slice().sort(function (a, b) { return (/expense/i.test(b.name) ? 1 : 0) - (/expense/i.test(a.name) ? 1 : 0); }).forEach(function (s) {
+        var q = parseQbRows(s.rows);
+        if (q && (!parsed || (!parsed.tx.length && q.tx.length))) parsed = q;
+        if (!summary) summary = readSummaryBudget(s.rows);
+      });
+      if (!parsed && !summary) throw new Error("This doesn't look like a QuickBooks Transaction Report (no Date and Amount columns)");
+      return { parsed: parsed, summary: summary };
+    });
+  }
+  // Only this project's rows, by the Customer column ("Client:Project").
+  function qbForProject(parsed, name) {
+    if (!parsed.hasCust || !parsed.tx.some(function (t) { return t.cust; })) return { tx: parsed.tx, note: '' };
+    var key = projectKey(name);
+    var mine = parsed.tx.filter(function (t) { return projectKey(t.cust.split(':').pop()) === key || projectKey(t.cust).indexOf(key) !== -1; });
+    if (!mine.length) return { tx: parsed.tx, note: "None of the Customer names match this project, so every transaction in the file is included." };
+    var other = parsed.tx.length - mine.length;
+    return { tx: mine, note: other ? other + ' transaction' + (other === 1 ? '' : 's') + ' for other projects left out.' : '' };
+  }
+  function reportFinanceLoad(name, file) {
+    return readFinanceFile(file).then(function (res) {
+      var f = reportFinance[projectKey(name)] || (reportFinance[projectKey(name)] = { accruals: [] });
+      if (res.parsed) {
+        var pick = qbForProject(res.parsed, name);
+        f.file = file.name; f.tx = pick.tx; f.matchNote = pick.note; f.footer = res.parsed.footer;
+        f.totalCheck = pick.tx === res.parsed.tx ? res.parsed.total : null;
+        if (res.parsed.accruals.length) f.accruals = res.parsed.accruals.slice();
+      }
+      if (res.summary && res.summary.budget) {
+        f.budget = res.summary.budget; f.budgetFrom = file.name;
+        if (res.summary.other) { f.other = res.summary.other; f.cur = res.summary.cur || f.cur || 'USD'; f.rate = res.summary.rate; }
+      }
+      return f;
+    });
+  }
+  // Budget, external and internal spend, and the margins, as the Summary tab works them out.
+  function reportFinanceNumbers(f, internal) {
+    f = f || {};
+    var txSum = f.tx ? f.tx.reduce(function (s, t) { return s + t.amount; }, 0) : null;
+    var acc = (f.accruals || []).reduce(function (s, a) { return s + (a.amount || 0); }, 0);
+    var ext = txSum === null ? null : qbRound(txSum + acc);
+    var budget = f.budget || (f.other && f.rate ? qbRound(f.other * f.rate) : null);
+    var pct = function (x) { return (x * 100).toFixed(2) + '%'; };
+    return {
+      txSum: txSum === null ? null : qbRound(txSum), acc: qbRound(acc), ext: ext, budget: budget,
+      gm: budget && ext !== null ? pct((budget - ext) / budget) : '',
+      gmOther: budget && ext !== null ? pct(ext / budget) : '',
+      pm: budget && ext !== null ? pct((budget - ext - internal) / budget) : ''
+    };
+  }
+  // QuickBooks' layout again: account headings, transactions, "Total for ..." (only this project's rows).
+  function qbDocRows(tx) {
+    var out = [], open = [], sums = [];
+    var close = function () { var g = open.pop(), s = sums.pop(); out.push({ kind: 'sub', label: g.totalLabel, amount: s }); };
+    tx.forEach(function (t) {
+      var same = 0;
+      while (same < open.length && same < t.path.length && open[same] === t.path[same]) same++;
+      while (open.length > same) close();
+      while (open.length < t.path.length) { var g = t.path[open.length]; open.push(g); sums.push(0); out.push({ kind: 'group', label: g.label }); }
+      for (var i = 0; i < sums.length; i++) sums[i] += t.amount;
+      out.push({ kind: 'tx', t: t });
+    });
+    while (open.length) close();
+    return out;
+  }
+
   // ---- Filling the template ----
   var JSZIP_URL = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
   var DOCX_TYPE = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -12620,8 +12842,28 @@
     var blank = {}; blank[key] = '';
     fillMarkers(tpl, blank);
   }
+  // The external spend table: QuickBooks rows (template rows {{EG}} heading, {{ED}} transaction,
+  // {{ES}} subtotal), then accruals. No file: the table goes and the template's note stays.
+  function fillExpenseTable(xml, f) {
+    var tg = firstWithMarker(xml, 'tr', 'EG'), tt = firstWithMarker(xml, 'tr', 'ED'), ts = firstWithMarker(xml, 'tr', 'ES');
+    if (!tg || !tt || !ts) return;
+    var tbl = tg.parentNode;
+    if (!f || !f.tx) { tbl.parentNode.removeChild(tbl); return; }
+    qbDocRows(f.tx).forEach(function (row) {
+      var c = (row.kind === 'group' ? tg : row.kind === 'sub' ? ts : tt).cloneNode(true);
+      fillMarkers(c, row.kind === 'group' ? { EG: row.label }
+        : row.kind === 'sub' ? { ES: row.label, ESA: finMoney(row.amount) }
+        : { ED: row.t.date, EN: row.t.num, EM: row.t.name, EL: row.t.memo, EA: qbNum(row.t.amount), EC: row.t.cust });
+      tbl.insertBefore(c, tg);
+    });
+    [tg, tt, ts].forEach(function (x) { tbl.removeChild(x); });
+    var acc = (f.accruals || []).filter(function (a) { return a.amount; });
+    repeatRow(xml, 'XL', acc, function (a) { return { XL: a.label || 'Accrual item', XA: qbNum(a.amount) }; });
+    if (!acc.length) { var gt = firstWithMarker(xml, 'tr', 'EGT'); if (gt) gt.parentNode.removeChild(gt); }
+  }
   // `typedRates`: rates typed in the report window (finance/rates not readable yet); else loaded.
-  function buildClosingReportDocx(name, prevName, typedRates) {
+  // `fin`: the QuickBooks file and budget from the report window (QUICKBOOKS TRANSACTIONS), or none.
+  function buildClosingReportDocx(name, prevName, typedRates, fin) {
     return Promise.all([ensureJsZip(), typedRates || loadFinanceRates(), fetch('templates/closing-report.docx').then(function (r) {
       if (!r.ok) throw new Error('Could not load the report template');
       return r.arrayBuffer();
@@ -12654,12 +12896,26 @@
             roleRows.push({ RN: 'No rate set (' + noRateNames.map(function (x) { return x.split(' ')[0]; }).join(', ') + ')', RH: finHours(nrMin), RA: '', RP: '', RD: '' });
           }
           repeatRow(xml, 'RN', roleRows, function (r) { return r; });
+          var fm = reportFinanceNumbers(fin, n.bAmt);
+          fillExpenseTable(xml, fin);
           repeatRow(xml, 'DP', n.entries, function (e) {
             return { DP: e.who, DD: e.date ? entryDate(e.date) : '', DT: (e.billable ? 'Billable' : 'Unbillable') + (e.overtime ? ' (OT)' : ''), DH: finHours(e.minutes), DK: e.task, DN: e.note };
           });
           fillMarkers(xml.documentElement, {
             PROJECT: name, AUTHOR: myDisplayName(), DATE: finLongDate(new Date()),
             INT_A: finMoney(n.bAmt),
+            BUD: fm.budget ? finMoney(fm.budget) : '', RATE: fin && fin.other && fin.rate ? fin.rate : '',
+            BUD_O: fin && fin.other ? (fin.cur || 'USD') + ' ' + qbNum(fin.other) : '',
+            CUR_H: fin && fin.other ? ' (' + (fin.cur || 'USD') + ')' : '',
+            EXT: fm.ext !== null ? finMoney(fm.ext) : '', GM: fm.gm, GM_O: fm.gmOther, PM: fm.pm,
+            FIN_NOTE: fm.ext !== null || fm.budget
+              ? '<' + [fm.budget ? 'Budget ' + (fin.budgetFrom ? 'from the Summary tab of ' + fin.budgetFrom : 'typed in Project Manager') : '',
+                  fm.ext !== null ? 'External spend from the QuickBooks Transaction Report (' + fin.file + ')' : '',
+                  'Internal spend is from Project Manager'].filter(Boolean).join('. ') + '.>'
+              : '<Budget and external spend: from the [Summary] tab of ‘Transaction Report’. Internal spend is from Project Manager.>',
+            EXT_NOTE: fin && fin.tx ? '<From the QuickBooks Transaction Report: ' + fin.file + '.' + (fin.matchNote ? ' ' + fin.matchNote : '') + '>'
+              : '<Copy linked table from [Expenses] tab of ‘Transaction Report’.>',
+            ETOT: fm.txSum !== null ? finMoney(fm.txSum) : '', EGT: fm.ext !== null ? finMoney(fm.ext) : '', EFOOT: fin && fin.footer || '',
             PREV_INT: prev ? finMoney(prev.bAmt) : '', PREV_INT_D: prev ? finPct(n.bAmt, prev.bAmt) : '',
             TOT_H: finHours(n.bMin + n.uMin), TOT_A: finMoney(n.bAmt + n.uAmt),
             BILL_H: finHours(n.bMin), BILL_A: finMoney(n.bAmt),
@@ -12728,7 +12984,7 @@
     if (el) return el;
     document.body.insertAdjacentHTML('beforeend',
       '<div id="closing-report-modal" class="fixed inset-0 z-[60] hidden items-center justify-center p-2 sm:p-4 modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="closing-report-title">' +
-        '<div class="bg-white dark:bg-zinc-800 w-full max-w-md rounded-2xl shadow-pop overflow-hidden max-h-[92vh] flex flex-col modal-pop-in">' +
+        '<div class="bg-white dark:bg-zinc-800 w-full max-w-lg rounded-2xl shadow-pop overflow-hidden max-h-[92vh] flex flex-col modal-pop-in">' +
           '<div class="flex items-center justify-between gap-3 px-5 py-4 border-b border-zinc-100 dark:border-zinc-700">' +
             '<h3 id="closing-report-title" class="text-base font-bold text-zinc-900 dark:text-zinc-100">Closing report</h3>' +
             '<button type="button" data-closing-report-cancel class="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500" aria-label="Close">' + svgIcon('x', 'w-4 h-4') + '</button>' +
@@ -12751,6 +13007,7 @@
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeClosingReportModal(); }
     });
     el.addEventListener('keydown', trapFocus(el));
+    wireReportFin(el);
     return el;
   }
   function openClosingReportModal(name) {
@@ -12792,12 +13049,21 @@
             '<select id="closing-report-prev" class="w-full ' + FIN_INPUT + '"><option value="">Don\'t compare</option>' +
             Object.keys(others).sort(function (a, b) { return a.localeCompare(b); }).map(function (p) { return '<option value="' + escapeHtml(p) + '">' + escapeHtml(p) + '</option>'; }).join('') +
             '</select></div>' +
-          '<p class="text-xs text-zinc-500 dark:text-zinc-400">Fills in your report template: hours, internal spend and facts for the learnings. Budget and external spend stay blank for the Transaction Report. Saved to the project\'s Drive folder, or your own Drive.</p>';
+          '<div id="closing-report-fin" class="space-y-2"></div>' +
+          '<p class="text-xs text-zinc-500 dark:text-zinc-400">Fills in your report template: hours, internal spend and facts for the learnings, plus budget, external spend and margins when given above. Saved to the project\'s Drive folder, or your own Drive.</p>';
         var showSummary = function () {
           var m = got.blocked ? closingReportNumbers(name, reportRatesFromForm()) : n;
-          document.getElementById('closing-report-summary').textContent = m.entries.length + ' time entr' + (m.entries.length === 1 ? 'y' : 'ies') + ', ' +
-            finHours(m.bMin + m.uMin) + ' hours' + (m.bAmt ? ', internal spend ' + finMoney(m.bAmt) : '') + '.';
+          var fm = reportFinanceNumbers(closingReportState && closingReportState.fin, m.bAmt);
+          var sumEl = document.getElementById('closing-report-summary');
+          if (!sumEl) return;
+          sumEl.textContent = (m.entries.length + ' time entr' + (m.entries.length === 1 ? 'y' : 'ies') + ', ' +
+            finHours(m.bMin + m.uMin) + ' hours' + (m.bAmt ? ', internal spend ' + finMoney(m.bAmt) : '') + '.' +
+            (fm.ext !== null ? ' External spend ' + finMoney(fm.ext) + '.' : '') +
+            (fm.pm ? ' Margin ' + fm.gm + ', ' + fm.pm + ' including internal spend.' : '')).replace(/\$ /g, '$\u00a0');   // keeps "$" on the same line as its number
         };
+        closingReportState.fin = reportFinance[projectKey(name)] || (reportFinance[projectKey(name)] = { accruals: [] });
+        closingReportState.showSummary = showSummary;
+        renderReportFin();
         showSummary();
         var rr = document.getElementById('closing-report-rates');
         if (rr) { rr.addEventListener('input', showSummary); rr.addEventListener('change', showSummary); }
@@ -12806,6 +13072,135 @@
       }).catch(function (err) {
         body.innerHTML = '<p class="text-sm text-rose-600 dark:text-rose-400">Could not load rates: ' + escapeHtml(err.message) + '</p>';
       });
+    });
+  }
+  // Budget and external spend (QUICKBOOKS TRANSACTIONS): drop zone, budget, accruals.
+  function renderReportFin() {
+    var box = document.getElementById('closing-report-fin'), s = closingReportState;
+    if (!box || !s || !s.fin) return;
+    var f = s.fin, lbl = 'block text-xs font-semibold text-zinc-600 dark:text-zinc-400 mb-1';
+    var txTotal = f.tx ? qbRound(f.tx.reduce(function (a, t) { return a + t.amount; }, 0)) : 0;
+    var unmatched = f.matchNote && /None of/.test(f.matchNote);
+    var check = f.tx && f.totalCheck != null && Math.abs(f.totalCheck - txTotal) > 0.01
+      ? 'The rows add up to ' + finMoney(txTotal) + ' but the file\'s TOTAL says ' + finMoney(f.totalCheck) + '. Worth a look before sending.' : '';
+    var warn = [unmatched ? f.matchNote : '', check, s.finError || ''].filter(Boolean);
+    box.innerHTML =
+      '<p class="' + lbl + '">Budget and external spend <span class="font-normal text-zinc-400 dark:text-zinc-500">(optional, never saved in Project Manager)</span></p>' +
+      (f.tx
+        ? '<div class="flex items-center gap-2 rounded-lg border border-zinc-200 dark:border-zinc-600 px-3 py-2">' +
+            '<div class="min-w-0 flex-1"><p class="text-sm text-zinc-800 dark:text-zinc-100 truncate" title="' + escapeHtml(f.file) + '">' + escapeHtml(f.file) + '</p>' +
+            '<p class="text-xs text-zinc-500 dark:text-zinc-400">' + f.tx.length + ' transaction' + (f.tx.length === 1 ? '' : 's') + ', ' + finMoney(txTotal) +
+            (f.matchNote && !unmatched ? '. ' + escapeHtml(f.matchNote) : '') + '</p></div>' +
+            '<button type="button" data-fin-remove class="w-7 h-7 shrink-0 flex items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700" aria-label="Remove the file" title="Remove the file">' + svgIcon('x', 'w-3.5 h-3.5') + '</button>' +
+          '</div>'
+        : '<div id="closing-report-drop" class="rounded-lg border-2 border-dashed border-zinc-300 dark:border-zinc-600 px-3 py-4 text-center text-xs text-zinc-500 dark:text-zinc-400">' +
+            (s.finLoading ? 'Reading the file…'
+              : 'Drop the QuickBooks Transaction Report here (CSV or Excel), or the project\'s Transaction Report sheet downloaded as Excel. <button type="button" data-fin-choose class="font-semibold text-brand-700 dark:text-brand-400 underline">Choose a file</button>') +
+          '</div>') +
+      '<input type="file" id="closing-report-file" accept=".csv,.xlsx" class="hidden">' +
+      warn.map(function (w) { return '<p class="text-xs rounded-lg px-3 py-2 bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300">' + escapeHtml(w) + '</p>'; }).join('') +
+      '<div class="flex flex-wrap items-end gap-2">' +
+        '<div><label for="closing-report-budget" class="' + lbl + '">Total budget (SGD)</label>' +
+          '<input id="closing-report-budget" data-fin="budget" inputmode="decimal" class="w-36 ' + FIN_INPUT + '" value="' + (f.budget ? f.budget : '') + '" placeholder="' + (f.other && f.rate ? qbNum(f.other * f.rate) : '0.00') + '"></div>' +
+        (f.showOther || f.other
+          ? '<div><label for="closing-report-other" class="' + lbl + '">Other currency</label><div class="flex gap-1">' +
+              '<input id="closing-report-cur" data-fin="cur" maxlength="3" aria-label="Currency" class="w-14 uppercase ' + FIN_INPUT + '" value="' + escapeHtml(f.cur || 'USD') + '">' +
+              '<input id="closing-report-other" data-fin="other" inputmode="decimal" class="w-28 ' + FIN_INPUT + '" value="' + (f.other || '') + '" placeholder="0.00"></div></div>' +
+            '<div><label for="closing-report-rate" class="' + lbl + '">Exchange rate</label>' +
+              '<input id="closing-report-rate" data-fin="rate" inputmode="decimal" class="w-20 ' + FIN_INPUT + '" value="' + (f.rate || '') + '" placeholder="1.30"></div>'
+          : '<button type="button" data-fin-other class="text-xs font-semibold text-zinc-500 dark:text-zinc-400 hover:text-brand-600 dark:hover:text-brand-400 pb-2">+ Billed in another currency</button>') +
+      '</div>' +
+      (f.tx
+        ? (f.accruals || []).map(function (a, i) {
+            return '<div class="flex items-center gap-1">' +
+              '<input data-fin-acc="label" data-i="' + i + '" aria-label="Accrual description" class="min-w-0 flex-1 ' + FIN_INPUT + '" value="' + escapeHtml(a.label || '') + '" placeholder="Accrual item (not in QuickBooks yet)">' +
+              '<input data-fin-acc="amount" data-i="' + i + '" inputmode="decimal" aria-label="Accrual amount" class="w-28 ' + FIN_INPUT + '" value="' + (a.amount || '') + '" placeholder="0.00">' +
+              '<button type="button" data-fin-acc-remove="' + i + '" class="w-7 h-7 shrink-0 flex items-center justify-center rounded-md text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-700" aria-label="Remove accrual">' + svgIcon('x', 'w-3.5 h-3.5') + '</button></div>';
+          }).join('') +
+          '<button type="button" data-fin-acc-add class="text-xs font-semibold text-zinc-500 dark:text-zinc-400 hover:text-brand-600 dark:hover:text-brand-400">+ Accrual</button>'
+        : '');
+  }
+  function reportFinFile(file) {
+    var s = closingReportState;
+    if (!s || !file) return;
+    var name = s.name;
+    s.finLoading = true; s.finError = '';
+    renderReportFin();
+    reportFinanceLoad(name, file).then(function (f) {
+      if (closingReportState !== s) return;
+      s.fin = f; s.finLoading = false;
+      if (!f.tx && !f.budget) s.finError = 'Nothing to use was found in ' + file.name + '.';
+      renderReportFin(); s.showSummary();
+    }, function (err) {
+      if (closingReportState !== s) return;
+      s.finLoading = false; s.finError = 'Could not read ' + file.name + ': ' + err.message;
+      renderReportFin();
+    });
+  }
+  function wireReportFin(el) {
+    var dropOn = function (on) {
+      var dz = document.getElementById('closing-report-drop');
+      if (dz) ['border-brand-400', 'bg-brand-50', 'dark:bg-brand-500/10'].forEach(function (c) { dz.classList.toggle(c, on); });
+    };
+    el.addEventListener('dragover', function (e) {
+      if (!closingReportState || !closingReportState.fin) return;
+      e.preventDefault();
+      dropOn(true);
+    });
+    el.addEventListener('dragleave', function (e) { if (!el.contains(e.relatedTarget)) dropOn(false); });
+    el.addEventListener('drop', function (e) {
+      if (!closingReportState || !closingReportState.fin) return;
+      e.preventDefault();
+      dropOn(false);
+      var file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (file) reportFinFile(file);
+    });
+    el.addEventListener('change', function (e) {
+      if (e.target.id === 'closing-report-file') { reportFinFile(e.target.files[0]); e.target.value = ''; }
+    });
+    el.addEventListener('input', function (e) {
+      var s = closingReportState, t = e.target;
+      if (!s || !s.fin) return;
+      var num = function (v) { var x = parseFloat(String(v).replace(/[^\d.]/g, '')); return isNaN(x) ? null : x; };
+      if (t.dataset.fin === 'cur') s.fin.cur = t.value.trim().toUpperCase();
+      else if (t.dataset.fin) {
+        s.fin[t.dataset.fin] = num(t.value);
+        if (t.dataset.fin === 'budget') s.fin.budgetFrom = null;
+        else {   // keep the budget's hint in step with amount x rate
+          var b = document.getElementById('closing-report-budget');
+          if (b) b.placeholder = s.fin.other && s.fin.rate ? qbNum(s.fin.other * s.fin.rate) : '0.00';
+        }
+      } else if (t.dataset.finAcc) {
+        var a = s.fin.accruals[+t.dataset.i];
+        if (a) { if (t.dataset.finAcc === 'label') a.label = t.value; else a.amount = num(t.value); }
+      } else return;
+      if (s.showSummary) s.showSummary();
+    });
+    el.addEventListener('click', function (e) {
+      var s = closingReportState;
+      if (!s || !s.fin) return;
+      if (e.target.closest('[data-fin-choose]')) { document.getElementById('closing-report-file').click(); return; }
+      if (e.target.closest('[data-fin-remove]')) {
+        ['file', 'tx', 'matchNote', 'footer', 'totalCheck'].forEach(function (k) { delete s.fin[k]; });
+        s.fin.accruals = [];
+        if (s.fin.budgetFrom) { s.fin.budget = null; s.fin.budgetFrom = null; }
+        s.finError = '';
+        renderReportFin(); s.showSummary();
+        return;
+      }
+      if (e.target.closest('[data-fin-other]')) {
+        s.fin.showOther = true; renderReportFin();
+        document.getElementById('closing-report-other').focus();
+        return;
+      }
+      if (e.target.closest('[data-fin-acc-add]')) {
+        s.fin.accruals.push({ label: '', amount: null }); renderReportFin();
+        var adds = document.querySelectorAll('[data-fin-acc="label"]');
+        adds[adds.length - 1].focus();
+        return;
+      }
+      var rm = e.target.closest('[data-fin-acc-remove]');
+      if (rm) { s.fin.accruals.splice(+rm.dataset.finAccRemove, 1); renderReportFin(); s.showSummary(); }
     });
   }
   function closeClosingReportModal() {
@@ -12821,7 +13216,7 @@
     var fileName = closingReportFileName(name);
     // The Google permission pop-up has to open straight from the click, before any waiting.
     var tokenP = toDrive ? getDriveWriteToken().catch(function () { return null; }) : Promise.resolve(null);
-    var built = buildClosingReportDocx(name, prevName, s.blocked ? reportRatesFromForm() : undefined);
+    var built = buildClosingReportDocx(name, prevName, s.blocked ? reportRatesFromForm() : undefined, s.fin);
     closeClosingReportModal();
     showToast(toDrive ? 'Making the closing report…' : 'Making the .docx…', 'info');
     Promise.all([tokenP, built]).then(function (res) {
@@ -24778,7 +25173,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-11-19T08:50:48Z";
+  var CURRENT_BUILD_VERSION = "2026-11-19T11:02:52Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
