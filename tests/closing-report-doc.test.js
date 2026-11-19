@@ -141,7 +141,7 @@ async function docText(page, file) {
   check('Make closing report… on a Completed card', !!(await page.$('#projects-grid .project-report-btn[data-project="Done Job"]')));
   await page.click('#projects-grid .project-report-btn[data-project="Done Job"]'); await page.waitForTimeout(800);
   const body = await page.textContent('#closing-report-body');
-  check('window sums the hours and spend', /5 time entries, 5\.50 hours, internal spend \$ 425\.00/.test(body), body);
+  check('window sums the hours and spend', /5 time entries, 5\.50 hours, internal spend \$\s425\.00/.test(body), body);
   check('window names who has no rate', /No rate for Harin Lee/.test(body), body);
   await page.screenshot({ path: path.join(OUT, 'closing-report-window.png') });
 
@@ -232,12 +232,12 @@ async function docText(page, file) {
   await q.page.fill('#closing-report-budget', '4,000');
   await q.page.waitForTimeout(150);
   const qs1 = await q.page.textContent('#closing-report-summary');
-  check('summary shows external spend and margins', /External spend \$ 1,189\.15\. Margin 70\.27%, 59\.65% including internal spend/.test(qs1), qs1);
+  check('summary shows external spend and margins', /External spend \$\s1,189\.15\. Margin 70\.27%, 59\.65% including internal spend/.test(qs1), qs1);
   await q.page.click('[data-fin-acc-add]'); await q.page.waitForTimeout(150);
   await q.page.fill('[data-fin-acc="label"]', 'Courier');
   await q.page.fill('[data-fin-acc="amount"]', '50');
   await q.page.waitForTimeout(150);
-  check('an accrual adds to external spend', /External spend \$ 1,239\.15\. Margin 69\.02%, 58\.40%/.test(await q.page.textContent('#closing-report-summary')));
+  check('an accrual adds to external spend', /External spend \$\s1,239\.15\. Margin 69\.02%, 58\.40%/.test(await q.page.textContent('#closing-report-summary')));
   await q.page.screenshot({ path: path.join(OUT, 'closing-report-finance.png') });
   const dl3 = q.page.waitForEvent('download', { timeout: 15000 });
   await q.page.click('#closing-report-download');
@@ -336,7 +336,7 @@ async function docText(page, file) {
   await d.page.fill('[data-rr-rate="creative"]', '100');
   await d.page.fill('[data-rr-rate="post"]', '60');
   await d.page.waitForTimeout(200);
-  check('summary adds up as rates are typed', /internal spend \$ 515\.00/.test(await d.page.textContent('#closing-report-summary')), await d.page.textContent('#closing-report-summary'));
+  check('summary adds up as rates are typed', /internal spend \$\s515\.00/.test(await d.page.textContent('#closing-report-summary')), await d.page.textContent('#closing-report-summary'));
   await d.page.screenshot({ path: path.join(OUT, 'closing-report-typed-rates.png') });
   const dl2 = d.page.waitForEvent('download', { timeout: 15000 });
   await d.page.click('#closing-report-download');
