@@ -3451,6 +3451,25 @@ admins only, target wins with nothing lost. PROJECT ACTIONS in index.html.
   archived unfinished (a cancelled job) isn't listed as finished.
 - `tests/project-actions.test.js`.
 
+### "Did you mean?" for similar project names (2026-11-19)
+
+From Ming Song's Suggestion (16 Nov): "261112[Lark]PitchDemoDay_Jakarta_Tokyo" and
+"261112[Lark]InnovationDemoDay_Jakarta_Tokyo" were one project typed two ways ("How to catch?").
+`canonicalProjectName` only catches capitals/spacing. SIMILAR PROJECT NAMES in index.html
+(`similarProjectFor`, `syncSimilarProject`, `#task-project-similar`), in the task window only.
+- A NEW name (not used by any other task or project doc, and not the task's own saved project,
+  `projectOnOpen`) that shares an existing project's leading 6-digit date AND `[Client]` (case and
+  spaces ignored), with similar words after it (half the words of 3+ letters in common, numbers
+  ignored, or one remainder containing the other), shows one line under the field: "Did you mean
+  <name>?". Clicking the name puts it in the field; "It's new" hides it for that name this visit.
+  Best match only. Never blocks Save. Nothing at rest.
+- Date + client is the house naming convention, so it is close to a unique key; names without it get
+  no hint. Not on phone quick add or WIP "+ Add entry" yet.
+- **Merge is admin-only and the question came from a non-admin**: Merge sits in a project card's ⋯
+  row only for `ADMIN_EMAILS`, so most people (Arvind included) never see it. The answer to an
+  existing duplicate is "ask an admin".
+- `tests/project-similar.test.js`.
+
 ### State model
 
 No framework/reactive layer — plain module-scoped `var`s (`tasks`, `currentView`,

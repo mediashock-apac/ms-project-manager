@@ -2015,6 +2015,9 @@
               <svg data-ic="drive" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="22" y1="12" x2="2" y2="12"></line><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"></path><line x1="6" y1="16" x2="6.01" y2="16"></line><line x1="10" y1="16" x2="10.01" y2="16"></line></svg>
             </button>
           </div>
+          <!-- "Did you mean?" for a NEW name that looks like an existing project (same date and
+               [Client], similar words). See SIMILAR PROJECT NAMES. Never blocks saving. -->
+          <p id="task-project-similar" class="hidden mt-1 items-center gap-1.5 min-w-0 text-[11px] text-zinc-600 dark:text-zinc-300"></p>
           <!-- The Drive link has no field of its own any more -- it rides along on the Project
                field (pasted in, or filled by the Drive picker) and lives in this hidden input.
                Still stored as its own `driveLink` task field, so existing tasks keep working. -->
@@ -8053,6 +8056,9 @@
     driveLinkDerived = false;
     driveLinkDismissed = false;
     deriveProjectFolder();
+    projectOnOpen = task ? task.project || '' : '';   // see SIMILAR PROJECT NAMES
+    similarDismissed = {};
+    syncSimilarProject();
     document.getElementById('task-delete-btn').classList.toggle('hidden', !task);
     document.getElementById('task-copy-link-btn').classList.toggle('hidden', !task);
     document.getElementById('task-remind-btn').classList.toggle('hidden', !task);
@@ -8257,6 +8263,84 @@
   }
   document.getElementById('task-project').addEventListener('input', deriveProjectFolder);
   document.getElementById('task-project-add-folder').addEventListener('click', browseDriveForProject);
+
+  /* SIMILAR PROJECT NAMES ("did you mean?"). From a Suggestion: "261112[Lark]PitchDemoDay_Jakarta_Tokyo"
+     and "261112[Lark]InnovationDemoDay_Jakarta_Tokyo" were one project typed two ways. canonicalProjectName
+     only catches capitals/spacing, so a typed NEW name that shares an existing project's leading date
+     AND [Client], with similar words after it, gets one quiet line under the field: "Did you mean <name>?"
+     (click to use it) or "It's new" (hides it for this visit). Only while the name is new: not the
+     task's own saved project, and not a name any other task or project already uses. Never blocks Save.
+     Merging duplicates that already exist stays with admins (PROJECT ACTIONS). */
+  var projectOnOpen = '', similarDismissed = {};
+  var PROJECT_PREFIX_RE = /^(\d{6})\s*\[([^\]]+)\]\s*(.*)$/;
+  function projectNameParts(name) {
+    var m = stripZwsp(String(name || '')).trim().match(PROJECT_PREFIX_RE);
+    if (!m) return null;
+    var words = m[3].replace(/([a-z])([A-Z])/g, '$1 $2').replace(/([A-Za-z])(\d)|(\d)([A-Za-z])/g, '$1$3 $2$4')
+      .toLowerCase().split(/[^a-z0-9]+/).filter(function (w) { return w.length >= 3 && !/^\d+$/.test(w); });
+    return { date: m[1], client: m[2].toLowerCase().replace(/\s+/g, ''), rest: m[3].toLowerCase().replace(/[^a-z0-9]/g, ''), words: words };
+  }
+  // Share of words in common (0-1), or 1 when one name's remainder contains the other's.
+  function projectNameSimilarity(a, b) {
+    if (a.rest && b.rest && (a.rest.indexOf(b.rest) !== -1 || b.rest.indexOf(a.rest) !== -1)) return 1;
+    var sa = {}, union = {}, shared = 0;
+    a.words.forEach(function (w) { sa[w] = 1; union[w] = 1; });
+    b.words.forEach(function (w) { if (sa[w] === 1) { shared++; sa[w] = 2; } union[w] = 1; });
+    var n = Object.keys(union).length;
+    return n ? shared / n : 0;
+  }
+  function similarProjectFor(typed, exceptTaskId) {
+    var key = projectKey(typed);
+    var parts = projectNameParts(typed);
+    if (!key || !parts) return null;
+    var seen = {}, names = [];
+    tasks.concat(archivedTasks || []).forEach(function (t) {
+      if (t && t.project && t.id !== exceptTaskId) names.push(t.project);
+    });
+    projectDocs.forEach(function (p) { if (p.name) names.push(p.name); });
+    if (names.some(function (n) { return projectKey(n) === key; })) return null;   // not a new name
+    var best = null, bestScore = 0;
+    names.forEach(function (n) {
+      var k = projectKey(n);
+      if (seen[k]) return;
+      seen[k] = 1;
+      var p = projectNameParts(n);
+      if (!p || p.date !== parts.date || p.client !== parts.client) return;
+      var s = projectNameSimilarity(parts, p);
+      if (s >= 0.5 && s > bestScore) { best = n; bestScore = s; }
+    });
+    return best;
+  }
+  function syncSimilarProject() {
+    var el = document.getElementById('task-project-similar');
+    var typed = document.getElementById('task-project').value;
+    var key = projectKey(typed);
+    var hit = (key && key !== projectKey(projectOnOpen) && !similarDismissed[key]) ? similarProjectFor(typed, editingTaskId) : null;
+    el.classList.toggle('hidden', !hit);
+    el.classList.toggle('flex', !!hit);
+    if (!hit) { el.innerHTML = ''; return; }
+    el.innerHTML = '<span class="shrink-0">Did you mean</span>' +
+      '<button type="button" data-similar-use class="min-w-0 truncate font-semibold text-brand-800 dark:text-brand-300 hover:underline focus:outline-none focus:underline" title="Use ' + escapeHtml(hit) + '">' + escapeHtml(hit) + '</button>' +
+      '<span class="shrink-0 -ml-1">?</span>' +
+      '<button type="button" data-similar-dismiss class="ml-auto shrink-0 font-medium text-zinc-500 dark:text-zinc-400 hover:text-zinc-800 dark:hover:text-zinc-100">It\'s new</button>';
+    el.querySelector('[data-similar-use]').setAttribute('data-name', hit);
+  }
+  document.getElementById('task-project').addEventListener('input', syncSimilarProject);
+  document.getElementById('task-project-similar').addEventListener('click', function (e) {
+    var input = document.getElementById('task-project');
+    var use = e.target.closest('[data-similar-use]');
+    if (use) {
+      input.value = use.getAttribute('data-name');
+      input.dispatchEvent(new Event('input', { bubbles: true }));   // folder, brief link, this hint
+      input.focus();
+      return;
+    }
+    if (e.target.closest('[data-similar-dismiss]')) {
+      similarDismissed[projectKey(input.value)] = true;
+      syncSimilarProject();
+      input.focus();
+    }
+  });
 
   // Pulls a link out of the Project field and parks it in task-drive, leaving whatever else
   // was typed as the project name. Runs on paste and on blur -- deliberately not on every
@@ -19539,6 +19623,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-11-19a', date: '2026-11-19', items: [
+      { type: 'new', title: "\"Did you mean?\" for project names", text: "Typing a new project name in a task that looks like one already on the board (same date and [Client], similar words)? A line under the Project field asks \"Did you mean ...?\". Click the name to use it, or \"It's new\" if it really is a different project. It helps stop one job ending up as two projects. Already have a duplicate? Ask an admin to merge it from the project card's ... menu. Thanks, Ming Song!" }
+    ] },
     { id: '2026-11-18c', date: '2026-11-18', items: [
       { type: 'new', title: 'Duplicate a task from the Board', text: "Hover a task on the Board and click the copy icon beside the bin. A copy is made straight away with the number in its name moved up (Video #1 becomes Video #2), the same people, dates, link and steps (unticked), and opens so you can change any detail. Comments, time and status lines aren't copied. Changed your mind? Click Undo on the message. Thanks, Arvind!" }
     ] },
@@ -23737,7 +23824,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-11-18T04:14:33Z";
+  var CURRENT_BUILD_VERSION = "2026-11-19T02:42:53Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
