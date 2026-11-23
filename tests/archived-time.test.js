@@ -1,5 +1,5 @@
-// archived-time -- "+ Log time" in an archived task's window adds hours someone forgot to a finished
-// task: the task stays archived (project stays Completed), the hours count in its totals, Undo takes
+// archived-time -- an archived task's window logs, edits and removes time like the task window does
+// (several people at once, one entry each). Hours added to a finished task: the task stays archived (project stays Completed), the hours count in its totals, Undo takes
 // them off, and it still works where the rules refuse a direct update of an archived task (moved out
 // and back). Browser test against index.html with Firebase stubbed (see tests/README.md).
 const { chromium } = require('playwright');
@@ -77,13 +77,14 @@ async function openTask(page) {
   await page.click('#archived-list [data-open-task="a1"]'); await page.waitForTimeout(400);
 }
 
-async function logTime(page, hours, who, note) {
+async function logTime(page, hours, note) {
   await page.click('#archived-time-open'); await page.waitForTimeout(200);
   await page.fill('#archived-time-hours', String(hours));
-  if (who) await page.selectOption('#archived-time-for', who);
   if (note) await page.fill('#archived-time-note', note);
-  await page.click('#archived-time-log'); await page.waitForTimeout(600);
+  await page.click('#archived-time-log-btn'); await page.waitForTimeout(600);
 }
+const pressed = (page) => page.$$eval('#archived-time-people .archived-person-toggle[aria-pressed="true"]', els => els.map(e => e.getAttribute('data-name')));
+const undo = async (page) => { await page.click('#toast-container > div:last-child .toast-action'); await page.waitForTimeout(600); };
 
 (async () => {
   const browser = await chromium.launch();
@@ -94,15 +95,12 @@ async function logTime(page, hours, who, note) {
     await openTask(page);
     check('archived window offers + Log time', !!(await page.$('#archived-time-open')));
     check('no form until asked', !(await page.$('#archived-time-form')));
+    check('logged time is listed as a row', (await page.$$('#archived-time-log .time-entry-edit')).length === 1);
     await page.click('#archived-time-open'); await page.waitForTimeout(200);
     check('form opens with hours focused', await page.evaluate(() => document.activeElement && document.activeElement.id === 'archived-time-hours'));
-    check('For defaults to me', (await page.inputValue('#archived-time-for')) === 'Zenon Kwok Ze Yong');
-    await page.screenshot({ path: path.join(OUT, 'archived-time-form.png') });
-    await page.evaluate(() => document.documentElement.classList.add('dark')); await page.waitForTimeout(150);
-    await page.screenshot({ path: path.join(OUT, 'archived-time-form-dark.png') });
-    await page.evaluate(() => document.documentElement.classList.remove('dark'));
+    check('For defaults to me', JSON.stringify(await pressed(page)) === '["Zenon Kwok Ze Yong"]');
     // Empty hours: nothing saved, form stays
-    await page.click('#archived-time-log'); await page.waitForTimeout(200);
+    await page.click('#archived-time-log-btn'); await page.waitForTimeout(200);
     check('no hours, nothing saved', (await archived(page)).timeEntries.length === 1);
     // Outside click keeps a half-typed entry
     await page.fill('#archived-time-hours', '1');
@@ -112,24 +110,51 @@ async function logTime(page, hours, who, note) {
     await page.keyboard.press('Escape'); await page.waitForTimeout(200);
     check('Escape closes only the form', !(await page.$('#archived-time-form')) && await page.$eval('#archived-task-modal', el => !el.classList.contains('hidden')));
 
-    await logTime(page, 1.5, null, 'colour grade');
+    await logTime(page, 1.5, 'colour grade');
     const a = await archived(page);
     const e = a.timeEntries[1] || {};
     check('entry saved on the archived task', a.timeEntries.length === 2 && e.minutes === 90 && e.author === 'Zenon Kwok Ze Yong' && e.billable === true, JSON.stringify(e));
     check('linked to the matching step', e.checklistItemId === 'c1');
     check('task stays archived, archivedAt kept', a.archivedAt === '2026-11-12T03:00:00Z' && !(await page.evaluate(() => !!window.__fb.data.tasks.a1)));
-    check('window shows the new total', /Time logged · 3h 30m/.test(await page.textContent('#archived-time')), await page.textContent('#archived-time'));
+    check('window shows the new total', /3h 30m logged/.test(await page.textContent('#archived-time-total')), await page.textContent('#archived-time-total'));
     check('form closed after logging', !(await page.$('#archived-time-form')));
     check('activity logged', await page.evaluate(() => Object.values(window.__fb.data.activity).some(x => /Logged 1h 30m on archived "Edit video"/.test(x.summary))));
 
-    // For someone else
-    await logTime(page, 2, 'Deane Cheng');
-    const e2 = (await archived(page)).timeEntries[2] || {};
-    check('logged for someone else records who entered it', e2.author === 'Deane Cheng' && e2.loggedBy === 'Zenon Kwok Ze Yong', JSON.stringify(e2));
+    // Several people at once: one entry each, shown as one row
+    await page.click('#archived-time-open'); await page.waitForTimeout(200);
+    await page.fill('#archived-time-hours', '2');
+    await page.selectOption('#archived-person-add', 'Deane Cheng'); await page.waitForTimeout(150);
+    check('For row says each and total', /2h each · 4h total/.test(await page.textContent('#archived-time-people')), await page.textContent('#archived-time-people'));
+    await page.screenshot({ path: path.join(OUT, 'archived-time-form.png') });
+    await page.evaluate(() => document.documentElement.classList.add('dark')); await page.waitForTimeout(150);
+    await page.screenshot({ path: path.join(OUT, 'archived-time-form-dark.png') });
+    await page.evaluate(() => document.documentElement.classList.remove('dark'));
+    await page.click('#archived-time-log-btn'); await page.waitForTimeout(600);
+    const two = (await archived(page)).timeEntries.slice(2);
+    check('logged for two people, one entry each', two.length === 2 && two[0].date === two[1].date &&
+      two.some(x => x.author === 'Deane Cheng' && x.loggedBy === 'Zenon Kwok Ze Yong' && x.minutes === 120) &&
+      two.some(x => x.author === 'Zenon Kwok Ze Yong' && !x.loggedBy), JSON.stringify(two));
+    check('shown as one row with 2 people', /2 people · 4h/.test(await page.textContent('#archived-time-log')));
+    await undo(page);
+    check('Undo removes both', (await archived(page)).timeEntries.length === 2);
 
-    // Undo takes it off
-    await page.click('#toast-container > div:last-child .toast-action'); await page.waitForTimeout(600);
-    check('Undo removes just that entry', (await archived(page)).timeEntries.length === 2);
+    // Edit time already logged: change the hours and add a person
+    await page.click('#archived-time-log .time-entry-edit-text[data-i="0"]'); await page.waitForTimeout(200);
+    check('edit fills the form', (await page.inputValue('#archived-time-hours')) === '2' && (await page.inputValue('#archived-time-note')) === 'Cut' && /Save/.test(await page.textContent('#archived-time-log-btn')));
+    check("edit ticks the row's people", JSON.stringify(await pressed(page)) === '["Deane Cheng"]', JSON.stringify(await pressed(page)));
+    await page.fill('#archived-time-hours', '3');
+    await page.selectOption('#archived-person-add', 'Zenon Kwok Ze Yong'); await page.waitForTimeout(150);
+    await page.click('#archived-time-log-btn'); await page.waitForTimeout(600);
+    const ed = (await archived(page)).timeEntries;
+    check('edit saved: hours changed, person added, same row', ed.length === 3 && ed[0].author === 'Deane Cheng' && ed[0].minutes === 180 &&
+      ed[1].author === 'Zenon Kwok Ze Yong' && ed[1].minutes === 180 && ed[1].date === '2026-11-05T03:00:00Z' && ed[2].minutes === 90, JSON.stringify(ed));
+    check('edit logged in activity', await page.evaluate(() => Object.values(window.__fb.data.activity).some(x => /Edited time \(3h each for 2 people\) on archived/.test(x.summary))));
+
+    // Remove a row, then Undo
+    await page.click('#archived-time-log .time-entry-remove[data-i="0,1"]'); await page.waitForTimeout(600);
+    check('remove takes the whole row off', (await archived(page)).timeEntries.length === 1);
+    await undo(page);
+    check('Undo puts it back', (await archived(page)).timeEntries.length === 3);
     check('no page errors', errors.length === 0, errors.join(' | '));
     await ctx.close();
   }

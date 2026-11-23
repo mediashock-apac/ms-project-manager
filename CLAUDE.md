@@ -3452,9 +3452,21 @@ task's steps suggested and linked by name, Billable/Overtime, Cancel/Log). This 
 archived task allows: **the task stays archived** (archivedAt unchanged), so the project stays
 Completed and the hours count on its card, Time by person and the closing report. Chosen over
 "restore, log, archive again", which puts finished work back on the board and is easy to leave there.
+- **Works like the task window's Time Tracking since 2026-11-23** (asked: "you cant really edit hours
+  that have already been logged ... add more people ... the same type of adding hours when it is
+  active on the board"). Entries are listed with the task window's own row renderer
+  (`renderTimeEntriesEditor`, which now takes the archived task's checklist as a 4th argument), so
+  entries logged together are one row. Click a row (or its pencil) to edit hours, note,
+  Billable/Overtime and people; the x removes the whole row. The form's **For** row is always shown
+  here (in the task window it only appears for a step with people): you ticked by default, a step's
+  people ticked when its name is picked, "+ Add" for anyone; one entry per person ticked, sharing a
+  timestamp. Editing rebuilds the row the way `commitTimeEntry` does (each existing person keeps
+  their entry; new people get the row's timestamp and `loggedBy`). Entries are found in the latest
+  copy by content (date, author, minutes, note), not index. **Every change saves at once**
+  (`applyArchivedTime`: no Save Task here), with an Activity line and Undo back to the list before.
 - Entry shape as in the task window (`author` = who it's for, `loggedBy` when someone else entered
-  it, `date` = when logged). Activity `task_updated` ("Logged 1h 30m on archived ..."). Undo on the
-  toast removes that entry. While the form is open an outside click doesn't close the window and
+  it, `date` = when logged). Activity `task_updated` ("Logged 1h 30m on archived ...", "Edited
+  time ...", "Removed ..."). While the form is open an outside click doesn't close the window and
   Escape closes only the form.
 - **Saving:** `saveArchivedTimeEntries` tries `updateDoc` on `archivedTasks/{id}`. The live rules
   allow that only for admins and the task's creator, so for everyone else it falls back to moving

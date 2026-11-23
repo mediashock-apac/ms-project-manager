@@ -2314,7 +2314,7 @@
     </div>
     <div id="archived-task-body" class="overflow-y-auto px-5 py-4 flex flex-col gap-5"></div>
     <div class="flex items-center gap-3 px-5 py-3 border-t border-zinc-100 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/40">
-      <p class="min-w-0 flex-1 text-xs text-zinc-500 dark:text-zinc-400">Archived tasks are read-only, apart from logging time someone missed. Restore puts it back on the board so you can change it.</p>
+      <p class="min-w-0 flex-1 text-xs text-zinc-500 dark:text-zinc-400">Archived tasks are read-only, apart from their time. Restore puts it back on the board so you can change it.</p>
       <button type="button" id="archived-task-restore" class="shrink-0 text-sm font-semibold px-3.5 py-2 rounded-lg bg-brand-500 hover:bg-brand-600 text-white">Restore to edit</button>
     </div>
   </div>
@@ -9473,8 +9473,10 @@
       (people.length > 3 ? '<span class="w-4 h-4 rounded-full ring-2 ring-white dark:ring-zinc-800 bg-zinc-200 dark:bg-zinc-600 text-[8px] font-bold text-zinc-600 dark:text-zinc-200 flex items-center justify-center">+' + (people.length - 2) + '</span>' : '');
   }
 
-  function renderTimeEntriesEditor(entries, logEl, totalEl) {
+  // `checklist`: whose steps the rows link to (the task window's by default; the archived task window passes its own).
+  function renderTimeEntriesEditor(entries, logEl, totalEl, checklist) {
     var list = entries || [];
+    var steps = checklist || currentChecklist;
     // One line per entry, or per group of entries logged together (timeEntryGroups). The per-row
     // Billable pill is only drawn when entries are MIXED -- when all of them are billable the total
     // says "all billable" once instead of on every row.
@@ -9486,7 +9488,7 @@
           var people = g.idx.map(function (k) { return list[k].author || ''; });
           var loggers = g.idx.map(function (k) { return list[k].loggedBy; }).filter(Boolean);
           var who = people.map(function (n) { return n || 'Unknown'; }).join(', ') + (loggers.length ? ' · logged by ' + loggers[0] : '');
-          var linkedItem = e.checklistItemId ? currentChecklist.find(function (item) { return item.id === e.checklistItemId; }) : null;
+          var linkedItem = e.checklistItemId ? steps.find(function (item) { return item.id === e.checklistItemId; }) : null;
           var note = (e.note || '').trim();
           var noteIsItem = linkedItem && note.toLowerCase() === String(linkedItem.text).trim().toLowerCase();
           var label = linkedItem ? (linkedItem.text + (note && !noteIsItem ? ' — ' + note : '')) : note;
@@ -14293,7 +14295,7 @@
   var archivedTaskOpenId = null;
   function openArchivedTask(t, redraw) {
     if (!t) return;
-    if (!redraw) archivedLogOpen = false;
+    if (!redraw) { archivedLogOpen = false; resetArchivedForm(); }
     archivedTaskOpenId = t.id;
     archivedTaskShown = t;
     var bodyEl = document.getElementById('archived-task-body');
@@ -14348,8 +14350,7 @@
     document.getElementById('archived-task-sub').textContent = (t.project || 'No project') + (t.archivedAt ? ' · Archived ' + formatShortDate(localDateOf(t.archivedAt)) : '');
     bodyEl.innerHTML = html;
     bodyEl.scrollTop = keepScroll;
-    var billBtn = document.getElementById('archived-time-billable');
-    if (billBtn) { setBillableToggle(billBtn, true); setOvertimeToggle(document.getElementById('archived-time-overtime'), false); }
+    archivedTimeAfterRender(t);
     if (redraw) return;
     var restore = document.getElementById('archived-task-restore');
     restore.disabled = false;
@@ -14377,45 +14378,131 @@
      archivedAt the whole time, so it never shows on the board (activeTasks skips it). */
   var archivedLogOpen = false;
   var archivedTaskShown = null;
+  // Time on an archived task works like the task window's (2026-11-23, asked: "you cant really edit
+  // hours that have already been logged ... add more people ... the same type of adding hours when it
+  // is active on the board"): every entry is a row (grouped like the board's, timeEntryGroups) that a
+  // click or the pencil edits and the x removes (Undo on the toast), and the "For" row ticks any
+  // number of people, one entry each. Every change saves at once, since there's no Save Task here.
+  var archivedEditIdx = null;     // the row being edited (its entries' indexes), or null for a new entry
+  var archivedPeopleSel = [];     // who the entry is for
+  var archivedPeopleStep = null;  // the step the For row was last filled from
+  function archivedMe() { return auth.currentUser ? (auth.currentUser.displayName || auth.currentUser.email) : ''; }
+  function archivedStepForNote(t, note) {
+    note = String(note || '').trim().toLowerCase();
+    return note ? (t.checklist || []).find(function (it) { return it && it.text && it.text.trim().toLowerCase() === note; }) || null : null;
+  }
   function archivedTimeHtml(t) {
-    var minutes = taskTimeMinutes(t);
-    var me = auth.currentUser ? (auth.currentUser.displayName || auth.currentUser.email) : '';
     var html = '<div id="archived-time"><div class="flex items-center justify-between gap-2 mb-1.5">' +
-      '<p class="text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Time logged' + (minutes ? ' · ' + formatDuration(minutes) : '') + '</p>' +
+      '<p class="text-[11px] font-bold uppercase tracking-wide text-zinc-400 dark:text-zinc-500">Time tracking <span id="archived-time-total" class="ml-1 normal-case tracking-normal font-medium text-zinc-500 dark:text-zinc-400"></span></p>' +
       (archivedLogOpen ? '' : '<button type="button" id="archived-time-open" class="shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full border border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 hover:border-brand-300 hover:text-brand-700 dark:hover:text-brand-300">+ Log time</button>') +
-      '</div>';
-    if (minutes) {
-      var people = timeByPerson([t]).map(function (x) { return { name: String(x.name).split(' ')[0], minutes: x.minutes, ot: x.ot }; });
-      html += '<p class="text-sm text-zinc-700 dark:text-zinc-200">' + escapeHtml(timeByPersonText(people)) + '</p>';
-    } else if (!archivedLogOpen) {
-      html += '<p class="text-sm text-zinc-400 dark:text-zinc-500">No time logged yet. Forgot some? Log it here.</p>';
-    }
+      '</div><div id="archived-time-log" class="flex flex-col"></div>';
     if (archivedLogOpen) {
-      var names = teamRoster();
-      if (me && names.indexOf(me) === -1) names.unshift(me);
       var field = 'text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 dark:placeholder-zinc-500 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40 focus:border-brand-400';
       var steps = (t.checklist || []).map(function (it) { return it && it.text; }).filter(Boolean);
+      var editing = archivedEditIdx !== null;
       html += '<div id="archived-time-form" class="mt-2 rounded-lg border border-zinc-200 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/40 p-2.5 flex flex-col gap-2">' +
         '<div class="flex flex-wrap items-center gap-2">' +
           '<label class="flex items-center gap-1.5 shrink-0"><input type="number" id="archived-time-hours" step="0.25" min="0" placeholder="0" aria-label="Hours" class="' + field + ' w-16 text-center px-2"><span class="text-xs text-zinc-400 dark:text-zinc-500">hrs</span></label>' +
-          '<label class="flex items-center gap-1.5 shrink-0"><span class="text-xs font-semibold text-zinc-500 dark:text-zinc-400">For</span><select id="archived-time-for" class="' + field + ' px-2 max-w-[12rem]">' +
-            names.map(function (n) { return '<option value="' + escapeHtml(n) + '"' + (n === me ? ' selected' : '') + '>' + escapeHtml(n) + '</option>'; }).join('') + '</select></label>' +
           '<input type="text" id="archived-time-note" list="archived-time-steps" maxlength="140" placeholder="What was it for? (optional)" aria-label="What was it for" class="' + field + ' flex-1 min-w-[10rem] px-3">' +
           '<datalist id="archived-time-steps">' + steps.map(function (s) { return '<option value="' + escapeHtml(s) + '"></option>'; }).join('') + '</datalist>' +
-        '</div>' +
-        '<div class="flex flex-wrap items-center gap-2">' +
-          '<button type="button" id="archived-time-billable" data-active="true" class="shrink-0 text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition">Billable</button>' +
-          '<button type="button" id="archived-time-overtime" data-active="false" class="shrink-0 text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition">Overtime</button>' +
-          '<p class="min-w-0 flex-1 text-xs text-zinc-500 dark:text-zinc-400">Adds to this task and the project\'s total. The task stays archived.</p>' +
+          '<button type="button" id="archived-time-billable" data-active="true" class="shrink-0 text-xs font-semibold px-2.5 py-2 rounded-lg border transition">Billable</button>' +
+          '<button type="button" id="archived-time-overtime" data-active="false" class="shrink-0 text-xs font-semibold px-2.5 py-2 rounded-lg border transition">Overtime</button>' +
           '<button type="button" id="archived-time-cancel" class="shrink-0 text-sm font-medium px-3 py-1.5 rounded-lg text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200">Cancel</button>' +
-          '<button type="button" id="archived-time-log" class="shrink-0 text-sm font-semibold px-3.5 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-600 text-white disabled:opacity-60">Log</button>' +
-        '</div></div>';
+          '<button type="button" id="archived-time-log-btn" class="shrink-0 text-sm font-semibold px-3.5 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-600 text-white disabled:opacity-60">' + (editing ? 'Save' : 'Log') + '</button>' +
+        '</div>' +
+        '<div id="archived-time-people" class="flex flex-wrap items-center gap-1.5 text-xs"></div>' +
+        '<p class="text-xs text-zinc-500 dark:text-zinc-400">Saves to this task and the project\'s total straight away. The task stays archived.</p>' +
+        '</div>';
     }
     return html + '</div>';
+  }
+  // Fills the rows and the total, and the form's fields, toggles and For row, after the window is drawn.
+  function archivedTimeAfterRender(t) {
+    var logEl = document.getElementById('archived-time-log');
+    if (!logEl) return;
+    var list = t.timeEntries || [];
+    renderTimeEntriesEditor(list, logEl, document.getElementById('archived-time-total'), t.checklist || []);
+    if (!list.length) logEl.innerHTML = archivedLogOpen ? '' : '<p class="text-sm text-zinc-400 dark:text-zinc-500">No time logged yet. Forgot some? Log it here.</p>';
+    if (archivedEditIdx !== null) {
+      var pencil = logEl.querySelector('.time-entry-edit[data-i="' + archivedEditIdx.join(',') + '"]');
+      var row = pencil && pencil.closest('.rounded-lg');
+      if (row) row.classList.add('bg-brand-50', 'dark:bg-brand-500/10');
+    }
+    var billBtn = document.getElementById('archived-time-billable');
+    if (!billBtn) return;
+    var e = archivedEditIdx !== null ? list[archivedEditIdx[0]] : null;
+    if (e) {
+      document.getElementById('archived-time-hours').value = e.minutes / 60;
+      var linked = e.checklistItemId ? (t.checklist || []).find(function (it) { return it && it.id === e.checklistItemId; }) : null;
+      document.getElementById('archived-time-note').value = e.note || (linked ? linked.text : '');
+    }
+    setBillableToggle(billBtn, e ? !!e.billable : true);
+    setOvertimeToggle(document.getElementById('archived-time-overtime'), e ? !!e.overtime : false);
+    syncArchivedPeople();
+  }
+  // The "For" row: always shown here (unlike the task window, where it only appears for a step with
+  // people), since logging for several people at once is the point. Starts with you ticked; picking a
+  // step that has people ticks them instead; "+ Add" adds anyone on the team.
+  function syncArchivedPeople() {
+    var wrap = document.getElementById('archived-time-people');
+    var t = archivedTaskShown;
+    if (!wrap || !t) return;
+    var list = t.timeEntries || [];
+    var editing = archivedEditIdx !== null;
+    var step = archivedStepForNote(t, document.getElementById('archived-time-note').value);
+    var stepIds = step ? stepPeople(step) : [];
+    var me = archivedMe();
+    var shown;
+    if (editing) {
+      shown = archivedEditIdx.map(function (k) { return list[k] && list[k].author; }).filter(Boolean);
+    } else {
+      shown = me ? [me] : [];
+      if (step && stepIds.length && archivedPeopleStep !== step.id) { archivedPeopleStep = step.id; archivedPeopleSel = stepIds.slice(); }
+      else if (!(step && stepIds.length) && archivedPeopleStep) { archivedPeopleStep = null; archivedPeopleSel = me ? [me] : []; }
+    }
+    stepIds.forEach(function (n) { if (shown.indexOf(n) === -1) shown.push(n); });
+    archivedPeopleSel.forEach(function (n) { if (shown.indexOf(n) === -1) shown.push(n); });
+    var others = teamRoster().filter(function (n) { return shown.indexOf(n) === -1; });
+    var minutes = Math.round((parseFloat(document.getElementById('archived-time-hours').value) || 0) * 60);
+    var count = archivedPeopleSel.length;
+    var hint = !count ? (editing ? 'Nobody ticked, so it stays as it was' : 'Nobody ticked, so it logs for you')
+      : minutes ? formatDuration(minutes) + (count > 1 ? ' each · ' + formatDuration(minutes * count) + ' total' : '')
+      : (count > 1 ? 'Logged for each person ticked' : '');
+    wrap.innerHTML = '<span class="font-semibold text-zinc-500 dark:text-zinc-400 mr-0.5">For</span>' +
+      shown.map(function (n) {
+        var on = archivedPeopleSel.indexOf(n) !== -1;
+        return '<button type="button" class="archived-person-toggle inline-flex items-center gap-1 pl-0.5 pr-2 py-0.5 rounded-full border ' +
+          (on ? 'border-brand-300 bg-brand-50 text-brand-700 dark:border-brand-500/40 dark:bg-brand-500/15 dark:text-brand-300'
+              : 'border-zinc-200 text-zinc-400 line-through dark:border-zinc-700 dark:text-zinc-500') +
+          '" data-name="' + escapeHtml(n) + '" aria-pressed="' + (on ? 'true' : 'false') + '">' + avatarHtml(n, 'w-4 h-4 shrink-0', 'text-[8px]') + escapeHtml(n) + '</button>';
+      }).join('') +
+      (others.length ? '<select id="archived-person-add" class="rounded-full border border-dashed border-zinc-300 dark:border-zinc-600 bg-transparent text-zinc-500 dark:text-zinc-400 pl-2 pr-1 py-0.5 focus:outline-none focus:ring-2 focus:ring-brand-500/40" aria-label="Also log for">' +
+        '<option value="">+ Add</option>' + others.map(function (n) { return '<option value="' + escapeHtml(n) + '">' + escapeHtml(n) + '</option>'; }).join('') + '</select>' : '') +
+      (hint ? '<span class="ml-1 text-zinc-400 dark:text-zinc-500">' + escapeHtml(hint) + '</span>' : '');
+  }
+  function resetArchivedForm() {
+    archivedEditIdx = null;
+    archivedPeopleStep = null;
+    var me = archivedMe();
+    archivedPeopleSel = me ? [me] : [];
+  }
+  function openArchivedLog(idxs) {
+    var t = archivedTaskShown;
+    if (!t) return;
+    resetArchivedForm();
+    if (idxs) {
+      archivedEditIdx = idxs;
+      archivedPeopleSel = idxs.map(function (k) { return (t.timeEntries || [])[k] && t.timeEntries[k].author; }).filter(Boolean);
+    }
+    archivedLogOpen = true;
+    openArchivedTask(t, true);
+    var h = document.getElementById('archived-time-hours');
+    if (h) { h.focus(); document.getElementById('archived-time').scrollIntoView({ block: 'nearest' }); }
   }
   function closeArchivedLog() {
     if (!archivedTaskShown) return;
     archivedLogOpen = false;
+    resetArchivedForm();
     openArchivedTask(archivedTaskShown, true);
   }
   // Writes `entries` as the archived task's time. Resolves true once saved.
@@ -14439,10 +14526,30 @@
         });
       }).then(function () { return true; });
     }).catch(function (err) {
-      showToast('Could not log time: ' + (err && err.message || err), 'error');
+      showToast('Could not save the time: ' + (err && err.message || err), 'error');
       return false;
     });
   }
+  // Saves a new list of entries, redraws the window, logs it and offers Undo back to the list before.
+  function applyArchivedTime(t, before, after, summary, toastText) {
+    var id = t.id;
+    return saveArchivedTimeEntries(id, after).then(function (ok) {
+      if (!ok) return false;
+      var shown = Object.assign({}, archivedTasks.find(function (x) { return x.id === id; }) || t, { timeEntries: after });
+      if (archivedTaskOpenId === id) { archivedLogOpen = false; resetArchivedForm(); openArchivedTask(shown, true); }
+      logActivity('task_updated', summary + ' on archived "' + t.name + '"', { taskId: id });
+      showToast(toastText + ' on "' + t.name + '"', 'success', { action: { label: 'Undo', onClick: function () {
+        saveArchivedTimeEntries(id, before).then(function (done) {
+          if (!done) return;
+          var now = archivedTasks.find(function (x) { return x.id === id; }) || shown;
+          if (archivedTaskOpenId === id) openArchivedTask(Object.assign({}, now, { timeEntries: before }), true);
+          showToast('Undone', 'info');
+        });
+      } } });
+      return true;
+    });
+  }
+  function sameTimeEntry(a, b) { return a.date === b.date && a.author === b.author && a.minutes === b.minutes && (a.note || '') === (b.note || ''); }
   function logArchivedTime() {
     var t = archivedTaskShown;
     if (!t) return;
@@ -14453,55 +14560,109 @@
       hoursEl.focus();
       return;
     }
-    var me = auth.currentUser ? (auth.currentUser.displayName || auth.currentUser.email) : null;
-    var who = document.getElementById('archived-time-for').value || me;
+    var me = archivedMe() || null;
+    var minutes = Math.round(hours * 60);
     var note = document.getElementById('archived-time-note').value.trim();
-    var step = (t.checklist || []).find(function (it) { return it && it.text && note && it.text.trim().toLowerCase() === note.toLowerCase(); });
-    var entry = {
-      minutes: Math.round(hours * 60), note: sentenceCase(note),
-      billable: document.getElementById('archived-time-billable').getAttribute('data-active') === 'true',
-      overtime: document.getElementById('archived-time-overtime').getAttribute('data-active') === 'true',
-      checklistItemId: step ? step.id : null, date: new Date().toISOString(), author: who
+    var step = archivedStepForNote(t, note);
+    var billable = document.getElementById('archived-time-billable').getAttribute('data-active') === 'true';
+    var overtime = document.getElementById('archived-time-overtime').getAttribute('data-active') === 'true';
+    var latest = archivedTasks.find(function (x) { return x.id === t.id; }) || t;
+    var before = (latest.timeEntries || []).slice();
+    var after, summary, toastText;
+    var fill = function (x) {
+      x.minutes = minutes; x.note = sentenceCase(note); x.billable = billable; x.overtime = overtime;
+      x.checklistItemId = step ? step.id : null;
+      return x;
     };
-    if (who !== me && me) entry.loggedBy = me;
-    var id = t.id;
-    var latest = archivedTasks.find(function (x) { return x.id === id; }) || t;
-    var after = (latest.timeEntries || []).concat([entry]);
-    var btn = document.getElementById('archived-time-log');
+    if (archivedEditIdx !== null) {
+      // Rebuild the row: one entry per ticked person, keeping each existing person's entry (and who
+      // logged it), adding the newly ticked, dropping the unticked; same as commitTimeEntry. Found in
+      // the latest copy by content, not index, in case someone else changed the list meanwhile.
+      var shownList = t.timeEntries || [];
+      var old = archivedEditIdx.map(function (k) { return shownList[k]; }).filter(Boolean);
+      var at = -1;
+      var kept = [];
+      before.forEach(function (x) {
+        if (old.some(function (o) { return sameTimeEntry(o, x); })) { if (at === -1) at = kept.length; }
+        else kept.push(x);
+      });
+      if (at === -1) { showToast('That time has since changed. Have another look.', 'info'); closeArchivedLog(); return; }
+      var byAuthor = {};
+      old.forEach(function (o) { byAuthor[o.author || ''] = o; });
+      var people = archivedPeopleSel.length ? archivedPeopleSel.slice() : old.map(function (o) { return o.author; });
+      var stamp = old[0].date || new Date().toISOString();
+      var rebuilt = people.map(function (who) {
+        var x = byAuthor[who || ''] ? Object.assign({}, byAuthor[who || '']) : { date: stamp, author: who };
+        if (!byAuthor[who || ''] && who !== me && me) x.loggedBy = me;
+        return fill(x);
+      });
+      after = kept.slice(0, at).concat(rebuilt, kept.slice(at));
+      summary = 'Edited time (' + formatDuration(minutes) + (people.length > 1 ? ' each for ' + people.length + ' people' : '') + ')';
+      toastText = 'Time updated';
+    } else {
+      var forPeople = archivedPeopleSel.length ? archivedPeopleSel.slice() : [me];
+      var now = new Date().toISOString();
+      after = before.concat(forPeople.map(function (who) {
+        var x = fill({ date: now, author: who });
+        if (who !== me && me) x.loggedBy = me;
+        return x;
+      }));
+      var forWho = forPeople.length > 1 ? ' each for ' + forPeople.length + ' people'
+        : (forPeople[0] !== me ? ' for ' + String(forPeople[0]).split(' ')[0] : '');
+      summary = 'Logged ' + formatDuration(minutes) + forWho;
+      toastText = summary;
+    }
+    var btn = document.getElementById('archived-time-log-btn');
+    var label = btn.textContent;
     btn.disabled = true;
-    btn.textContent = 'Logging…';
-    saveArchivedTimeEntries(id, after).then(function (ok) {
-      if (!ok) { btn.disabled = false; btn.textContent = 'Log'; return; }
-      var shown = Object.assign({}, latest, { timeEntries: after });
-      if (archivedTaskOpenId === id) { archivedLogOpen = false; openArchivedTask(shown, true); }
-      var forWho = who !== me ? ' for ' + String(who).split(' ')[0] : '';
-      logActivity('task_updated', 'Logged ' + formatDuration(entry.minutes) + forWho + ' on archived "' + t.name + '"', { taskId: id });
-      showToast('Logged ' + formatDuration(entry.minutes) + forWho + ' on "' + t.name + '"', 'success', { action: { label: 'Undo', onClick: function () {
-        var now = archivedTasks.find(function (x) { return x.id === id; }) || shown;
-        var without = (now.timeEntries || []).filter(function (e) { return !(e.date === entry.date && e.author === entry.author && e.minutes === entry.minutes); });
-        saveArchivedTimeEntries(id, without).then(function (done) {
-          if (!done) return;
-          if (archivedTaskOpenId === id) openArchivedTask(Object.assign({}, now, { timeEntries: without }), true);
-          showToast('Time removed', 'info');
-        });
-      } } });
+    btn.textContent = 'Saving…';
+    applyArchivedTime(t, before, after, summary, toastText).then(function (ok) {
+      if (!ok && btn.isConnected) { btn.disabled = false; btn.textContent = label; }
     });
+  }
+  function removeArchivedTime(idxs) {
+    var t = archivedTaskShown;
+    if (!t) return;
+    var shownList = t.timeEntries || [];
+    var old = idxs.map(function (k) { return shownList[k]; }).filter(Boolean);
+    if (!old.length) return;
+    var latest = archivedTasks.find(function (x) { return x.id === t.id; }) || t;
+    var before = (latest.timeEntries || []).slice();
+    var after = before.filter(function (x) { return !old.some(function (o) { return sameTimeEntry(o, x); }); });
+    var text = 'Removed ' + formatDuration(old[0].minutes * old.length) + (old.length > 1 ? ' for ' + old.length + ' people' : '');
+    applyArchivedTime(t, before, after, text, text);
   }
   document.getElementById('archived-task-body').addEventListener('click', function (e) {
     if (!archivedTaskShown) return;
-    if (e.target.closest('#archived-time-open')) {
-      archivedLogOpen = true;
-      openArchivedTask(archivedTaskShown, true);
-      var h = document.getElementById('archived-time-hours');
-      if (h) { h.focus(); document.getElementById('archived-time').scrollIntoView({ block: 'nearest' }); }
+    if (e.target.closest('#archived-time-open')) { openArchivedLog(null); return; }
+    if (e.target.closest('#archived-time-cancel')) { closeArchivedLog(); return; }
+    if (e.target.closest('#archived-time-log-btn')) { logArchivedTime(); return; }
+    var rowIdx = function (el) { return el.getAttribute('data-i').split(',').map(function (x) { return parseInt(x, 10); }); };
+    var ed = e.target.closest('#archived-time-log .time-entry-edit, #archived-time-log .time-entry-edit-text');
+    if (ed) { openArchivedLog(rowIdx(ed)); return; }
+    var rm = e.target.closest('#archived-time-log .time-entry-remove');
+    if (rm) { removeArchivedTime(rowIdx(rm)); return; }
+    var p = e.target.closest('.archived-person-toggle');
+    if (p) {
+      var n = p.getAttribute('data-name');
+      var at = archivedPeopleSel.indexOf(n);
+      if (at === -1) archivedPeopleSel.push(n); else archivedPeopleSel.splice(at, 1);
+      syncArchivedPeople();
       return;
     }
-    if (e.target.closest('#archived-time-cancel')) { closeArchivedLog(); return; }
-    if (e.target.closest('#archived-time-log')) { logArchivedTime(); return; }
     var b = e.target.closest('#archived-time-billable');
     if (b) { setBillableToggle(b, b.getAttribute('data-active') !== 'true'); return; }
     var o = e.target.closest('#archived-time-overtime');
     if (o) setOvertimeToggle(o, o.getAttribute('data-active') !== 'true');
+  });
+  document.getElementById('archived-task-body').addEventListener('change', function (e) {
+    if (e.target.id === 'archived-person-add' && e.target.value) {
+      if (archivedPeopleSel.indexOf(e.target.value) === -1) archivedPeopleSel.push(e.target.value);
+      syncArchivedPeople();
+    } else if (e.target.id === 'archived-time-note') syncArchivedPeople();
+  });
+  document.getElementById('archived-task-body').addEventListener('input', function (e) {
+    if (e.target.id === 'archived-time-hours' || e.target.id === 'archived-time-note') syncArchivedPeople();
   });
   document.getElementById('archived-task-body').addEventListener('keydown', function (e) {
     if (e.key === 'Enter' && (e.target.id === 'archived-time-hours' || e.target.id === 'archived-time-note')) { e.preventDefault(); logArchivedTime(); }
@@ -21237,6 +21398,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-11-23b', date: '2026-11-23', items: [
+      { type: 'improved', title: 'Edit hours on finished work, for several people', text: "Time on an archived task now works like it does on the board. Every entry is listed: click one to change its hours, note or people, or the x to remove it. When logging, tick everyone the time is for in the For row (\"+ Add\" adds anyone else): each person gets the hours, and it shows as one line. Every change saves straight away and can be undone from the message." }
+    ] },
     { id: '2026-11-23a', date: '2026-11-23', items: [
       { type: 'improved', title: 'Undo a project merge', text: "Merged the wrong project? The message after a merge now has Undo, which puts both projects back as they were: tasks, chat, links and notes. Ming Song and Arvind can now merge duplicate projects too, from the project card's ⋯ menu." }
     ] },
@@ -25461,7 +25625,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-11-23T03:17:23Z";
+  var CURRENT_BUILD_VERSION = "2026-11-23T04:34:18Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
