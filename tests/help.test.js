@@ -100,7 +100,9 @@ async function ask(page, q) {
   await page.waitForTimeout(80);
   return page.$$eval('#help-body [data-help-article]', bs => bs.map(b => b.getAttribute('data-help-article')));
 }
-const panelOpen = (page) => page.$eval('#help-panel', p => !p.hidden);
+// Open = actually on screen, not just the hidden flag (the panel's `flex` once beat [hidden], so it
+// never closed while the flag said it had).
+const panelOpen = (page) => page.$eval('#help-panel', p => p.getBoundingClientRect().width > 0);
 
 (async () => {
   const browser = await chromium.launch();
@@ -140,11 +142,15 @@ const panelOpen = (page) => page.$eval('#help-panel', p => !p.hidden);
     await page.press('#help-search', 'Enter'); await page.waitForTimeout(100);
     const art = await page.$eval('#help-body', b => b.textContent);
     check('Enter opens the top article', /Book time off/.test(art) && /Show me/.test(art) && /Go to People/.test(art), art.slice(0, 120));
-    check('search box hidden while reading', await page.$eval('#help-search-wrap', w => w.hidden));
+    check('search box hidden while reading', await page.$eval('#help-search-wrap', w => w.getBoundingClientRect().height === 0));
     await page.keyboard.press('Escape'); await page.waitForTimeout(80);
-    check('Escape goes back to the results, query kept', await panelOpen(page) && await page.evaluate(() => !document.getElementById('help-search-wrap').hidden && document.getElementById('help-search').value === 'book leave'));
+    check('Escape goes back to the results, query kept', await panelOpen(page) && await page.evaluate(() => document.getElementById('help-search-wrap').getBoundingClientRect().height > 0 && document.getElementById('help-search').value === 'book leave'));
     await page.keyboard.press('Escape'); await page.waitForTimeout(80);
     check('second Escape closes it', !(await panelOpen(page)));
+
+    await page.click('#help-fab'); await page.waitForTimeout(100);
+    await page.click('[data-help-close]'); await page.waitForTimeout(100);
+    check('the X closes it', !(await panelOpen(page)));
 
     await page.keyboard.press('Shift+Slash'); await page.waitForTimeout(100);
     check('"?" opens help', await panelOpen(page));

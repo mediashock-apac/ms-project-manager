@@ -278,6 +278,9 @@
   /* HELP: toasts stack above the floating "?" in the bottom-right corner, not under it. */
   html:not(.m-mode) #toast-container { bottom: 4.25rem; }
   #help-fab.help-fab-open { color: #ff4e20; border-color: #ff7a52; }
+  /* The panel carries `flex`, which beats the browser's own [hidden] rule: without this it never
+     closed (X, Escape and outside clicks set `hidden` while it stayed on screen). */
+  #help-panel[hidden], #help-search-wrap[hidden] { display: none !important; }
   .dark .panel-raised {
     box-shadow: 0 16px 40px -8px rgba(0, 0, 0, 0.60), 0 4px 12px -4px rgba(0, 0, 0, 0.45);
   }
@@ -26312,7 +26315,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-11-23T07:43:38Z";
+  var CURRENT_BUILD_VERSION = "2026-11-23T08:14:01Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
