@@ -3473,7 +3473,7 @@ admins only, target wins with nothing lost. PROJECT ACTIONS in index.html.
 - **One quiet ⋯ beside each project card's hours** (`projectMenuOpen`, session-only) opens one row:
   **Archive project** (Ongoing; every task, done or not, `archiveProjectTasks(name, true)`; asks
   first only when something isn't done; Undo on the toast) or **Restore project** (Completed; every
-  archived task back, `restoreWholeProject`), plus, for admins, **Merge into another project…**.
+  archived task back, `restoreWholeProject`), plus, for admins, Ming Song and Arvind, **Merge into another project…**.
   Nothing else shows at rest. "Ready to archive" is unchanged.
 - **Merge, not child projects**: Asana/Linear merge duplicates; a project tree would add a layer to
   every list. The row becomes a search (`projectMergeFor`, results redrawn in place because the grid
@@ -3485,8 +3485,22 @@ admins only, target wins with nothing lost. PROJECT ACTIONS in index.html.
   duplicate's doc is deleted. Your own chat favourite/mute/read marks follow
   (`moveMyProjectMarks`, shared with rename). Not migrated: Monday update rows and old Activity text
   keep the old name.
-- **Admins only** because archived tasks can only be updated by their creator or an admin in
-  `firestore.rules`, and a merge isn't a one-click undo. No rules change.
+- **Who can merge (2026-11-23, asked: "Need Mingsong and Arvind to be able to have this
+  access"):** admins plus `MERGE_EXTRA_EMAILS` (`canMergeProjects()`), mirrored by `mergers()` in
+  `firestore.rules`, which lets them change only `project` on someone else's archived task. **Keep
+  the two lists identical.** Until those rules are published, a refused archived-task update falls
+  back to moving the task out of the archive and back with the new name
+  (`updateArchivedTasksProject`, same technique as logging time on an archived task), so it works
+  now. Everyone else still doesn't see Merge.
+- **Undo on the merge toast** (same day, asked: "in case it's merged accidentally";
+  `undoMergeProjects`). The merge records what it did: the moved task ids, the duplicate's whole
+  project doc, the target's merged fields as they were and which list items were added. Undo
+  writes the duplicate's doc back, reverts those fields on the target (list items added since the
+  merge, e.g. a new chat message, are kept), moves the tasks back (a task re-filed since is left
+  alone), restores your chat marks and logs it. Taking merged chat messages back out shrinks
+  `chat`, which the rules leave to admins, so for others the target doc is deleted and written
+  again. Only while the toast shows (7s); after that, merging is still not reversible in one click.
+  `tests/project-actions.test.js` (Ming Song merges with the rules refusing, then undoes).
 - **Closing reports are a stage, not a checklist step (2026-11-18)**, asked: a "closing report"
   step kept finished projects Ongoing for weeks or months. CLOSING REPORTS in index.html.
   Archiving a finished project (Ready to archive, the deadline popup, or Archive project with

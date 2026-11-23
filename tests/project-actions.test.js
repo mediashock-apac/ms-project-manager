@@ -1,4 +1,4 @@
-// project-actions -- the ⋯ on a project card: archive a whole project (done or not, with Undo), restore a completed one, and (admins only) merge a duplicate into another project, carrying tasks, archived tasks, chat, links and notes. Browser test against index.html with Firebase stubbed (see tests/README.md).
+// project-actions -- the ⋯ on a project card: archive a whole project (done or not, with Undo), restore a completed one, and (admins, Ming Song and Arvind) merge a duplicate, with Undo into another project, carrying tasks, archived tasks, chat, links and notes. Browser test against index.html with Firebase stubbed (see tests/README.md).
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
@@ -15,7 +15,8 @@ function seed(asUser) {
   const T = (o) => Object.assign({ priority: 'Medium', startDate: '2026-10-01', deadline: '2026-10-30', assignee: 'Deane Cheng', createdBy: 'Deane Cheng', checklist: [], comments: [], timeEntries: [], createdAt: '2026-09-01T00:00:00Z' }, o);
   const users = {
     deane: { uid: 'u1', displayName: 'Deane Cheng', email: 'deane@mediashock.com.sg' },
-    zenon: { uid: 'u4', displayName: 'Zenon Kwok Ze Yong', email: 'zenon@mediashock.com.sg' }
+    zenon: { uid: 'u4', displayName: 'Zenon Kwok Ze Yong', email: 'zenon@mediashock.com.sg' },
+    mingsong: { uid: 'u2', displayName: 'Ming Song Ang', email: 'mingsong@mediashock.com.sg' }
   };
   window.__fb = {
     seq: 1, writes: [],
@@ -23,7 +24,8 @@ function seed(asUser) {
     data: {
       people: {
         u1: P({ name: 'Deane Cheng', email: 'deane@mediashock.com.sg', departments: ['production'], favoriteChats: ['Dup Project'] }),
-        u4: P({ name: 'Zenon Kwok Ze Yong', email: 'zenon@mediashock.com.sg', departments: ['copy'] })
+        u4: P({ name: 'Zenon Kwok Ze Yong', email: 'zenon@mediashock.com.sg', departments: ['copy'] }),
+        u2: P({ name: 'Ming Song Ang', email: 'mingsong@mediashock.com.sg', departments: ['admin'] })
       },
       tasks: {
         t1: T({ name: 'Edit', project: 'Dup Project', status: 'In Progress' }),
@@ -169,6 +171,38 @@ const db = (page, fn) => page.evaluate(fn);
   check('non-admin does not see Merge', !(await z.page.$('#projects-grid .project-merge-start')));
   check('no page errors (non-admin)', z.errors.length === 0, z.errors.join(' | '));
   await z.ctx.close();
+
+  // Ming Song: not an admin but may merge. The live rules refuse her direct update of an
+  // archived task, so it is moved out of the archive and back instead. Then Undo puts it all back,
+  // including taking the merged chat message out (a chat shrink the rules leave to admins).
+  const m = await newPage(browser, '2026-10-21T11:00:00', 'mingsong');
+  await skipTours(m.page);
+  await m.page.evaluate(() => { window.__fb.denyUpdate = { archivedTasks: true }; });
+  await m.page.click('[data-view-btn="projects"]'); await m.page.waitForTimeout(900); await skipTours(m.page);
+  await m.page.click(menu('Dup Project')); await m.page.waitForTimeout(200);
+  check('Ming Song sees Merge', !!(await m.page.$('#projects-grid .project-merge-start[data-project="Dup Project"]')));
+  await m.page.click('#projects-grid .project-merge-start[data-project="Dup Project"]'); await m.page.waitForTimeout(200);
+  await m.page.fill('.project-merge-search', 'real'); await m.page.waitForTimeout(150);
+  await m.page.click('#projects-grid .project-merge-pick[data-target="Real Project"]'); await m.page.waitForTimeout(200);
+  check('the confirm promises an Undo', /Undo/.test(await m.page.textContent('#confirm-body')));
+  await m.page.click('#confirm-ok-btn'); await m.page.waitForTimeout(900);
+  let md = await db(m.page, () => window.__fb.data);
+  check('Ming Song: active tasks moved', md.tasks.t1.project === 'Real Project' && md.tasks.t2.project === 'Real Project');
+  check('Ming Song: archived task moved via the archive, still archived', md.archivedTasks.a1 && md.archivedTasks.a1.project === 'Real Project' && !md.tasks.a1, JSON.stringify(md.archivedTasks.a1));
+  check('Ming Song: duplicate removed', !md.projects.p1 && md.projects.p2.chat.length === 2);
+  const undoBtn = await m.page.$('.toast-action');
+  check('merge toast has Undo', !!undoBtn && /Undo/.test(await undoBtn.textContent()));
+  await m.page.evaluate(() => { window.__fb.denyUpdate = { archivedTasks: true, projects: true }; });
+  await undoBtn.click(); await m.page.waitForTimeout(1200);
+  md = await db(m.page, () => window.__fb.data);
+  check('Undo: tasks back under the old name', md.tasks.t1.project === 'Dup Project' && md.tasks.t2.project === 'Dup Project' && md.tasks.t3.project === 'Real Project');
+  check('Undo: archived task back, still archived', md.archivedTasks.a1 && md.archivedTasks.a1.project === 'Dup Project' && !md.tasks.a1);
+  check('Undo: duplicate project record back', md.projects.p1 && md.projects.p1.name === 'Dup Project' && md.projects.p1.deadline === '2026-11-01' && md.projects.p1.chat.length === 1, JSON.stringify(md.projects.p1));
+  check('Undo: target back as it was', md.projects.p2 && JSON.stringify(md.projects.p2.chat.map(x => x.id)) === '["m2"]' && md.projects.p2.links.length === 2 && md.projects.p2.wipNote === 'Real note' && !('clientContact' in md.projects.p2) && !('mergedFrom' in md.projects.p2), JSON.stringify(md.projects.p2));
+  check('Undo: logged', Object.values(md.activity).some(a => /Undid merging project Dup Project into Real Project/.test(a.summary)));
+  check('Undo: duplicate is on Projects again', !!(await m.page.$(menu('Dup Project'))));
+  check('no page errors (Ming Song)', m.errors.length === 0, m.errors.join(' | '));
+  await m.ctx.close();
 
   await browser.close();
   console.log(results.join('\n'));

@@ -7547,6 +7547,14 @@
     var u = auth.currentUser;
     return !!(u && u.email && ADMIN_EMAILS.indexOf(u.email.toLowerCase()) !== -1);
   }
+  // Who may merge projects: admins plus these (asked 2026-11-23). Mirrors mergers() in
+  // firestore.rules; keep the two lists identical. Until those rules are published, a non-admin's
+  // merge moves archived tasks out of the archive and back (see mergeArchivedTaskProject).
+  var MERGE_EXTRA_EMAILS = ['mingsong@mediashock.com.sg', 'arvind@mediashock.com.sg'];
+  function canMergeProjects() {
+    var u = auth.currentUser;
+    return isAdminUser() || !!(u && u.email && MERGE_EXTRA_EMAILS.indexOf(u.email.toLowerCase()) !== -1);
+  }
 
   // Read-only "who's admin" lookup for the People tab badge below -- asked for directly
   // ("allow me to assign admin rights to selected users"), but admin status stays hardcoded in
@@ -12089,7 +12097,7 @@
      unarchive projects. And if there are two projects that are already created by accident, how
      can one become a child or piggyback under something else?"). One quiet "⋯" on each project
      card opens a single row: Archive project (any time, not only once every task is Done) or
-     Restore project, and for admins "Merge into another project". Nothing shows at rest.
+     Restore project, and for admins/mergers (canMergeProjects) "Merge into another project", with Undo. Nothing shows at rest.
      Merging rather than child projects: Asana and Linear handle accidental duplicates by merging,
      and a project tree would add a layer to every list. Admins only, because it rewrites archived
      tasks (which the rules only let an admin change) and isn't a one-click undo. */
@@ -13268,7 +13276,7 @@
       var n = tasks.concat(archivedTasks).filter(function (t) { return t.project === from; }).length;
       openConfirm('Merge "' + from + '" into "' + to + '"?',
         'Its ' + n + ' task' + (n === 1 ? '' : 's') + ', chat, links and notes move into "' + to + '", and "' + from + '" disappears from every list. ' +
-        'If both have a brief, deadline or WIP category, "' + to + '" keeps its own; the other is saved with the project and named in Activity. This can\'t be undone in one click.',
+        'If both have a brief, deadline or WIP category, "' + to + '" keeps its own; the other is saved with the project and named in Activity. Undo on the next message puts it all back.',
         function () { mergeProjects(from, to); },
         { tone: 'danger', confirmText: 'Merge projects', cancelText: 'Cancel' });
     });
@@ -13309,46 +13317,172 @@
     return { patch: patch, notKept: notKept };
   }
 
+  // Runs batch ops (functions taking a batch) in chunks under Firestore's 500-write limit.
+  function commitOpsChunked(ops) {
+    var chain = Promise.resolve();
+    for (var i = 0; i < ops.length; i += 400) {
+      (function (chunk) {
+        chain = chain.then(function () {
+          var batch = writeBatch(db);
+          chunk.forEach(function (op) { op(batch); });
+          return batch.commit();
+        });
+      })(ops.slice(i, i + 400));
+    }
+    return chain;
+  }
+
+  // Sets `patch` on an archived task by moving it out of the archive and back with the patch
+  // applied: the two moves anyone may make (see saveArchivedTimeEntries). Used when the rules
+  // refuse a direct update (only admins, and once published mergers(), may update someone
+  // else's archived task). archivedAt stays on it throughout, so it never shows on the board.
+  function moveArchivedTaskWithPatch(id, patch) {
+    var cur = archivedTasks.find(function (x) { return x.id === id; });
+    if (!cur) return Promise.resolve();
+    var data = Object.assign({}, cur, patch);
+    delete data.id;
+    if (!data.archivedAt) data.archivedAt = new Date().toISOString();
+    var out = writeBatch(db);
+    out.set(doc(tasksCol, id), data);
+    out.delete(doc(archivedTasksCol, id));
+    return out.commit().then(function () {
+      var back = writeBatch(db);
+      back.set(doc(archivedTasksCol, id), data);
+      back.delete(doc(tasksCol, id));
+      return back.commit().catch(function () {
+        return getDoc(doc(archivedTasksCol, id)).then(function (snap) { if (!snap.exists()) throw new Error('a task is still being moved back to the archive'); });
+      });
+    });
+  }
+  function updateArchivedTasksProject(ids, project) {
+    if (!ids.length) return Promise.resolve();
+    return commitOpsChunked(ids.map(function (id) {
+      return function (b) { b.update(doc(archivedTasksCol, id), { project: project }); };
+    })).catch(function () {
+      return ids.reduce(function (p, id) { return p.then(function () { return moveArchivedTaskWithPatch(id, { project: project }); }); }, Promise.resolve());
+    });
+  }
+
+  function mergeItemKey(k, x) {
+    if (k === 'links' && x && x.url) return 'u:' + x.url;
+    if (x && x.id) return 'i:' + x.id;
+    return 'j:' + JSON.stringify(x);
+  }
+
   function mergeProjects(from, to) {
-    if (!isAdminUser() || !from || !to || projectKey(from) === projectKey(to)) return;
+    if (!canMergeProjects() || !from || !to || projectKey(from) === projectKey(to)) return;
     withArchivedTasksReady(function () {
       var live = tasks.filter(function (t) { return t.project === from; });
       var arch = archivedTasks.filter(function (t) { return t.project === from; });
-      var ops = [];
-      live.forEach(function (t) { ops.push(function (b) { b.update(doc(tasksCol, t.id), { project: to }); }); });
-      arch.forEach(function (t) { ops.push(function (b) { b.update(doc(archivedTasksCol, t.id), { project: to }); }); });
+      var me = myPersonDoc();
+      // What Undo needs to put everything back (see undoMergeProjects).
+      var undo = {
+        from: from, to: to,
+        taskIds: live.concat(arch).map(function (t) { return t.id; }),
+        fromDoc: null, renamedDocId: null, toDocId: null, toBefore: {}, toAdded: {},
+        marks: me ? { favoriteChats: me.favoriteChats, mutedChats: me.mutedChats, chatLastRead: me.chatLastRead } : null
+      };
+      var taskOps = live.map(function (t) { return function (b) { b.update(doc(tasksCol, t.id), { project: to }); }; });
       // Project docs last, so a failure part-way leaves the duplicate's chat/brief in place and
       // merging again finishes the job.
+      var projectOps = [];
       var fromDoc = projectDeadlineDoc(from), toDoc = projectDeadlineDoc(to), notKept = [];
       if (fromDoc && toDoc && fromDoc.id !== toDoc.id) {
         var m = mergeProjectDocData(fromDoc, toDoc, from);
         notKept = m.notKept;
-        if (Object.keys(m.patch).length) ops.push(function (b) { b.update(doc(projectsCol, toDoc.id), m.patch); });
-        ops.push(function (b) { b.delete(doc(projectsCol, fromDoc.id)); });
+        undo.fromDoc = Object.assign({}, fromDoc);
+        undo.toDocId = toDoc.id;
+        Object.keys(m.patch).forEach(function (k) {
+          undo.toBefore[k] = Object.prototype.hasOwnProperty.call(toDoc, k) ? toDoc[k] : undefined;
+          if (MERGE_JOIN_LISTS.indexOf(k) !== -1 && Array.isArray(m.patch[k])) {
+            var had = {};
+            (Array.isArray(toDoc[k]) ? toDoc[k] : []).forEach(function (x) { had[mergeItemKey(k, x)] = true; });
+            undo.toAdded[k] = m.patch[k].map(function (x) { return mergeItemKey(k, x); }).filter(function (key) { return !had[key]; });
+          }
+        });
+        if (Object.keys(m.patch).length) projectOps.push(function (b) { b.update(doc(projectsCol, toDoc.id), m.patch); });
+        projectOps.push(function (b) { b.delete(doc(projectsCol, fromDoc.id)); });
       } else if (fromDoc && !toDoc) {
-        ops.push(function (b) { b.update(doc(projectsCol, fromDoc.id), { name: to }); });
+        undo.renamedDocId = fromDoc.id;
+        projectOps.push(function (b) { b.update(doc(projectsCol, fromDoc.id), { name: to }); });
       }
-      var chain = Promise.resolve();
-      for (var i = 0; i < ops.length; i += 400) {
-        (function (chunk) {
-          chain = chain.then(function () {
-            var batch = writeBatch(db);
-            chunk.forEach(function (op) { op(batch); });
-            return batch.commit();
-          });
-        })(ops.slice(i, i + 400));
-      }
-      chain.then(function () {
+      commitOpsChunked(taskOps).then(function () {
+        return updateArchivedTasksProject(arch.map(function (t) { return t.id; }), to);
+      }).then(function () { return commitOpsChunked(projectOps); }).then(function () {
         projectMenuOpen = null;
         projectMergeFor = null;
         if (projectExpanded[from]) projectExpanded[to] = true;
         var n = live.length + arch.length;
         logActivity('project_merged', 'Merged project ' + from + ' into ' + to + ' (' + n + ' task' + (n === 1 ? '' : 's') + ')' +
           (notKept.length ? '. ' + to + ' kept its own ' + notKept.join(', ') + '; ' + from + "'s is saved with the project" : ''));
-        showToast('"' + from + '" merged into "' + to + '"', 'success');
+        showToast('"' + from + '" merged into "' + to + '"', 'success', { action: { label: 'Undo', onClick: function () { undoMergeProjects(undo); } } });
         renderProjects();
         return moveMyProjectMarks(from, to);
       }).catch(function (err) { showToast('Could not merge projects: ' + err.message, 'error'); });
+    });
+  }
+
+  // Puts a merge back (the Undo on the merge toast): the duplicate's project doc as it was, the
+  // target's merged fields as they were (keeping anything added since, e.g. a new chat message),
+  // the moved tasks back under the old name, and your own chat marks. A task someone re-filed
+  // since the merge is left alone.
+  function undoMergeProjects(u) {
+    if (!canMergeProjects()) return;
+    withArchivedTasksReady(function () {
+      var ids = {};
+      u.taskIds.forEach(function (id) { ids[id] = true; });
+      var liveNow = tasks.filter(function (t) { return ids[t.id] && t.project === u.to; });
+      var archNow = archivedTasks.filter(function (t) { return ids[t.id] && t.project === u.to; });
+      var steps = Promise.resolve();
+      if (u.fromDoc) {
+        var fromData = Object.assign({}, u.fromDoc);
+        var fromId = fromData.id;
+        delete fromData.id;
+        steps = steps.then(function () { return setDoc(doc(projectsCol, fromId), fromData); });
+      } else if (u.renamedDocId) {
+        steps = steps.then(function () { return updateDoc(doc(projectsCol, u.renamedDocId), { name: u.from }); });
+      }
+      if (u.toDocId && Object.keys(u.toBefore).length) {
+        steps = steps.then(function () {
+          var cur = projectDocs.find(function (p) { return p.id === u.toDocId; }) || {};
+          var put = {}, remove = [];
+          Object.keys(u.toBefore).forEach(function (k) {
+            if (u.toAdded[k]) {
+              var drop = {};
+              u.toAdded[k].forEach(function (key) { drop[key] = true; });
+              var list = (Array.isArray(cur[k]) ? cur[k] : []).filter(function (x) { return !drop[mergeItemKey(k, x)]; });
+              if (list.length || u.toBefore[k] !== undefined) put[k] = list; else remove.push(k);
+            } else if (u.toBefore[k] === undefined) remove.push(k);
+            else put[k] = u.toBefore[k];
+          });
+          var fsPatch = Object.assign({}, put);
+          remove.forEach(function (k) { fsPatch[k] = deleteField(); });
+          return updateDoc(doc(projectsCol, u.toDocId), fsPatch).catch(function (err) {
+            // Taking merged chat messages back out shrinks `chat`, which the rules leave to
+            // admins. Delete and create are open to the team, so write the doc again instead.
+            if (!cur.id) throw err;
+            var data = Object.assign({}, cur, put);
+            delete data.id;
+            remove.forEach(function (k) { delete data[k]; });
+            return deleteDoc(doc(projectsCol, u.toDocId)).then(function () { return setDoc(doc(projectsCol, u.toDocId), data); });
+          });
+        });
+      }
+      steps.then(function () {
+        return commitOpsChunked(liveNow.map(function (t) { return function (b) { b.update(doc(tasksCol, t.id), { project: u.from }); }; }));
+      }).then(function () {
+        return updateArchivedTasksProject(archNow.map(function (t) { return t.id; }), u.from);
+      }).then(function () {
+        var me = myPersonDoc();
+        if (!me || !u.marks) return;
+        var marks = {};
+        ['favoriteChats', 'mutedChats', 'chatLastRead'].forEach(function (k) { marks[k] = u.marks[k] === undefined ? deleteField() : u.marks[k]; });
+        return setDoc(doc(peopleCol, me.id), marks, { merge: true });
+      }).then(function () {
+        logActivity('project_merged', 'Undid merging project ' + u.from + ' into ' + u.to);
+        showToast('Merge undone: "' + u.from + '" is back', 'success');
+        renderProjects();
+      }).catch(function (err) { showToast('Could not undo the merge: ' + err.message, 'error'); });
     });
   }
 
@@ -13387,7 +13521,7 @@
           sep + closeBtn
         : '<button type="button" class="project-archive-all-btn ' + WIP_ACT_BTN + '" data-project="' + escapeHtml(p.name) + '" title="Archive every task, done or not, and move the project to Completed">Archive project</button>' +
           sep + closeBtn) +
-      (isAdminUser()
+      (canMergeProjects()
         ? '<span class="w-px h-4 mx-3 bg-zinc-200 dark:bg-zinc-600"></span>' +
           '<button type="button" class="project-merge-start ' + WIP_ACT_BTN + '" data-project="' + escapeHtml(p.name) + '" title="For a duplicate created by accident: move everything into another project">Merge into another project…</button>'
         : '') +
@@ -21103,6 +21237,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-11-23a', date: '2026-11-23', items: [
+      { type: 'improved', title: 'Undo a project merge', text: "Merged the wrong project? The message after a merge now has Undo, which puts both projects back as they were: tasks, chat, links and notes. Ming Song and Arvind can now merge duplicate projects too, from the project card's ⋯ menu." }
+    ] },
     { id: '2026-11-19d', date: '2026-11-19', items: [
       { type: 'new', title: 'Log hours on finished work', text: "Forgot to log some hours before a project was completed? Open the task from the Completed project's card (or from Archived) and click \"+ Log time\". Enter the hours, who they're for and what they were for, then Log. The task stays archived, and the hours count in the project's total straight away. Logged the wrong amount? Click Undo on the message." }
     ] },
@@ -25324,7 +25461,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-11-19T12:25:04Z";
+  var CURRENT_BUILD_VERSION = "2026-11-23T03:17:23Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {

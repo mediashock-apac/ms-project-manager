@@ -41,6 +41,16 @@ service cloud.firestore {
       return isMediashock() && request.auth.token.email.lower() in admins();
     }
 
+    // Who may merge projects besides admins (asked 2026-11-23). Must match MERGE_EXTRA_EMAILS in
+    // index.html. A merge re-files archived tasks under the surviving project's name, which is
+    // the only archived-task update this grants (see archivedTasks below).
+    function mergers() {
+      return ['mingsong@mediashock.com.sg', 'arvind@mediashock.com.sg'];
+    }
+    function isMerger() {
+      return isMediashock() && (isAdmin() || request.auth.token.email.lower() in mergers());
+    }
+
     // A task's `assignee` is a DISPLAY NAME, not a uid -- that's what the field has always
     // held and what every view renders, so this compares against the Google-verified name on
     // the token, with email as a fallback for accounts that have no displayName set.
@@ -151,6 +161,7 @@ service cloud.firestore {
         || isCreator(resource.data)
         || (resource.data.createdBy == null && isAssignee(resource.data))
         || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['timeEntries'])
+        || (isMerger() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['project']))
       );
       allow delete: if isMediashock() && (
         isAdmin()
