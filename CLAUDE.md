@@ -3395,6 +3395,34 @@ Note this was a *code* removal — it can't delete tasks that button already cre
 were ever loaded on the live board, those documents are still there and have to be deleted from the
 board itself.
 
+### Preferences: start page, sidebar pages, notifications (2026-11-23)
+
+Asked "Are there any customization features i can add?", then "do 1., 2. and 3." of: which
+notifications you get (Slack, Linear, Asana), your start page (Linear, Notion), hiding sidebar pages
+(Slack, Linear). YOUR PREFERENCES in index.html. One window from the profile menu
+(`#btn-preferences`, `#prefs-modal`, built in JS), saved as you go, Done/X/Escape/outside click close it.
+- **Stored on your own roster row** (`people/{uid}`: `startView`, `hiddenPages`, `notifOff`,
+  `quietHours` {on, from, to, weekends}), so they follow you and need no rules change; mirrored to
+  localStorage `flowboard_prefs`, because the page lands and notifications load before the roster
+  arrives. Always read through `myPrefs()` (`cleanPrefs` drops unknown values).
+- **Notifications in 6 groups** (`NOTIF_GROUPS`, types per group). Can't be turned off: @mentions,
+  owner, step assigned, your reminders, Monday reminders. Filtered when they ARRIVE
+  (`notifShownToMe`: `myNotifications` is `myNotificationsRaw` minus turned-off kinds), so every sender
+  is covered in one place and turning a group back on brings those back. Chat posts and reactions are
+  also not written (`personWantsNotif` in `notifyOnProjectChat`/`notifyOnChatReaction`) so they can't
+  fill the 30-notification query. **A new notification type goes in a group, or it is always on.**
+- **Quiet hours** hold back desktop pop-ups only (`inQuietHours` in `fireDesktopNotification`); the bell
+  still collects them. Reminder cards are unaffected (you set those yourself).
+- **Start page**: `init()` lands on `startViewChoice()` (the local copy) unless a version reload brings
+  you back; when the roster arrives with a different choice (set on another computer) and nothing has
+  moved the page and no link opened, `settleStartView` goes there once. Not on the phone layout.
+- **Hidden pages** (`applyHiddenPages`, run from `setView` and on prefs change): only pages in
+  `#sidebar-nav` (New Updates and Suggestions can't be hidden; New Updates has to light up). The page
+  you're on always shows; a group heading with nothing visible hides; `#sidebar-more-btn` "More (N)"
+  shows them until a page is picked (`navMoreOpen`). Uses the `hidden` attribute plus
+  `#sidebar-nav [hidden] { display: none !important }`, since the rows carry `flex`.
+- `tests/preferences.test.js`.
+
 ### Reminders (2026-11-12)
 
 Asked: "a feature that is like a reminder. You get to choose ... a pop up or a notification (or others

@@ -604,6 +604,9 @@
       &[data-ic="moreHorizontal"] > * { animation: ic-hop .4s ease backwards; }
       &[data-ic="moreHorizontal"] > :nth-child(2) { animation-delay: .07s; }
       &[data-ic="moreHorizontal"] > :nth-child(3) { animation-delay: .14s; }
+      /* Preferences: the slider knobs move along their tracks. */
+      &[data-ic="sliders"] > circle:nth-of-type(odd) { animation: ic-nudge-right .5s ease; }
+      &[data-ic="sliders"] > circle:nth-of-type(even) { animation: ic-nudge-left .5s ease; }
       /* Repeat cycles half way; refresh goes all the way round; the compass needle swings and settles. */
       &[data-ic="repeat"] > * { animation: ic-half-turn .6s ease-in-out; }
       &[data-ic="refresh"] > * { animation: ic-half-turn .6s ease-in-out; }
@@ -820,6 +823,8 @@
      per-class in setView()) -- that shape suited a white pill floating on a grey track; a
      vertical rail item is a plainer on/off state, so setView() now toggles one class
      ("active") and this rule decides what it looks like. */
+  /* Pages hidden in Preferences (YOUR PREFERENCES): the rows carry `flex`, which would beat [hidden]. */
+  #sidebar-nav [hidden] { display: none !important; }
   .view-toggle-btn { color: #52525b; }
   .dark .view-toggle-btn { color: #a1a1aa; }
   .view-toggle-btn:hover { background: #fafafa; color: #27272a; }
@@ -1223,6 +1228,11 @@
         <svg data-ic="archive" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="21 8 21 21 3 21 3 8"></polyline><rect x="1" y="3" width="22" height="5"></rect><line x1="10" y1="12" x2="14" y2="12"></line></svg>
         <span class="sidebar-label truncate">Archived</span>
       </button>
+      <!-- Pages you hid in Preferences wait behind this; it only shows when you've hidden some. -->
+      <button type="button" id="sidebar-more-btn" hidden data-tooltip="More pages" aria-expanded="false" class="tooltip-right w-full flex items-center gap-3 px-2.5 py-2 mt-1 rounded-lg text-sm font-medium text-zinc-500 dark:text-zinc-400 hover:bg-zinc-50 dark:hover:bg-zinc-700/60">
+        <svg data-ic="moreHorizontal" class="w-[18px] h-[18px] shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1"></circle><circle cx="12" cy="12" r="1"></circle><circle cx="19" cy="12" r="1"></circle></svg>
+        <span id="sidebar-more-label" class="sidebar-label truncate">More</span>
+      </button>
       <input type="file" id="import-file-input" accept="application/json" class="hidden">
     </nav>
 
@@ -1281,6 +1291,11 @@
         <button type="button" id="btn-desktop-notif-toggle" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-600">
           <span id="desktop-notif-toggle-icon" class="w-4 h-4 shrink-0 flex items-center justify-center"></span>
           <span id="desktop-notif-toggle-label">Desktop notifications: Off</span>
+        </button>
+        <!-- Start page, which pages show in the sidebar, which notifications you get. See YOUR PREFERENCES. -->
+        <button type="button" id="btn-preferences" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-600">
+          <svg data-ic="sliders" class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="20" y2="18"></line><circle cx="9" cy="6" r="2" fill="currentColor"></circle><circle cx="15" cy="12" r="2" fill="currentColor"></circle><circle cx="8" cy="18" r="2" fill="currentColor"></circle></svg>
+          <span>Preferences</span>
         </button>
         <button type="button" id="btn-take-tour" class="w-full flex items-center gap-2.5 px-3.5 py-2 text-left text-zinc-600 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-600">
           <svg data-ic="compass" class="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
@@ -2602,6 +2617,13 @@
   var notificationsCol = collection(db, "notifications");
   var unsubNotifications = null;
   var myNotifications = [];
+  var myNotificationsRaw = [];   // everything addressed to you; myNotifications drops kinds you turned off
+  // After turning a kind of notification on or off, the bell and the chat count follow at once.
+  function refreshMyNotifications() {
+    myNotifications = myNotificationsRaw.filter(notifShownToMe);
+    renderNotificationBell();
+    renderChatNavBadge();
+  }
   var notifListenerReady = false;
   var firedDesktopNotifIds = {};
 
@@ -2670,6 +2692,7 @@
   function fireDesktopNotification(notif) {
     if (notif.type === 'reminder') return;   // reminders choose their own way of showing (showReminderAlert)
     if (!desktopNotifActive() || firedDesktopNotifIds[notif.id]) return;
+    if (!notifShownToMe(notif) || inQuietHours(new Date())) return;   // Preferences: turned off, or quiet hours
     firedDesktopNotifIds[notif.id] = true;
     // `chat_post` is a project-assignee broadcast with no real @mention behind it (see
     // notifyOnProjectChat) -- worded as "posted in", not "mentioned you", for the same reason
@@ -5646,6 +5669,7 @@
     Object.keys(recipients).forEach(function (name) {
       // A mute silences the assignee-broadcast, never an actual @mention -- see isPersonMutedOnChat.
       if (!mentioned[name] && isPersonMutedOnChat(name, projectName)) return;
+      if (!mentioned[name] && !personWantsNotif(name, 'chat_post')) return;   // turned off in their Preferences
       setDoc(doc(notificationsCol), {
         recipient: name,
         type: mentioned[name] ? 'chat_mention' : 'chat_post',
@@ -5672,6 +5696,7 @@
     // A reaction is never a mention -- a mute silences it fully, unlike notifyOnProjectChat's
     // broadcast (which still lets an actual @mention through).
     if (isPersonMutedOnChat(message.author, projectName)) return;
+    if (!personWantsNotif(message.author, 'chat_reaction')) return;   // turned off in their Preferences
     setDoc(doc(notificationsCol), {
       recipient: message.author,
       type: 'chat_reaction',
@@ -21398,6 +21423,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-11-23c', date: '2026-11-23', items: [
+      { type: 'new', title: 'Make Project Manager yours: Preferences', text: "Click your name at the bottom of the sidebar, then Preferences. Pick the page Project Manager opens on, untick pages you never use (they wait under More at the bottom of the sidebar), and choose which notifications you get, with quiet hours for desktop pop-ups. @mentions and anything put on you always come through. Your choices follow you to every computer you sign in to." }
+    ] },
     { id: '2026-11-23b', date: '2026-11-23', items: [
       { type: 'improved', title: 'Edit hours on finished work, for several people', text: "Time on an archived task now works like it does on the board. Every entry is listed: click one to change its hours, note or people, or the x to remove it. When logging, tick everyone the time is for in the For row (\"+ Add\" adds anyone else): each person gets the hours, and it shows as one line. Every change saves straight away and can be undone from the message." }
     ] },
@@ -22582,6 +22610,283 @@
   });
 
   /* =========================================================
+     YOUR PREFERENCES (2026-11-23). Asked "Are there any customization features i can add?", then
+     "do 1., 2. and 3.": (1) which notifications you get, plus quiet hours for desktop pop-ups
+     (Slack, Linear, Asana); (2) the page you land on (Linear, Notion); (3) hiding sidebar pages you
+     never use, behind a "More" row (Slack, Linear). One window from the profile menu
+     (Preferences), since all three are set-once choices about yourself.
+     - Stored on your OWN roster doc (people/{uid}: notifOff, quietHours, startView, hiddenPages),
+       so they follow you to every computer and need no rules change, mirrored to localStorage
+       (flowboard_prefs) because the page lands and notifications load before the roster arrives.
+     - Notifications you turned off are hidden when they arrive (notifShownToMe, in the listener),
+       so every sender is covered in one place, and chat broadcasts/reactions aren't even written
+       (personWantsNotif in notifyOnProjectChat/notifyOnChatReaction) so they can't fill the
+       30-notification window. @mentions, being made owner or put on a step, your own reminders
+       and the Monday update reminders can't be turned off (NOTIF_ALWAYS).
+     - Quiet hours hold back desktop pop-ups only; the bell still collects everything.
+     - Hidden pages: the page you're on always shows, a group heading hides when all its pages are
+       hidden, and "More" shows them until you pick a page. New Updates and Suggestions (footer)
+       can't be hidden: New Updates has to be able to light up.
+  ========================================================= */
+  var PREFS_KEY = 'flowboard_prefs';
+  var NOTIF_GROUPS = [
+    { key: 'comments', label: 'Comments on tasks you\x27re on', types: ['comment'] },
+    { key: 'chat', label: 'Chat messages and reactions', hint: 'Messages in your projects\x27 chats. @mentions still come through.', types: ['chat_post', 'chat_reaction'] },
+    { key: 'taskUpdates', label: 'Task updates', hint: 'Added to a task, steps finished on your tasks, you\x27re up next.', types: ['involved', 'checklist_done', 'step_up'] },
+    { key: 'alerts', label: 'Deadline and workload alerts', hint: 'Due soon, pile-ups, waiting on a review, deadline on your leave, missing dates.', types: ['deadline_reminder', 'workload_spike', 'clash_heads_up', 'review_stale', 'leave_clash', 'dates_missing'] },
+    { key: 'time', label: 'Friday time reminder', types: ['time_nudge'] },
+    { key: 'suggestions', label: 'Updates on your suggestions', types: ['suggestion_status', 'suggestion_fixed'] }
+  ];
+  var NOTIF_ALWAYS = '@mentions, being made owner or put on a step, your own reminders and the Monday update reminders always come through.';
+  var START_VIEWS = ['mytasks', 'board', 'gantt', 'calendar', 'projects', 'people', 'chat', 'weekly', 'wip', 'activity', 'archived'];
+  var QUIET_DEFAULT = { on: false, from: '19:00', to: '08:00', weekends: false };
+
+  function notifGroupOf(type) {
+    return NOTIF_GROUPS.find(function (g) { return g.types.indexOf(type) !== -1; }) || null;
+  }
+  function cleanPrefs(src) {
+    src = src || {};
+    var groupKeys = NOTIF_GROUPS.map(function (g) { return g.key; });
+    var q = src.quietHours && typeof src.quietHours === 'object' ? src.quietHours : {};
+    var hhmm = function (v, d) { return /^\d{2}:\d{2}$/.test(v || '') ? v : d; };
+    return {
+      notifOff: Array.isArray(src.notifOff) ? src.notifOff.filter(function (k) { return groupKeys.indexOf(k) !== -1; }) : [],
+      quietHours: { on: !!q.on, from: hhmm(q.from, QUIET_DEFAULT.from), to: hhmm(q.to, QUIET_DEFAULT.to), weekends: !!q.weekends },
+      startView: START_VIEWS.indexOf(src.startView) !== -1 ? src.startView : 'board',
+      hiddenPages: Array.isArray(src.hiddenPages) ? src.hiddenPages.filter(function (v) { return START_VIEWS.indexOf(v) !== -1; }) : []
+    };
+  }
+  function storedPrefs() {
+    try { return cleanPrefs(JSON.parse(localStorage.getItem(PREFS_KEY) || '{}')); } catch (e) { return cleanPrefs({}); }
+  }
+  // Your roster row once it has arrived (the record that follows you), else this computer's copy.
+  function myPrefs() {
+    var me = myPersonDoc();
+    return me ? cleanPrefs(me) : storedPrefs();
+  }
+  function saveMyPrefs(patch) {
+    var next = cleanPrefs(Object.assign({}, myPrefs(), patch));
+    try { localStorage.setItem(PREFS_KEY, JSON.stringify(next)); } catch (e) { /* private window: the roster row still has it */ }
+    var uid = auth.currentUser && auth.currentUser.uid;
+    var me = myPersonDoc();
+    if (me) Object.assign(me, patch);   // so the page follows at once, before the snapshot returns
+    applyMyPrefs();
+    if (!uid) return Promise.resolve();
+    return setDoc(doc(peopleCol, uid), patch, { merge: true }).catch(function (err) {
+      showToast('Could not save your preferences: ' + err.message, 'error');
+    });
+  }
+  // Read by whoever SENDS a notification, about the person receiving it (people is team-readable).
+  function personWantsNotif(personName, type) {
+    var g = notifGroupOf(type);
+    if (!g) return true;
+    var p = teamPeople.find(function (x) { return x.name === personName; });
+    return !(p && Array.isArray(p.notifOff) && p.notifOff.indexOf(g.key) !== -1);
+  }
+  function notifShownToMe(n) {
+    var g = notifGroupOf(n.type);
+    return !g || myPrefs().notifOff.indexOf(g.key) === -1;
+  }
+  function inQuietHours(when) {
+    var q = myPrefs().quietHours;
+    if (!q.on) return false;
+    var d = when || new Date();
+    if (q.weekends && (d.getDay() === 0 || d.getDay() === 6)) return true;
+    var mins = function (s) { var p = s.split(':'); return +p[0] * 60 + +p[1]; };
+    var now = d.getHours() * 60 + d.getMinutes(), from = mins(q.from), to = mins(q.to);
+    if (from === to) return false;
+    return from < to ? (now >= from && now < to) : (now >= from || now < to);
+  }
+  function startViewChoice() {
+    var v = storedPrefs().startView;
+    return document.querySelector('#sidebar-nav [data-view-btn="' + v + '"]') ? v : 'board';
+  }
+
+  // Hidden pages in the sidebar. `navMoreOpen` = the More row is showing them (until a page is picked).
+  var navMoreOpen = false;
+  function applyHiddenPages() {
+    var nav = document.getElementById('sidebar-nav');
+    if (!nav || !START_VIEWS) return;   // START_VIEWS: not before this section has run
+    var hide = myPrefs().hiddenPages;
+    var count = 0;
+    nav.querySelectorAll('[data-view-btn]').forEach(function (btn) {
+      var v = btn.getAttribute('data-view-btn');
+      var isHidden = hide.indexOf(v) !== -1;
+      if (isHidden && v !== currentView) count++;
+      btn.hidden = isHidden && v !== currentView && !navMoreOpen;
+    });
+    // A group heading with nothing visible under it goes too.
+    var label = null, anyShown = false;
+    var finish = function () { if (label) label.hidden = !anyShown; };
+    Array.prototype.forEach.call(nav.children, function (el) {
+      if (el.tagName === 'P' && el.classList.contains('sidebar-label')) { finish(); label = el; anyShown = false; }
+      else if (el.hasAttribute('data-view-btn') && !el.hidden) anyShown = true;
+    });
+    finish();
+    var more = document.getElementById('sidebar-more-btn');
+    more.hidden = !count && !navMoreOpen;
+    more.setAttribute('aria-expanded', navMoreOpen ? 'true' : 'false');
+    var text = navMoreOpen ? 'Fewer pages' : 'More (' + count + ')';
+    document.getElementById('sidebar-more-label').textContent = text;
+    more.setAttribute('data-tooltip', navMoreOpen ? 'Hide pages again' : count + ' more page' + (count === 1 ? '' : 's'));
+  }
+  document.getElementById('sidebar-more-btn').addEventListener('click', function () {
+    navMoreOpen = !navMoreOpen;
+    applyHiddenPages();
+  });
+
+  // Re-applies everything after a change (yours, or your roster row arriving from another computer).
+  var lastPrefsKey = null;
+  function applyMyPrefs() {
+    var p = myPrefs();
+    var key = JSON.stringify(p);
+    if (myPersonDoc()) { try { localStorage.setItem(PREFS_KEY, key); } catch (e) {} }
+    applyHiddenPages();
+    if (key === lastPrefsKey) return;
+    var notifChanged = !lastPrefsKey || JSON.stringify(JSON.parse(lastPrefsKey).notifOff) !== JSON.stringify(p.notifOff);
+    lastPrefsKey = key;
+    if (notifChanged) refreshMyNotifications();
+  }
+  // The roster can arrive after the page has landed. If nothing has moved the page since (no click,
+  // no link), go to the start page this person chose on another computer.
+  var landedView = null, startViewSettled = false;
+  function settleStartView() {
+    if (startViewSettled || !myPersonDoc()) return;
+    startViewSettled = true;
+    if (typeof mActive === 'function' && mActive()) return;
+    var want = myPrefs().startView;
+    if (currentView === landedView && want !== currentView && !pendingAppLink && !(typeof openedFromLink !== 'undefined' && openedFromLink) &&
+        document.querySelector('#sidebar-nav [data-view-btn="' + want + '"]')) setView(want);
+  }
+
+  function prefsModalEl() {
+    var el = document.getElementById('prefs-modal');
+    if (el) return el;
+    document.body.insertAdjacentHTML('beforeend',
+      '<div id="prefs-modal" class="fixed inset-0 z-[60] hidden items-center justify-center p-2 sm:p-4 modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="prefs-modal-title">' +
+        '<div class="bg-white dark:bg-zinc-800 w-full max-w-lg rounded-2xl shadow-pop overflow-hidden max-h-[92vh] flex flex-col modal-pop-in">' +
+          '<div class="flex items-center justify-between px-5 py-4 border-b border-zinc-100 dark:border-zinc-700">' +
+            '<div><h3 id="prefs-modal-title" class="text-base font-bold text-zinc-900 dark:text-zinc-100">Preferences</h3>' +
+            '<p class="text-xs text-zinc-500 dark:text-zinc-400">Just for you, on every computer you sign in to. Saved as you go.</p></div>' +
+            '<button type="button" data-prefs-close class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500" aria-label="Close">' + svgIcon('x', 'w-4 h-4') + '</button>' +
+          '</div>' +
+          '<div id="prefs-modal-body" class="px-5 py-4 space-y-5 overflow-y-auto"></div>' +
+          '<div class="flex justify-end px-5 py-3 border-t border-zinc-100 dark:border-zinc-700">' +
+            '<button type="button" data-prefs-close class="text-sm font-semibold px-3.5 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700 shadow-card">Done</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>');
+    el = document.getElementById('prefs-modal');
+    el.addEventListener('click', function (e) {
+      if (e.target.closest('[data-prefs-close]') || e.target === el) closePrefsModal();
+    });
+    el.addEventListener('change', onPrefsChange);
+    el.addEventListener('keydown', trapFocus(el));
+    return el;
+  }
+  function prefsSectionTitle(text, sub) {
+    return '<p class="text-xs font-bold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">' + text + '</p>' +
+      (sub ? '<p class="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">' + sub + '</p>' : '');
+  }
+  function renderPrefsModal() {
+    var p = myPrefs();
+    var selCls = 'text-sm rounded-lg border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-brand-500/40';
+    var row = 'flex items-start gap-2.5 py-1.5 cursor-pointer';
+    var box = 'brand-checkbox mt-0.5 w-4 h-4 shrink-0 rounded border border-zinc-300 dark:border-zinc-600 focus:outline-none focus:ring-2 focus:ring-brand-500/40 cursor-pointer';
+    var pages = START_VIEWS.filter(function (v) { return document.querySelector('#sidebar-nav [data-view-btn="' + v + '"]'); });
+    var q = p.quietHours;
+    document.getElementById('prefs-modal-body').innerHTML =
+      '<section>' + prefsSectionTitle('Start page', 'The page Project Manager opens on.') +
+        '<select id="prefs-start" class="mt-2 w-full ' + selCls + '">' +
+          pages.map(function (v) { return '<option value="' + v + '"' + (v === p.startView ? ' selected' : '') + '>' + escapeHtml(VIEW_LABELS[v] || v) + '</option>'; }).join('') +
+        '</select>' +
+      '</section>' +
+      '<section>' + prefsSectionTitle('Sidebar', 'Untick pages you never use. They wait under More at the bottom of the sidebar.') +
+        '<div class="mt-2 grid grid-cols-2 gap-x-4">' +
+          pages.map(function (v) {
+            return '<label class="' + row + '"><input type="checkbox" class="' + box + '" data-prefs-page="' + v + '"' + (p.hiddenPages.indexOf(v) === -1 ? ' checked' : '') + '>' +
+              '<span class="text-sm text-zinc-700 dark:text-zinc-200">' + escapeHtml(VIEW_LABELS[v] || v) + '</span></label>';
+          }).join('') +
+        '</div>' +
+      '</section>' +
+      '<section>' + prefsSectionTitle('Notifications', NOTIF_ALWAYS) +
+        '<div class="mt-2">' +
+          NOTIF_GROUPS.map(function (g) {
+            return '<label class="' + row + '"><input type="checkbox" class="' + box + '" data-prefs-notif="' + g.key + '"' + (p.notifOff.indexOf(g.key) === -1 ? ' checked' : '') + '>' +
+              '<span><span class="block text-sm text-zinc-700 dark:text-zinc-200">' + escapeHtml(g.label) + '</span>' +
+              (g.hint ? '<span class="block text-xs text-zinc-500 dark:text-zinc-400">' + escapeHtml(g.hint) + '</span>' : '') + '</span></label>';
+          }).join('') +
+        '</div>' +
+        '<div class="mt-3 pt-3 border-t border-zinc-100 dark:border-zinc-700">' +
+          '<label class="' + row + '"><input type="checkbox" class="' + box + '" id="prefs-quiet-on"' + (q.on ? ' checked' : '') + '>' +
+            '<span><span class="block text-sm text-zinc-700 dark:text-zinc-200">Quiet hours</span>' +
+            '<span class="block text-xs text-zinc-500 dark:text-zinc-400">No desktop pop-ups at these times. The bell still collects them.</span></span></label>' +
+          '<div id="prefs-quiet-times" class="' + (q.on ? 'flex' : 'hidden') + ' flex-wrap items-center gap-2 pl-6 pt-1 text-sm text-zinc-600 dark:text-zinc-300">' +
+            '<span>From</span><input type="time" id="prefs-quiet-from" value="' + q.from + '" aria-label="Quiet hours start" class="' + selCls + '">' +
+            '<span>to</span><input type="time" id="prefs-quiet-to" value="' + q.to + '" aria-label="Quiet hours end" class="' + selCls + '">' +
+            '<label class="flex items-center gap-1.5 ml-1 cursor-pointer"><input type="checkbox" class="' + box.replace('mt-0.5 ', '') + '" id="prefs-quiet-weekends"' +(q.weekends ? ' checked' : '') + '><span>and all weekend</span></label>' +
+          '</div>' +
+        '</div>' +
+      '</section>';
+  }
+  function onPrefsChange(e) {
+    var t = e.target;
+    var p = myPrefs();
+    if (t.id === 'prefs-start') { saveMyPrefs({ startView: t.value }); return; }
+    if (t.hasAttribute('data-prefs-page')) {
+      var v = t.getAttribute('data-prefs-page');
+      var hidden = p.hiddenPages.filter(function (x) { return x !== v; });
+      if (!t.checked) hidden.push(v);
+      saveMyPrefs({ hiddenPages: hidden });
+      return;
+    }
+    if (t.hasAttribute('data-prefs-notif')) {
+      var k = t.getAttribute('data-prefs-notif');
+      var off = p.notifOff.filter(function (x) { return x !== k; });
+      if (!t.checked) off.push(k);
+      saveMyPrefs({ notifOff: off });
+      return;
+    }
+    if (/^prefs-quiet-/.test(t.id)) {
+      var on = document.getElementById('prefs-quiet-on').checked;
+      var times = document.getElementById('prefs-quiet-times');
+      times.classList.toggle('hidden', !on);
+      times.classList.toggle('flex', on);
+      saveMyPrefs({ quietHours: {
+        on: on,
+        from: document.getElementById('prefs-quiet-from').value || QUIET_DEFAULT.from,
+        to: document.getElementById('prefs-quiet-to').value || QUIET_DEFAULT.to,
+        weekends: document.getElementById('prefs-quiet-weekends').checked
+      } });
+    }
+  }
+  function openPrefsModal() {
+    var el = prefsModalEl();
+    renderPrefsModal();
+    el.classList.remove('hidden');
+    el.classList.add('flex');
+    var first = document.getElementById('prefs-start');
+    if (first) first.focus();
+  }
+  function closePrefsModal() {
+    var el = document.getElementById('prefs-modal');
+    if (!el || el.classList.contains('hidden')) return;
+    el.classList.add('hidden');
+    el.classList.remove('flex');
+  }
+  document.getElementById('btn-preferences').addEventListener('click', function () {
+    document.getElementById('user-menu-panel').classList.add('hidden');
+    openPrefsModal();
+  });
+  document.addEventListener('keydown', function (e) {
+    var el = document.getElementById('prefs-modal');
+    if (e.key !== 'Escape' || !el || el.classList.contains('hidden')) return;
+    if (e.defaultPrevented || selectMenuFor) return;   // an open dropdown list closes first
+    e.preventDefault(); e.stopPropagation();
+    closePrefsModal();
+  }, true);
+
+  /* =========================================================
      QUICK JUMP (Ctrl+K / Cmd+K) -- type a few letters, Enter to go to any page, task, project or
      chat. Asked for as part of "more pleasant and delightful ... add to the usability": the fastest
      way round a big board, with nothing on screen at rest except the "Ctrl K" hint in the search
@@ -22897,6 +23202,9 @@
     document.querySelectorAll('.view-toggle-btn').forEach(function (btn) {
       btn.classList.toggle('active', btn.getAttribute('data-view-btn') === view);
     });
+    // Pages hidden in Preferences: the one you're on always shows; picking a page folds More again.
+    navMoreOpen = false;
+    applyHiddenPages();
     document.getElementById('current-view-title').textContent = VIEW_LABELS[view] || view;
     // Meeting pages open straight on the agenda: Focus of the Day is a personal "what's urgent"
     // strip, and on a shared meeting screen it repeated the overdue items and pushed the agenda down.
@@ -25220,7 +25528,9 @@
       notifListenerReady = false;
       var myNotificationsQuery = query(notificationsCol, where('recipient', '==', myName), orderBy('at', 'desc'), limit(30));
       unsubNotifications = onSnapshot(myNotificationsQuery, function (snap) {
-        myNotifications = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
+        myNotificationsRaw = snap.docs.map(function (d) { return Object.assign({ id: d.id }, d.data()); });
+        // Kinds you turned off in Preferences are never shown (see YOUR PREFERENCES).
+        myNotifications = myNotificationsRaw.filter(notifShownToMe);
         // Only pop a desktop notification for docs added *after* the listener's first
         // snapshot -- otherwise the initial snapshot of pre-existing unread notifications
         // would fire a burst of popups every time the app is opened. Deliberately not a
@@ -25234,7 +25544,7 @@
           snap.docChanges().forEach(function (change) {
             if (change.type !== 'added') return;
             var data = Object.assign({ id: change.doc.id }, change.doc.data());
-            if (data.read) return;
+            if (data.read || !notifShownToMe(data)) return;
             fireDesktopNotification(data);
             if (data.type === 'reminder') showReminderAlert(data);
             gotNewUnread = true;
@@ -25316,6 +25626,9 @@
         return;
       }
       lastPeopleRenderKey = peopleKey;
+      // Your Preferences live on your own row: follow a change made on another computer.
+      applyMyPrefs();
+      settleStartView();
       // Needs the roster, so it can't live in loadTeamspace() at module init. Self-limiting --
       // see applyDefaultTeamspaceOnce; it calls setTeamspace, which renders on its own.
       applyDefaultTeamspaceOnce();
@@ -25625,7 +25938,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-11-23T04:34:18Z";
+  var CURRENT_BUILD_VERSION = "2026-11-23T06:01:43Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
@@ -25775,7 +26088,10 @@
     syncDesktopNotifToggleIcon();
     var returnTo = null;
     try { returnTo = sessionStorage.getItem(UPDATE_RETURN_KEY); sessionStorage.removeItem(UPDATE_RETURN_KEY); } catch (e) { /* ignore */ }
-    setView(returnTo && document.querySelector('[data-view-btn="' + returnTo + '"]') ? returnTo : 'board');
+    // Your start page (Preferences), unless a reload for a new version brings you back where you were.
+    setView(returnTo && document.querySelector('[data-view-btn="' + returnTo + '"]') ? returnTo : startViewChoice());
+    landedView = currentView;
+    if (returnTo) startViewSettled = true;
     renderAll();
   }
 
