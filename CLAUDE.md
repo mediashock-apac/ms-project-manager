@@ -169,7 +169,7 @@ here (dependencies, Gantt grouping, the progress column) stay out even when a re
 
 ## Commands
 
-**Browser tests: `node tests/run.mjs`** (see `tests/README.md`). 49 suites, each loading
+**Browser tests: `node tests/run.mjs`** (see `tests/README.md`). 60 suites, each loading
 the real `index.html` in Chromium with Firebase replaced by `tests/fbstub.js`. They run on every push to
 `main` and every weekday at 7am Singapore (`.github/workflows/tests.yml`); a failure is a red X plus
 GitHub's email. Asked for directly: "Constantly run checks as I did today to make sure everything is
@@ -355,6 +355,43 @@ tutorial should auto update on new features"** — so feature tours are generate
 - Verified in Chromium against the real markup with Firebase stubbed (24 checks: who gets which
   tour, every step's card on screen at 1440×900, auto-derived tour and welcome folding, mobile
   fallback, Escape/Skip, waits for a modal). Not yet clicked through signed in on the live app.
+
+## Help (the floating "?", 2026-11-23)
+
+Asked: "Im worried some may not know how to use the features ... a chatbot that can give
+instructions ... or is AI tokens needed?", then, of the no-AI option, "dont want it [in Ctrl K], i
+want it to be separate and accessible, something that maybe floats on top, bottom right corner".
+HELP in index.html (`HELP_ARTICLES`, `helpSearch`, `buildHelp`, `#help-fab`, `#help-panel`).
+
+- **No AI, no cost, nothing to set up.** An AI chatbot needs a shared API key, which a public static
+  page can't hide, so it would need a server (Firebase Functions, so the Blaze plan) or per-person
+  keys; and it can describe buttons that don't exist. Hand-written articles can't. If word matching
+  ever proves too rigid, the same articles become an AI's knowledge (Intercom Fin works that way).
+- **A quiet round "?" bottom right** (Intercom/Linear/Notion), inside `#app`, so it's gone when
+  signed out and on the phone layout. Tooltip "Help · press ?"; **"?" (Shift+/) toggles it** when
+  not typing, not in a window and not during a tour. Toasts now sit above it
+  (`html:not(.m-mode) #toast-container { bottom: 4.25rem }`).
+- **The panel** (`float-panel`, 23rem, above the button): a search box, then "On this page"
+  (articles whose `page` is the current view) and "Popular" (`HELP_POPULAR`). Typing lists the top
+  8 matches; Enter / arrows / click open one. An article: title, a few sentences, then buttons:
+  `act` (clicks a real control, e.g. "Add a task now" → `#btn-add-task`), **Show me** (opens the
+  page and plays its `PAGE_TOURS` tour) and "Go to <page>". Escape backs out of an article, then
+  closes; an outside click closes; it's in `closeOtherHeaderPanels`. Query and article are kept
+  for the visit.
+- **Search** (`helpWords`/`helpSearch`): lower-case words, simple stemming (`-ing/-ed/-es/-s` on
+  words over 4 letters), common words ignored ("how do I"), title 6 / `keys` 4 / text 1 per word,
+  half for a word that only starts a longer one ("remin"), +5 when every word is found.
+  **`keys` is where synonyms go** ("holiday", "ooo" on Book time off): it's what makes word
+  matching work, so add the words people actually use.
+- **Nothing found → "Ask in Suggestions"**, which opens Suggestions with "Help request: how do
+  I ...?" typed in (not posted). Those posts are the list of missing articles.
+- **A new feature ships with its article**, in the same change as its New Updates entry, and an
+  article whose feature changes is updated with it. `tests/help.test.js` reads `HELP_ARTICLES`
+  from the page and checks every article is found by its own title (top 3), its `page` exists and
+  its `act` selector exists, so a renamed button or page fails the tests.
+- Not in the welcome tour (that route is tested and fixed at 7 steps); existing teammates get a
+  one-step "Show me" through New Updates (`cl-2026-11-23d`, added to every suite's `toursSeen`).
+- Switch off: `HELP_ENABLED = false`.
 
 ## New Updates (the changelog tab)
 

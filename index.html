@@ -275,6 +275,9 @@
     box-shadow: 0 18px 44px -10px rgba(24, 24, 27, 0.32), 0 4px 12px -4px rgba(24, 24, 27, 0.16) !important; }
   .dark .float-panel { background-color: rgb(45 45 50) !important; border-color: rgb(82 82 91) !important;
     box-shadow: 0 18px 44px -8px rgba(0, 0, 0, 0.70), 0 4px 14px -4px rgba(0, 0, 0, 0.55) !important; }
+  /* HELP: toasts stack above the floating "?" in the bottom-right corner, not under it. */
+  html:not(.m-mode) #toast-container { bottom: 4.25rem; }
+  #help-fab.help-fab-open { color: #ff4e20; border-color: #ff7a52; }
   .dark .panel-raised {
     box-shadow: 0 16px 40px -8px rgba(0, 0, 0, 0.60), 0 4px 12px -4px rgba(0, 0, 0, 0.45);
   }
@@ -9883,6 +9886,7 @@
     if (byId('chat-message-menu')) closeChatMessageMenu();
     if (byId('checklist-people-pop')) closeChecklistPeoplePop();
     if (byId('checklist-copy-pop')) closeChecklistCopyPop();
+    if (byId('help-panel')) closeHelp();
   }
 
   document.addEventListener('click', function (e) {
@@ -21423,6 +21427,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-11-23d', date: '2026-11-23', items: [
+      { type: 'new', title: 'Help, one click away', text: "Not sure how to do something? Click the ? in the bottom-right corner (or press ?) and type your question, like \"book leave\" or \"log time for someone else\". You get a short how-to, and \"Show me\" walks you through it on the page. Can't find an answer? Ask in Suggestions and we'll add it.", tourTarget: '#help-fab' }
+    ] },
     { id: '2026-11-23c', date: '2026-11-23', items: [
       { type: 'new', title: 'Make Project Manager yours: Preferences', text: "Click your name at the bottom of the sidebar, then Preferences. Pick the page Project Manager opens on, untick pages you never use (they wait under More at the bottom of the sidebar), and choose which notifications you get, with quiet hours for desktop pop-ups. @mentions and anything put on you always come through. Your choices follow you to every computer you sign in to." }
     ] },
@@ -23058,6 +23065,373 @@
     if (CMDK_MAC) hint.textContent = '⌘K';
     hint.addEventListener('click', function () { cmdkOpen(); });
   })();
+
+  /* =========================================================
+     HELP -- a floating "?" in the bottom-right corner that answers "how do I...?" (asked: "a chatbot
+     that can give instructions on how to use the tool", then "searchable help ... separate and
+     accessible, something that maybe floats on top, bottom right corner"). Intercom / Linear style.
+     No AI and no cost: HELP_ARTICLES below are hand-written and matched by words (title, keywords,
+     text), so it can't describe a button that doesn't exist. "Show me" opens the page and plays its
+     page tour. Nothing found → "Ask in Suggestions", which tells us which article is missing.
+     A NEW FEATURE SHIP WITH ITS ARTICLE HERE, same as its New Updates entry. `keys` carries the
+     words people might use that the title doesn't (synonyms are what make word matching work).
+     Desktop only (it lives inside #app, which the phone layout hides). Shift+/ ("?") opens it.
+  ========================================================= */
+  var HELP_ENABLED = true;
+  var HELP_PAGE_NAMES = { mytasks: 'My Tasks', board: 'Board', gantt: 'Timeline', calendar: 'Calendar', projects: 'Projects', people: 'People', chat: 'Chat', weekly: 'Monday Meeting', wip: 'WIP Meeting', activity: 'Activity', archived: 'Archived', suggestions: 'Suggestions', updates: 'New Updates' };
+  // page: the view it's about ("Go to" + "Show me" when that page has a tour). act: a button that
+  // clicks something for you. steps: shown as a numbered list under the text.
+  var HELP_ARTICLES = [
+    // Getting around
+    { id: 'quick-jump', title: 'Jump to anything with Ctrl K', keys: 'search find shortcut keyboard command palette open quick go to cmd k',
+      text: 'Press Ctrl K (Cmd K on a Mac) anywhere, or click the Ctrl K hint in the search box. Type a few letters of a page, task, project or chat and press Enter to go straight there. With nothing typed, it lists your next open tasks.' },
+    { id: 'search', title: 'Search and filter the board', page: 'board', keys: 'find filter narrow priority project person people overdue clear',
+      text: 'The search box above the board looks through task names, projects, owners, checklist steps and comments. Next to it, narrow by priority, project or people. Clicking "overdue" or "high priority" in the top bar filters to those. "Clear filters" puts everything back. Filters are remembered on your computer until you clear them.' },
+    { id: 'teamspace', title: 'See only your team\'s work', keys: 'teamspace department team switch suits creative post copy production admin unassigned all',
+      text: 'The teamspace switcher at the top of the sidebar scopes the whole app to one team. A task shows in a team when anyone on it (owner, involved, or on a step) belongs to that team. "All teamspaces" shows everything.' },
+    { id: 'department', title: 'Set your department', keys: 'team join change department role profile unassigned',
+      text: 'Open your profile menu (your name at the bottom of the sidebar) and tick your team. You can pick more than one. Your tasks then show under that teamspace.' },
+    { id: 'preferences', title: 'Choose your start page, pages and notifications', keys: 'preferences settings customise customize start page hide sidebar pages notifications mute quiet hours turn off',
+      act: { label: 'Open Preferences', click: '#btn-preferences' },
+      text: 'Profile menu → Preferences. Pick the page Project Manager opens on, hide sidebar pages you don\'t use (they stay under "More"), choose which kinds of notifications you get, and set quiet hours for desktop pop-ups. @mentions and anything assigned to you can\'t be turned off.' },
+    { id: 'dark-mode', title: 'Dark mode', keys: 'theme dark light night colour color',
+      act: { label: 'Switch theme', click: '#btn-theme-toggle' },
+      text: 'Profile menu → "Switch to dark mode" (or back to light). It\'s remembered on that computer.' },
+    { id: 'tours', title: 'Replay a guided tour', keys: 'tour tutorial walkthrough onboarding guide learn intro',
+      text: 'Profile menu → "Take the tour" for the short welcome tour, or "Tour this page" for the page you\'re on. "Show me" in this help and on New Updates also plays tours.' },
+    { id: 'phone', title: 'Using it on your phone', keys: 'mobile phone app iphone android home screen',
+      text: 'Open the same address on your phone and you get a phone layout: your tasks, calendar, chat and meetings. On a phone you can tick steps, move a task\'s status, comment, chat, write your Monday update and quick-add a task. Everything else is on desktop. Add it to your home screen to use it like an app.' },
+
+    // Tasks
+    { id: 'add-task', title: 'Add a task', page: 'board', keys: 'new create task make add start',
+      act: { label: 'Add a task now', click: '#btn-add-task' },
+      text: 'Click "Add Task" at the top. Give it a name, a project, an owner, dates and a priority. The owner is the one person who answers for the task from start to finish.' },
+    { id: 'move-task', title: 'Move a task to the next stage', page: 'board', keys: 'status move drag stage column pipeline progress review done complete finish',
+      text: 'On the Board, drag the task into another column. Or open it and change Status. Moving it into Review asks whether it\'s a client or internal review; moving it into Done is celebrated.' },
+    { id: 'hand-over', title: 'Hand work over to someone else', keys: 'handover hand over handoff pass reassign owner change next person stage',
+      text: 'Keep one owner and put each hand-over in a checklist step with people (Brief: Kan, Edit: Aqila, Client review: Kan). When a step is ticked, the people on the next step are told "You\'re up".' },
+    { id: 'involved', title: 'Add someone who works on a task too', keys: 'involved also add people collaborator watcher helper second person',
+      text: 'Open the task and click "+ Also involved". They get the task\'s comments and see it in their teamspace, but the owner still answers for it.' },
+    { id: 'checklist', title: 'Add checklist steps (several at once)', keys: 'checklist steps items subtasks todo list multiple paste batch deliverables',
+      text: 'In the task window, type a step and press Enter. For several at once, press Shift+Enter for a new line or paste a list: each line becomes a step. The link, date and people you set on the add row go on every step added. Steps due the same day are grouped under that date.' },
+    { id: 'step-people', title: 'Assign a step to people', keys: 'assign step people checklist person member who youre up notify',
+      text: 'Click a step\'s name (or its pencil) and add people under People. They\'re notified and see it on their People card. When the step is ticked, the next step\'s people get "You\'re up".' },
+    { id: 'step-range', title: 'Give a step a date range', keys: 'range start end from to dates span step multiple days',
+      text: 'Pick the step\'s due date, then click "+ Start" beside it to add a start date. The range shows in the checklist; the due date is still what the Timeline and reminders use.' },
+    { id: 'copy-steps', title: 'Copy steps from a similar task', keys: 'template copy steps reuse similar checklist same as before',
+      text: 'On a task with an empty checklist, click "Copy steps from a similar task". Pick any earlier task: its steps come over with their people and the same distance from the deadline.' },
+    { id: 'duplicate-task', title: 'Duplicate a task', page: 'board', keys: 'duplicate copy clone task same again number',
+      text: 'On the Board, hover over the task row and click the copy icon. The copy opens with the number in its name already selected, so you only type the new one. Comments and logged time aren\'t copied.' },
+    { id: 'duplicate-step', title: 'Duplicate a checklist step', keys: 'duplicate copy step checklist clone repeat item',
+      text: 'Click the step\'s name to edit it, then "Duplicate". The copy goes right below with the same date, link and people, ready for you to change the name.' },
+    { id: 'repeat', title: 'Make a task repeat', keys: 'repeat recurring weekly fortnightly monthly every week schedule regular',
+      text: 'In the task window, pick Repeat beside the deadline (weekly, every 2 weeks or monthly). When the task is marked Done, the next one is made with its steps unticked and its dates moved on.' },
+    { id: 'rounds', title: 'Start round 2 of a task', keys: 'round 2 second round redo revision again requote rework version',
+      text: 'When a task is in Review or Done, click "Start round 2" at the top of its window. A new linked task is made and round 1 stays as it was. Both rounds are listed under "Created by".' },
+    { id: 'log-time', title: 'Log time', keys: 'time hours log track timesheet billable overtime ot record',
+      text: 'In the task window, under Time Tracking, enter how long and what it was for, then Log. Tick Billable or Overtime when they apply. Name a step with people and you can log the time for each of them in one go. Click a logged row to edit it.' },
+    { id: 'log-time-archived', title: 'Log time you forgot on a finished project', page: 'projects', keys: 'forgot missed late hours archived completed finished project time add after',
+      text: 'On Projects, open the finished project\'s card and click the archived task. Click "+ Log time" beside Time logged. The task stays archived and the hours count on the project.' },
+    { id: 'comments', title: 'Comment and @mention someone', keys: 'comment mention tag at notify reply message feedback',
+      text: 'Type in the comment box in the task window. Type @ and pick a name to notify that person. Click Reply under a comment to answer it in a thread. A comment you haven\'t sent is kept as a draft.' },
+    { id: 'review', title: 'Client or internal review', keys: 'review client internal approval sign off feedback round',
+      text: 'Moving a task into Review asks whether it\'s a client or internal review, and the label shows on the Board. Click the label to change it. From the second round it reads "Client round 2" and so on.' },
+    { id: 'reminders', title: 'Set a reminder for yourself', keys: 'remind reminder alarm alert later remember nudge me',
+      text: 'Click the alarm button at the top of a task, or "Remind me" in a step\'s editor. Pick when (in an hour, tomorrow, a day before it\'s due...) and how: a pop-up, a desktop notification, the bell, or a Google Calendar event. Only you see your reminders.' },
+    { id: 'share-link', title: 'Share a link to a task, project, brief or chat', keys: 'link share copy url send whatsapp email point',
+      text: 'Click "Copy link" on the task window, a brief, a project card\'s ⋯ menu or a chat. Anyone at Mediashock who opens it lands right on it.' },
+    { id: 'archive-task', title: 'Archive or restore a task', page: 'archived', keys: 'archive restore undo remove tidy delete bring back',
+      text: 'Hover a task on the Board and click its archive icon, or click the archive icon at the top of the Done column to archive every Done task. Undo is on the message that appears. Archived tasks are on the Archived page, where Restore brings one back.' },
+    { id: 'move-steps', title: 'Move step dates when a deadline moves', keys: 'deadline moved shift steps dates later earlier push slip',
+      text: 'Change a task\'s deadline and a message offers to move its open steps by the same amount. Click "Move steps", or ignore it to leave them.' },
+    { id: 'drive-folder', title: 'Attach the project\'s Drive folder', keys: 'drive folder link google attach files browse',
+      text: 'Paste the folder link into the Project field in the task window, or click the folder button to browse Drive. Other tasks in the same project pick the folder up for you.' },
+
+    // Projects
+    { id: 'project-deadline', title: 'Set a project deadline', page: 'projects', keys: 'project deadline due date end final',
+      text: 'On Projects, click "+ Deadline" on the project\'s card (or click its "Due" date to change it). Without one, the card shows the latest deadline among its tasks.' },
+    { id: 'files-links', title: 'Find a project\'s files and links', page: 'projects', keys: 'files links documents assets brand guidelines folder shared find',
+      text: 'On a project\'s card, open "Files & links". It gathers the Drive folder, the brief, client assets and guidelines, and the links on checklist steps. Use "+ Add" to pin a client file there.' },
+    { id: 'brief', title: 'Write a creative brief', page: 'projects', keys: 'brief creative template write job sections',
+      text: 'On a project\'s card, click "+ Brief". Pick a template and add only the sections the job needs. Everyone on the job can open it from the project, its tasks and WIP.' },
+    { id: 'archive-project', title: 'Archive, restore or close a project', page: 'projects', keys: 'archive project restore reopen lost cancelled close finished wrap up dropped pitch',
+      text: 'Click the ⋯ beside a project\'s hours. Archive project tidies it away, Restore project brings it back, and "Lost or cancelled..." closes it with a reason, so it stays on record without counting as done.' },
+    { id: 'closing-report', title: 'Closing reports', page: 'projects', keys: 'closing report end of project wrap up finance report',
+      text: 'When you archive a finished project, click "Needs closing report" on the message so it shows under Closing reports on WIP. Mark it "Closing report done" from the ⋯ menu when it\'s written.' },
+    { id: 'merge', title: 'Two projects that should be one', page: 'projects', keys: 'merge duplicate project same two combine typo wrong name',
+      text: 'Ask an admin (or Ming Song or Arvind): they can merge one project into the other from its ⋯ menu, with Undo straight after. To avoid duplicates, pick the project name from the suggestions as you type it.' },
+
+    // Team
+    { id: 'leave', title: 'Book time off', page: 'people', keys: 'leave holiday vacation off away annual sick mc time off ooo out of office',
+      text: 'On People, find your own card and click "+ Time off". Pick the dates and, if it repeats, "Every week" or "Every 2 weeks". Your leave shows on the Timeline, Calendar and meetings, and next to your name when someone assigns work.' },
+    { id: 'chat', title: 'Chat with a project team', page: 'chat', keys: 'chat group message talk conversation start new',
+      text: 'On Chat, click "New chat" and pick a project. Everyone working on it hears about new messages. Type @ to mention someone, and right-click a message to reply, forward, copy, pin or react.' },
+    { id: 'chat-mute', title: 'Mute or favourite a chat', page: 'chat', keys: 'mute quiet silence favourite favorite star chat notifications',
+      text: 'Open the chat and click the bell at the top to mute it (you still hear about @mentions). Click the star on a chat in the list to keep it at the top.' },
+    { id: 'notifications', title: 'Notifications and desktop pop-ups', keys: 'notification bell alerts desktop popup pop up sound not getting missing',
+      act: { label: 'Turn on desktop notifications', click: '#btn-desktop-notif-toggle' },
+      text: 'The bell at the top lists everything addressed to you. To get pop-ups on your computer, open your profile menu and turn on desktop notifications, then allow them in your browser. They only arrive while Project Manager is open in a tab.' },
+    { id: 'this-week', title: 'What\'s due this week', keys: 'this week digest due soon overdue summary checklist icon',
+      text: 'The checklist icon beside the bell lists your overdue tasks, what\'s due in the next 7 days and what you\'ve finished.' },
+    { id: 'focus', title: 'Focus of the Day', page: 'board', keys: 'focus today urgent priority top strip',
+      text: 'The strip above the board picks your six most urgent tasks: closest deadlines and steps first, then priority. Change Sort to see them by deadline, priority or project.' },
+    { id: 'my-tasks', title: 'All my tasks in one list', page: 'mytasks', keys: 'my tasks mine personal list everything assigned me',
+      text: 'My Tasks lists everything you own or are involved in, plus steps you\'re on in other people\'s tasks, grouped by when they\'re due.' },
+    { id: 'timeline', title: 'Reading the Timeline', page: 'gantt', keys: 'timeline gantt bars diamonds late tags scroll schedule',
+      text: 'Each bar runs from a task\'s start to its deadline. Click a task\'s name to see its steps as diamonds. A rose tag says how late it is, an amber one that 3 or more things are due that day. Drag empty space, or use ‹ Today ›, to scroll sideways.' },
+    { id: 'calendar', title: 'Using the Calendar', page: 'calendar', keys: 'calendar week month day schedule mine everyone',
+      text: 'It shows what lands on each day: deadlines, steps, brief dates and who\'s away. Switch between Mine and Everyone, or Week and Month. Click a day to see all of it.' },
+
+    // Meetings
+    { id: 'monday-update', title: 'Write your Monday update', page: 'weekly', keys: 'monday meeting update weekly status write pulse',
+      text: 'On Monday Meeting, click "Write my update". Your projects are already listed: pick a status for each, add a note only if it helps, and Send. You\'re reminded on Friday afternoon and Monday morning if it\'s missing.' },
+    { id: 'monday-help', title: 'Ask for help in the Monday update', page: 'weekly', keys: 'needs help blocked stuck resolve resolved monday',
+      text: 'Pick "Needs help" for a project and say what you need. It\'s listed at the top of the meeting and on WIP. Click Resolve when it\'s sorted.' },
+    { id: 'meeting-size', title: 'Bigger text for the meeting screen', keys: 'zoom text size bigger larger font meeting screen projector',
+      text: 'On Monday Meeting or WIP Meeting, use the "A A A A" control in the header to make everything 1.2, 1.5 or 1.8 times bigger. It\'s remembered on that computer.' },
+    { id: 'wip', title: 'Running the WIP meeting', page: 'wip', keys: 'wip meeting work in progress agenda resourcing team load clash category leads',
+      text: 'By project walks through each project; click one to open it. Team load shows who has too much due on which day. Use a project\'s ⋯ to set its category, and "+ Add entry" for leads with no tasks yet. Agenda lists what\'s coming and who\'s away.' },
+    { id: 'wip-status', title: 'Add a status update to a task', page: 'wip', keys: 'status update note progress latest wip line',
+      text: 'On WIP Meeting, open a project and click the speech-bubble icon at the end of a task\'s line. Type the update and press Enter. Click the text later to edit it.' },
+
+    // Everything else
+    { id: 'suggest', title: 'Suggest a change or report a problem', page: 'suggestions', keys: 'suggestion idea feedback bug problem report request feature broken',
+      text: 'On Suggestions (bottom of the sidebar), describe what you\'d like changed. You\'re told when its status changes.' },
+    { id: 'whats-new', title: 'See what\'s new', page: 'updates', keys: 'new updates changelog changes release version refresh',
+      text: 'New Updates (bottom of the sidebar) lists every change, newest first, and lights up when there\'s something new. When it says "New version · refresh", click it to get the latest.' },
+    { id: 'offline', title: 'Working when the internet drops', keys: 'offline internet connection wifi lost save',
+      text: 'An amber note appears at the top while you\'re offline. Keep the tab open: your changes save when you\'re back online.' },
+    { id: 'export', title: 'Back up the whole board', keys: 'export import backup download restore data json',
+      text: 'Profile menu → Data → "Export board" downloads everything. "Import board" replaces the board with a file, so only use it to restore a backup.' }
+  ];
+  var HELP_POPULAR = ['add-task', 'checklist', 'log-time', 'leave', 'monday-update', 'quick-jump'];
+  var HELP_STOP = ' a an the i to do how can my me is it in on of for and or with what where why when do does should would could you your we be at this that there get set make use '.split(' ').filter(Boolean)
+    .reduce(function (o, w) { o[w] = 1; return o; }, {});
+
+  function helpWords(s) {
+    return String(s || '').toLowerCase().replace(/['’]/g, '').split(/[^a-z0-9]+/).filter(Boolean).map(function (w) {
+      return w.length > 4 ? w.replace(/(ing|ed|es|s)$/, '') : w;
+    });
+  }
+  var helpIndex = null;
+  function helpIndexed() {
+    if (helpIndex) return helpIndex;
+    helpIndex = HELP_ARTICLES.map(function (a) {
+      return { a: a, title: helpWords(a.title), keys: helpWords(a.keys), body: helpWords(a.text) };
+    });
+    return helpIndex;
+  }
+  // Each query word scores where it's found: title beats keywords beats text; a word that only
+  // starts a longer one ("dupl" → "duplicate") counts for less. Common words ("how do I") are ignored.
+  function helpSearch(q) {
+    var words = helpWords(q).filter(function (w) { return !HELP_STOP[w]; });
+    if (!words.length) return [];
+    var scored = helpIndexed().map(function (e) {
+      var score = 0, hit = 0;
+      words.forEach(function (w) {
+        var best = 0;
+        [[e.title, 6], [e.keys, 4], [e.body, 1]].forEach(function (f) {
+          f[0].forEach(function (t) {
+            if (t === w) best = Math.max(best, f[1]);
+            else if (w.length >= 3 && t.indexOf(w) === 0) best = Math.max(best, f[1] / 2);
+          });
+        });
+        if (best) hit++;
+        score += best;
+      });
+      // Every word found beats most words found.
+      if (hit === words.length) score += 5;
+      return { a: e.a, score: score };
+    }).filter(function (r) { return r.score > 0; });
+    scored.sort(function (x, y) { return y.score - x.score; });
+    return scored.slice(0, 8).map(function (r) { return r.a; });
+  }
+
+  var helpFab = null, helpPanel = null, helpQuery = '', helpArticleId = null;
+  function helpArticle(id) { return HELP_ARTICLES.find(function (a) { return a.id === id; }); }
+  function helpOpen() { return !!(helpPanel && !helpPanel.hidden); }
+
+  function helpRowHtml(a) {
+    return '<button type="button" data-help-article="' + a.id + '" class="help-row w-full text-left flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700 focus:outline-none focus-visible:bg-zinc-100 dark:focus-visible:bg-zinc-700">' +
+      '<span class="flex-1 min-w-0">' + escapeHtml(a.title) + '</span>' +
+      svgIcon('chevronDown', 'w-3.5 h-3.5 -rotate-90 shrink-0 text-zinc-400') + '</button>';
+  }
+  function helpGroupHtml(label, list) {
+    if (!list.length) return '';
+    return '<p class="px-3 pt-3 pb-1 text-[11px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">' + escapeHtml(label) + '</p>' +
+      list.map(helpRowHtml).join('');
+  }
+
+  function renderHelpBody() {
+    var body = helpPanel.querySelector('#help-body');
+    var search = helpPanel.querySelector('#help-search-wrap');
+    var a = helpArticleId && helpArticle(helpArticleId);
+    search.hidden = !!a;
+    if (a) {
+      var page = a.page && HELP_PAGE_NAMES[a.page];
+      var hasTour = a.page && PAGE_TOURS[a.page];
+      var btn = 'inline-flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-lg ';
+      var actions = [];
+      if (a.act) actions.push('<button type="button" data-help-act class="' + btn + 'bg-brand-600 text-white hover:bg-brand-700">' + escapeHtml(a.act.label) + '</button>');
+      if (page && hasTour) actions.push('<button type="button" data-help-show class="' + btn + (a.act ? 'border border-zinc-300 dark:border-zinc-600 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700' : 'bg-brand-600 text-white hover:bg-brand-700') + '">Show me</button>');
+      if (page && currentView !== a.page) actions.push('<button type="button" data-help-go class="' + btn + 'border border-zinc-300 dark:border-zinc-600 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700">Go to ' + escapeHtml(page) + '</button>');
+      body.innerHTML =
+        '<button type="button" data-help-back class="inline-flex items-center gap-1 -ml-1.5 mb-2 px-1.5 py-0.5 rounded-md text-xs font-medium text-zinc-500 dark:text-zinc-400 hover:text-brand-600 dark:hover:text-brand-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-500/40">' +
+          svgIcon('chevronDown', 'w-3.5 h-3.5 rotate-90') + 'Back</button>' +
+        '<h3 class="text-base font-bold text-zinc-900 dark:text-zinc-100 mb-1.5">' + escapeHtml(a.title) + '</h3>' +
+        '<p class="text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">' + escapeHtml(a.text) + '</p>' +
+        (actions.length ? '<div class="flex flex-wrap gap-2 mt-3">' + actions.join('') + '</div>' : '');
+      body.classList.add('p-4');
+      body.classList.remove('p-1');
+      return;
+    }
+    body.classList.add('p-1');
+    body.classList.remove('p-4');
+    var q = helpQuery.trim();
+    if (q) {
+      var found = helpSearch(q);
+      body.innerHTML = found.length ? found.map(helpRowHtml).join('') :
+        '<div class="px-3 py-4 text-sm text-zinc-600 dark:text-zinc-300">' +
+          '<p class="font-medium text-zinc-800 dark:text-zinc-100">Nothing on that yet.</p>' +
+          '<p class="mt-1">Try other words, or ask and we\'ll add the answer here.</p>' +
+          '<button type="button" data-help-ask class="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold px-3 py-1.5 rounded-lg border border-zinc-300 dark:border-zinc-600 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700">Ask in Suggestions</button>' +
+        '</div>';
+      return;
+    }
+    var here = HELP_ARTICLES.filter(function (x) { return x.page === currentView; }).slice(0, 4);
+    var hereIds = here.map(function (x) { return x.id; });
+    var popular = HELP_POPULAR.map(helpArticle).filter(function (x) { return x && hereIds.indexOf(x.id) === -1; });
+    body.innerHTML = helpGroupHtml('On this page', here) + helpGroupHtml('Popular', popular) + '<div class="h-2"></div>';
+  }
+
+  function openHelp() {
+    if (!helpPanel) return;
+    closeOtherHeaderPanels(helpPanel);
+    helpPanel.hidden = false;
+    helpFab.setAttribute('aria-expanded', 'true');
+    helpFab.classList.add('help-fab-open');
+    renderHelpBody();
+    var input = helpPanel.querySelector('#help-search');
+    input.value = helpQuery;
+    if (!helpArticleId) setTimeout(function () { input.focus(); input.select(); }, 0);
+  }
+  function closeHelp() {
+    if (!helpOpen()) return;
+    helpPanel.hidden = true;
+    helpFab.setAttribute('aria-expanded', 'false');
+    helpFab.classList.remove('help-fab-open');
+  }
+  function showHelpArticle(id) {
+    helpArticleId = id;
+    renderHelpBody();
+    var back = helpPanel.querySelector('[data-help-back]');
+    if (back) back.focus();
+  }
+
+  function buildHelp() {
+    var app = document.getElementById('app');
+    if (!HELP_ENABLED || !app) return;
+    helpFab = document.createElement('button');
+    helpFab.type = 'button';
+    helpFab.id = 'help-fab';
+    helpFab.setAttribute('aria-label', 'Help');
+    helpFab.setAttribute('aria-expanded', 'false');
+    helpFab.setAttribute('aria-controls', 'help-panel');
+    helpFab.setAttribute('data-tooltip', 'Help · press ?');
+    helpFab.className = 'tooltip-top fixed bottom-4 right-4 z-[45] w-10 h-10 rounded-full flex items-center justify-center bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-600 text-zinc-600 dark:text-zinc-300 shadow-pop hover:text-brand-600 dark:hover:text-brand-400 hover:border-brand-300 dark:hover:border-brand-500/60 transition';
+    helpFab.innerHTML = '<svg data-ic="help" class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>';
+    helpPanel = document.createElement('div');
+    helpPanel.id = 'help-panel';
+    helpPanel.hidden = true;
+    helpPanel.setAttribute('role', 'dialog');
+    helpPanel.setAttribute('aria-label', 'Help');
+    helpPanel.className = 'float-panel fixed bottom-16 right-4 z-[46] w-[23rem] max-w-[calc(100vw-2rem)] max-h-[min(34rem,calc(100vh-6rem))] flex flex-col bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden panel-pop-in';
+    helpPanel.innerHTML =
+      '<div class="flex items-center justify-between px-4 pt-3 pb-2">' +
+        '<h2 class="text-sm font-bold text-zinc-900 dark:text-zinc-100">How can we help?</h2>' +
+        '<button type="button" data-help-close aria-label="Close help" class="p-1 -mr-1 rounded-md text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200 hover:bg-zinc-100 dark:hover:bg-zinc-700">' + svgIcon('x', 'w-4 h-4') + '</button>' +
+      '</div>' +
+      '<div id="help-search-wrap" class="px-3 pb-2 border-b border-zinc-100 dark:border-zinc-700">' +
+        '<div class="relative">' +
+          '<svg data-ic="search" class="w-4 h-4 text-zinc-400 dark:text-zinc-500 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>' +
+          '<input id="help-search" type="search" autocomplete="off" placeholder="Ask how to do something…" aria-label="Search help" class="w-full text-sm rounded-lg border border-zinc-200 dark:border-zinc-600 bg-white dark:bg-zinc-700 text-zinc-800 dark:text-zinc-100 placeholder-zinc-400 pl-8 pr-2.5 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500/40">' +
+        '</div>' +
+      '</div>' +
+      '<div id="help-body" class="flex-1 overflow-y-auto p-1"></div>';
+    app.appendChild(helpPanel);
+    app.appendChild(helpFab);
+
+    helpFab.addEventListener('click', function () { if (helpOpen()) closeHelp(); else openHelp(); });
+    var input = helpPanel.querySelector('#help-search');
+    input.addEventListener('input', function () { helpQuery = input.value; renderHelpBody(); });
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { var first = helpPanel.querySelector('[data-help-article]'); if (first) { e.preventDefault(); showHelpArticle(first.getAttribute('data-help-article')); } }
+      if (e.key === 'ArrowDown') { var f = helpPanel.querySelector('[data-help-article]'); if (f) { e.preventDefault(); f.focus(); } }
+    });
+    helpPanel.addEventListener('keydown', function (e) {
+      if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+      var rows = Array.prototype.slice.call(helpPanel.querySelectorAll('[data-help-article]'));
+      var i = rows.indexOf(document.activeElement);
+      if (i === -1) return;
+      e.preventDefault();
+      if (e.key === 'ArrowUp' && i === 0) { input.focus(); return; }
+      var next = rows[Math.max(0, Math.min(rows.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)))];
+      if (next) next.focus();
+    });
+    helpPanel.addEventListener('click', function (e) {
+      var t = e.target.closest('button');
+      if (!t) return;
+      var a = helpArticleId && helpArticle(helpArticleId);
+      if (t.hasAttribute('data-help-close')) { closeHelp(); helpFab.focus(); return; }
+      if (t.hasAttribute('data-help-article')) { showHelpArticle(t.getAttribute('data-help-article')); return; }
+      if (t.hasAttribute('data-help-back')) { helpArticleId = null; renderHelpBody(); input.value = helpQuery; input.focus(); return; }
+      if (t.hasAttribute('data-help-go') && a) { closeHelp(); setView(a.page); return; }
+      if (t.hasAttribute('data-help-show') && a) {
+        closeHelp();
+        if (currentView !== a.page) setView(a.page);
+        clearTimeout(pageTourTimer);
+        setTimeout(function () { startTour('page:' + a.page); }, 450);
+        return;
+      }
+      if (t.hasAttribute('data-help-act') && a && a.act) {
+        var target = document.querySelector(a.act.click);
+        closeHelp();
+        if (target) setTimeout(function () { target.click(); }, 0);
+        return;
+      }
+      if (t.hasAttribute('data-help-ask')) {
+        var q = helpQuery.trim();
+        closeHelp();
+        setView('suggestions');
+        setTimeout(function () {
+          var box = document.getElementById('suggestion-input');
+          if (!box) return;
+          if (!box.value.trim()) box.value = 'Help request: how do I ' + q.replace(/^how (do|can) i\s+/i, '') + '?';
+          box.focus();
+        }, 100);
+      }
+    });
+    // Outside click closes it, like every other floating panel.
+    document.addEventListener('mousedown', function (e) {
+      if (helpOpen() && !helpPanel.contains(e.target) && !helpFab.contains(e.target)) closeHelp();
+    });
+    // Escape: back out of an article first, then close. Capture phase, so it doesn't also reach
+    // the page's own Escape handlers underneath.
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && helpOpen()) {
+        e.stopImmediatePropagation();
+        if (helpArticleId) { helpArticleId = null; renderHelpBody(); input.value = helpQuery; input.focus(); }
+        else { closeHelp(); helpFab.focus(); }
+        return;
+      }
+      // "?" opens it (Linear, GitHub, Gmail), but never while typing, in a window or during a tour.
+      if (e.key === '?' && !e.ctrlKey && !e.metaKey && !e.altKey && !isUserEditing() && !tourState && !mActive() && auth.currentUser) {
+        e.preventDefault();
+        if (helpOpen()) closeHelp(); else openHelp();
+      }
+    }, true);
+  }
+  buildHelp();
 
   /* =========================================================
      MY TASKS -- everything of yours on one page, grouped by when it's due (asked in Suggestions:
@@ -25938,7 +26312,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-11-23T06:01:43Z";
+  var CURRENT_BUILD_VERSION = "2026-11-23T07:43:38Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
