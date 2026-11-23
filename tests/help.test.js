@@ -92,7 +92,7 @@ async function skipTours(page) {
 // The articles, read straight from index.html, so every one is checked (findable by its own words,
 // its page and its button exist).
 const html = fs.readFileSync(path.join(REPO, 'index.html'), 'utf8');
-const ARTS = new Function('return ' + html.slice(html.indexOf('var HELP_ARTICLES = [') + 'var HELP_ARTICLES = '.length, html.indexOf('];\n  var HELP_POPULAR') + 1))();
+const ARTS = new Function('return ' + html.slice(html.indexOf('var HELP_ARTICLES = [') + 'var HELP_ARTICLES = '.length, html.search(/\];\r?\n  var HELP_POPULAR/) + 1))();   // \r?: a Windows checkout has CRLF
 const NAMES = new Function('return ' + html.match(/var HELP_PAGE_NAMES = (\{[^\n]*\});/)[1])();
 
 async function ask(page, q) {
