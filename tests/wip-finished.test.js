@@ -137,7 +137,7 @@ async function skipTours(page) {
   await page.click('#archived-list [data-open-task="a1"]'); await page.waitForTimeout(300);
   const view = await page.textContent('#archived-task-modal');
   check('archived task opens read-only', await page.$eval('#archived-task-modal', e => !e.classList.contains('hidden')) && await page.$eval('#task-modal', e => e.classList.contains('hidden')));
-  check('shows steps, the link, time and comments', /Checklist · 1 of 2 done/.test(view) && /Final deck/.test(view) && /Google Slides/.test(view) && /Time logged · 1h 30m/.test(view) && /Deck sent to all staff/.test(view), view.slice(0, 400));
+  check('shows steps, the link, time and comments', /Checklist · 1 of 2 done/.test(view) && /Final deck/.test(view) && /Google Slides/.test(view) && /Time tracking/.test(view) && /1h 30m logged/.test(view) && /Deck sent to all staff/.test(view), view.slice(0, 400));
   check('nothing to type into', (await page.$$('#archived-task-modal input, #archived-task-modal textarea, #archived-task-modal select')).length === 0);
   await page.screenshot({ path: path.join(OUT, 'archived-task-view.png') });
   await page.evaluate(() => document.documentElement.classList.add('dark')); await page.waitForTimeout(150);
