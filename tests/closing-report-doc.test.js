@@ -241,7 +241,9 @@ async function docText(page, file) {
   await q.page.screenshot({ path: path.join(OUT, 'closing-report-finance.png') });
   const dl3 = q.page.waitForEvent('download', { timeout: 15000 });
   await q.page.click('#closing-report-download');
-  const f3 = await docText(q.page, await (await dl3).path());
+  const f3Path = await (await dl3).path();
+  fs.copyFileSync(f3Path, path.join(OUT, 'closing-report-finance.docx'));
+  const f3 = await docText(q.page, f3Path);
   fs.writeFileSync(path.join(OUT, 'closing-report-finance.txt'), f3.text);
   check('finance: no markers left', !/\{\{/.test(f3.xml));
   check('finance summary filled', /Project total budget \| \$ 4,000\.00 \|  \| $/m.test(f3.text) && /Project external spend \| \$ 1,239\.15 \| N\.A\./.test(f3.text) &&
