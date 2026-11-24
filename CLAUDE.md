@@ -3568,14 +3568,29 @@ admins only, target wins with nothing lost. PROJECT ACTIONS in index.html.
   Nothing else shows at rest. "Ready to archive" is unchanged.
 - **Merge, not child projects**: Asana/Linear merge duplicates; a project tree would add a layer to
   every list. The row becomes a search (`projectMergeFor`, results redrawn in place because the grid
-  waits while typing), then a confirm. `mergeProjects` moves active and archived tasks to the target
+  waits while typing), then the merge window (below). `mergeProjects` moves active and archived tasks to the target
   name, then the project docs: lists combine (`MERGE_JOIN_LISTS`: chat by date, links by URL,
   pinned, WIP deliverables), WIP notes are joined, a field only the duplicate has comes across, and
-  where both differ the target keeps its own and the duplicate's value is saved in `mergedFrom`
-  [{name, at, by, fields}] on the target doc and named in Activity (`project_merged`). The
+  where both differ the window's choice wins (default: the target's own); the value not kept is saved in `mergedFrom`
+  [{name, at, by, fields}] on the target doc, under the name of the project it came from, and named in Activity (`project_merged`). The
   duplicate's doc is deleted. Your own chat favourite/mute/read marks follow
   (`moveMyProjectMarks`, shared with rename). Not migrated: Monday update rows and old Activity text
   keep the old name.
+- **The merge window (2026-11-24, asked: "improve the merge project flow so that its more
+  customizable? It may be confusing to some as to whats happening")**, replacing a one-paragraph
+  danger confirm that repeated both long names four times. MERGE WINDOW in index.html
+  (`#merge-modal`, `mergeState`, `renderMergeModal`; HubSpot/Salesforce record merge). Two cards,
+  "Moves in, then this name goes" and "Name that stays" (brand border), with a ⇄ button
+  (`data-merge-swap`, resets the choices) between them; "Moving across" lists the duplicate's tasks
+  by name with owner (archived marked, 8 then "and N more") plus counts of chat messages, links, WIP
+  deliverables, notes and fields only it has; "Both have these. Which to keep?" shows one row of two
+  pills per labelled field both have (`MERGE_FIELD_LABELS`: deadline, brief, WIP category, WIP
+  owner, client contact; `mergeProjectDocData(..., choices)` returns `conflicts`), only when there
+  is one, defaulting to the kept project. Button "Merge into <short name>" (`projectShortName`
+  drops the date and [Client]), brand, not red; "Nothing is deleted. You can undo straight after."
+  Escape/X/Cancel close it; an outside click doesn't. **Not offered: choosing which tasks move**
+  (a partial merge leaves two half-projects; re-file one task from its Project field instead).
+  Undo unchanged. `tests/project-actions.test.js`.
 - **Who can merge (2026-11-23, asked: "Need Mingsong and Arvind to be able to have this
   access"):** admins plus `MERGE_EXTRA_EMAILS` (`canMergeProjects()`), mirrored by `mergers()` in
   `firestore.rules`, which lets them change only `project` on someone else's archived task. **Keep

@@ -532,6 +532,9 @@
       &[data-ic="chevronUp"] > * { animation: ic-nudge-up .5s ease; }
       &[data-ic="chevronRight"] > *, &[data-ic="arrowRight"] > * { animation: ic-nudge-right .5s ease; }
       &[data-ic="chevronLeft"] > * { animation: ic-nudge-left .5s ease; }
+      /* Swap (merge window): the top arrow runs left, the bottom one right, as if trading places. */
+      &[data-ic="swap"] > :nth-child(-n+2) { animation: ic-nudge-left .5s ease; }
+      &[data-ic="swap"] > :nth-child(n+3) { animation: ic-nudge-right .5s ease; }
       /* Collapse: the two arrows fold in one after the other. */
       &[data-ic="collapse"] > * { animation: ic-nudge-left .5s ease; }
       &[data-ic="collapse"] > :last-child { animation-delay: .07s; }
@@ -13305,15 +13308,168 @@
       (all.length > 8 ? '<p class="text-xs text-zinc-400 dark:text-zinc-500 px-2 pt-1">' + (all.length - 8) + ' more. Keep typing to narrow it down.</p>' : '');
   }
 
-  function confirmMergeProject(from, to) {
-    withArchivedTasksReady(function () {
-      var n = tasks.concat(archivedTasks).filter(function (t) { return t.project === from; }).length;
-      openConfirm('Merge "' + from + '" into "' + to + '"?',
-        'Its ' + n + ' task' + (n === 1 ? '' : 's') + ', chat, links and notes move into "' + to + '", and "' + from + '" disappears from every list. ' +
-        'If both have a brief, deadline or WIP category, "' + to + '" keeps its own; the other is saved with the project and named in Activity. Undo on the next message puts it all back.',
-        function () { mergeProjects(from, to); },
-        { tone: 'danger', confirmText: 'Merge projects', cancelText: 'Cancel' });
+  /* MERGE WINDOW (2026-11-24). Asked: "improve the merge project flow so that its more
+     customizable? It may be confusing to some as to whats happening" (the old confirm was one
+     paragraph repeating both long names). Modelled on HubSpot/Salesforce record merges: the two
+     projects side by side with a swap for which NAME stays, the tasks that will move listed by name,
+     and one choice per field both projects have (deadline, brief, WIP category...), defaulting to
+     the kept project. The value not picked is still saved in `mergedFrom`. Undo is unchanged. */
+  var mergeState = null;   // {from, to, choices: {field: 'from'|'to'}}
+  function projectShortName(name) {
+    var s = String(name || '').replace(/^\s*\d{6}\s*/, '').replace(/^\[[^\]]*\]\s*/, '').trim() || String(name || '');
+    return s.length > 30 ? s.slice(0, 29) + '…' : s;
+  }
+  function mergeFieldValueText(k, v) {
+    if (k === 'deadline') return formatShortDate(v) + (parseDate(v) ? ' ' + parseDate(v).getFullYear() : '');
+    if (k === 'wipCategory') return wipCategoryLabel(v) || 'Not sorted';
+    if (k === 'brief') {
+      var when = v && v.updatedAt ? formatShortDate(String(v.updatedAt).slice(0, 10)) : '';
+      return 'Brief' + (when && when !== '—' ? ', updated ' + when : '');
+    }
+    var t = typeof v === 'string' ? v : JSON.stringify(v);
+    return t.length > 40 ? t.slice(0, 39) + '…' : t;
+  }
+  function mergeModalEl() {
+    var el = document.getElementById('merge-modal');
+    if (el) return el;
+    document.body.insertAdjacentHTML('beforeend',
+      '<div id="merge-modal" class="fixed inset-0 z-[60] hidden items-center justify-center p-2 sm:p-4 modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="merge-title">' +
+        '<div class="bg-white dark:bg-zinc-800 w-full max-w-2xl rounded-2xl shadow-pop overflow-hidden max-h-[92vh] flex flex-col modal-pop-in">' +
+          '<div class="flex items-center justify-between gap-3 px-5 py-4 border-b border-zinc-100 dark:border-zinc-700">' +
+            '<h3 id="merge-title" class="text-base font-bold text-zinc-900 dark:text-zinc-100">Merge projects</h3>' +
+            '<button type="button" data-merge-cancel class="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-700 text-zinc-400 dark:text-zinc-500" aria-label="Close">' + svgIcon('x', 'w-4 h-4') + '</button>' +
+          '</div>' +
+          '<div id="merge-body" class="px-5 py-4 space-y-5 overflow-y-auto"></div>' +
+          '<div class="flex items-center justify-end gap-2 px-5 py-3 border-t border-zinc-100 dark:border-zinc-700">' +
+            '<button type="button" data-merge-cancel class="text-sm font-semibold px-3.5 py-2 rounded-lg text-zinc-600 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700">Cancel</button>' +
+            '<button type="button" id="merge-ok" class="text-sm font-semibold px-3.5 py-2 rounded-lg bg-brand-600 text-white hover:bg-brand-700 shadow-card max-w-[22rem] truncate"></button>' +
+          '</div>' +
+        '</div>' +
+      '</div>');
+    el = document.getElementById('merge-modal');
+    el.addEventListener('click', function (e) {
+      if (e.target.closest('[data-merge-cancel]')) { closeMergeModal(); return; }
+      if (e.target.closest('[data-merge-swap]')) {
+        mergeState = { from: mergeState.to, to: mergeState.from, choices: {} };
+        renderMergeModal();
+        var sw = el.querySelector('[data-merge-swap]');
+        if (sw) sw.focus();
+        return;
+      }
+      var pick = e.target.closest('[data-merge-field]');
+      if (pick) {
+        mergeState.choices[pick.getAttribute('data-merge-field')] = pick.getAttribute('data-merge-side');
+        renderMergeModal();
+        var again = el.querySelector('[data-merge-field="' + pick.getAttribute('data-merge-field') + '"][data-merge-side="' + pick.getAttribute('data-merge-side') + '"]');
+        if (again) again.focus();
+        return;
+      }
+      if (e.target.closest('#merge-ok')) {
+        var s = mergeState;
+        closeMergeModal();
+        if (s) mergeProjects(s.from, s.to, s.choices);
+      }
     });
+    el.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeMergeModal(); }
+    });
+    el.addEventListener('keydown', trapFocus(el));
+    return el;
+  }
+  function mergeChoicePill(field, side, text, on) {
+    return '<button type="button" data-merge-field="' + field + '" data-merge-side="' + side + '" aria-pressed="' + (on ? 'true' : 'false') + '" ' +
+      'class="text-left text-sm px-3 py-1.5 rounded-lg border transition focus:outline-none focus:ring-2 focus:ring-brand-500/40 min-w-0 ' + (on
+        ? 'ring-2 ring-brand-500/40 border-brand-400 bg-brand-50 dark:bg-brand-500/10 text-brand-900 dark:text-brand-100'
+        : 'border-zinc-200 dark:border-zinc-600 text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-700') + '">' + text + '</button>';
+  }
+  function renderMergeModal() {
+    var s = mergeState;
+    if (!s) return;
+    var from = s.from, to = s.to;
+    var all = tasks.concat(archivedTasks);
+    var fromTasks = tasks.filter(function (t) { return t.project === from; }).concat(archivedTasks.filter(function (t) { return t.project === from; }));
+    var toCount = all.filter(function (t) { return t.project === to; }).length;
+    var fromDoc = projectDeadlineDoc(from), toDoc = projectDeadlineDoc(to);
+    var msgs = function (d) { return d && Array.isArray(d.chat) ? d.chat.length : 0; };
+    var stat = function (n, m) {
+      return n + ' task' + (n === 1 ? '' : 's') + (m ? ' · ' + m + ' message' + (m === 1 ? '' : 's') : '');
+    };
+    var card = function (name, label, kept, n, m) {
+      return '<div class="min-w-0 rounded-xl p-3 ' + (kept ? 'border-2 border-brand-400 bg-brand-50/60 dark:bg-brand-500/10' : 'border border-zinc-200 dark:border-zinc-600') + '">' +
+        '<p class="text-xs font-semibold ' + (kept ? 'text-brand-800 dark:text-brand-300' : 'text-zinc-500 dark:text-zinc-400') + '">' + label + '</p>' +
+        '<p class="mt-1 text-sm font-semibold text-zinc-900 dark:text-zinc-100 break-words">' + projectNameHtml(name) + '</p>' +
+        '<p class="mt-1 text-xs text-zinc-500 dark:text-zinc-400">' + stat(n, m) + '</p></div>';
+    };
+    var html = '<div class="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] gap-2 items-stretch">' +
+      card(from, 'Moves in, then this name goes', false, fromTasks.length, msgs(fromDoc)) +
+      '<button type="button" data-merge-swap class="self-center justify-self-center w-9 h-9 flex items-center justify-center rounded-lg border border-zinc-200 dark:border-zinc-600 text-zinc-500 dark:text-zinc-300 hover:bg-zinc-100 dark:hover:bg-zinc-700 focus:outline-none focus:ring-2 focus:ring-brand-500/40" ' +
+        'aria-label="Swap which name stays" data-tooltip="Swap which name stays">' +
+        '<svg data-ic="swap" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4 3 8l4 4"/><path d="M3 8h14"/><path d="m17 20 4-4-4-4"/><path d="M21 16H7"/></svg></button>' +
+      card(to, 'Name that stays', true, toCount, msgs(toDoc)) +
+      '</div>';
+
+    // What moves: the tasks by name, then the lists that are added to.
+    var rows = fromTasks.slice(0, 8).map(function (t) {
+      return '<li class="flex items-baseline gap-2 min-w-0">' + svgIcon('check', 'w-3.5 h-3.5 shrink-0 text-emerald-600 dark:text-emerald-400 relative top-0.5') +
+        '<span class="min-w-0 truncate text-zinc-800 dark:text-zinc-100" title="' + escapeHtml(t.name || '') + '">' + escapeHtml(t.name || 'Untitled task') + '</span>' +
+        '<span class="shrink-0 text-xs text-zinc-500 dark:text-zinc-400">' + escapeHtml(String(t.assignee || '').split(' ')[0] || 'No owner') + (t.archivedAt ? ' · archived' : '') + '</span></li>';
+    }).join('');
+    if (fromTasks.length > 8) rows += '<li class="text-xs text-zinc-500 dark:text-zinc-400 pl-5">and ' + (fromTasks.length - 8) + ' more</li>';
+    var m = fromDoc && toDoc && fromDoc.id !== toDoc.id ? mergeProjectDocData(fromDoc, toDoc, from, s.choices, to) : null;
+    var extras = [];
+    if (m) {
+      var added = function (k) { return Array.isArray(m.patch[k]) ? m.patch[k].length - (Array.isArray(toDoc[k]) ? toDoc[k].length : 0) : 0; };
+      var c = added('chat'), l = added('links') + added('pinned'), w = added('wipDeliverables');
+      if (c) extras.push(c + ' chat message' + (c === 1 ? '' : 's') + ', in date order');
+      if (l) extras.push(l + ' link' + (l === 1 ? '' : 's'));
+      if (w) extras.push(w + ' WIP deliverable' + (w === 1 ? '' : 's'));
+      if (m.patch.wipNote && toDoc.wipNote) extras.push('its WIP notes, added below the others');
+      m.onlyFrom.forEach(function (lab) { extras.push('its ' + lab + ' (the other has none)'); });
+    } else if (fromDoc && !toDoc) {
+      extras.push('its chat, links, notes and brief, as they are');
+    }
+    if (extras.length) rows += extras.map(function (x) {
+      return '<li class="flex items-baseline gap-2 min-w-0">' + svgIcon('check', 'w-3.5 h-3.5 shrink-0 text-emerald-600 dark:text-emerald-400 relative top-0.5') + '<span class="text-zinc-600 dark:text-zinc-300">' + escapeHtml(x.charAt(0).toUpperCase() + x.slice(1)) + '</span></li>';
+    }).join('');
+    html += '<div><p class="text-sm font-semibold text-zinc-800 dark:text-zinc-100 mb-1.5">Moving across</p>' +
+      (rows ? '<ul class="space-y-1 text-sm">' + rows + '</ul>' : '<p class="text-sm text-zinc-500 dark:text-zinc-400">Nothing but the name: it has no tasks or saved details.</p>') + '</div>';
+
+    // One choice per field both have.
+    if (m && m.conflicts.length) {
+      html += '<div><p class="text-sm font-semibold text-zinc-800 dark:text-zinc-100">Both have these. Which to keep?</p>' +
+        '<p class="text-xs text-zinc-500 dark:text-zinc-400 mb-2">The one you don\'t pick is still saved with the project.</p>' +
+        '<div class="grid grid-cols-[7rem_minmax(0,1fr)] gap-x-3 gap-y-2 items-center">' +
+        m.conflicts.map(function (cf) {
+          var side = s.choices[cf.key] === 'from' ? 'from' : 'to';
+          return '<span class="text-sm text-zinc-500 dark:text-zinc-400">' + escapeHtml(cf.label.charAt(0).toUpperCase() + cf.label.slice(1)) + '</span>' +
+            '<div class="flex flex-wrap gap-2 min-w-0">' +
+              mergeChoicePill(cf.key, 'to', escapeHtml(mergeFieldValueText(cf.key, cf.to)) + ' <span class="text-xs opacity-70">(' + escapeHtml(projectShortName(to)) + ')</span>', side === 'to') +
+              mergeChoicePill(cf.key, 'from', escapeHtml(mergeFieldValueText(cf.key, cf.from)) + ' <span class="text-xs opacity-70">(' + escapeHtml(projectShortName(from)) + ')</span>', side === 'from') +
+            '</div>';
+        }).join('') + '</div></div>';
+    }
+    html += '<p class="text-xs text-zinc-500 dark:text-zinc-400">Nothing is deleted. You can undo straight after merging.</p>';
+    document.getElementById('merge-body').innerHTML = html;
+    var ok = document.getElementById('merge-ok');
+    ok.textContent = 'Merge into ' + projectShortName(to);
+    ok.title = 'Merge into ' + to;
+  }
+  function confirmMergeProject(from, to) {
+    if (!canMergeProjects() || !from || !to) return;
+    withArchivedTasksReady(function () {
+      mergeState = { from: from, to: to, choices: {} };
+      var el = mergeModalEl();
+      renderMergeModal();
+      el.classList.remove('hidden');
+      el.classList.add('flex');
+      var ok = document.getElementById('merge-ok');
+      if (ok) ok.focus();
+    });
+  }
+  function closeMergeModal() {
+    var el = document.getElementById('merge-modal');
+    if (el) { el.classList.add('hidden'); el.classList.remove('flex'); }
+    mergeState = null;
   }
 
   // Lists on a project doc that combine; anything else: the target's own value wins and the
@@ -13321,8 +13477,13 @@
   var MERGE_JOIN_LISTS = ['chat', 'links', 'pinned', 'wipDeliverables', 'updates'];
   var MERGE_FIELD_LABELS = { brief: 'brief', deadline: 'deadline', wipCategory: 'WIP category', wipOwner: 'WIP owner', clientContact: 'client contact' };
   function isEmptyValue(v) { return v === null || v === undefined || v === '' || (Array.isArray(v) && !v.length); }
-  function mergeProjectDocData(fromDoc, toDoc, fromName) {
-    var patch = {}, saved = {}, notKept = [];
+  // `choices` (from the merge window): field -> 'from' takes the duplicate's value for a field
+  // both have; anything else keeps the target's. Whichever isn't kept goes into `mergedFrom`,
+  // under the name of the project it came from. Also returns `conflicts` (fields both have,
+  // labelled ones only, for the window) and `onlyFrom` (labelled fields only the duplicate has).
+  function mergeProjectDocData(fromDoc, toDoc, fromName, choices, toName) {
+    choices = choices || {};
+    var patch = {}, saved = {}, savedTo = {}, notKept = [], took = [], conflicts = [], onlyFrom = [];
     Object.keys(fromDoc).forEach(function (k) {
       if (k === 'id' || k === 'name' || k === 'mergedFrom') return;
       var a = toDoc[k], b = fromDoc[k];
@@ -13341,14 +13502,20 @@
         patch[k] = list;
         return;
       }
-      if (isEmptyValue(a)) { patch[k] = b; return; }
+      if (isEmptyValue(a)) { patch[k] = b; if (MERGE_FIELD_LABELS[k]) onlyFrom.push(MERGE_FIELD_LABELS[k]); return; }
       if (k === 'wipNote' && a !== b) { patch[k] = a + '\n\n' + b; return; }
-      if (JSON.stringify(a) !== JSON.stringify(b)) { saved[k] = b; notKept.push(MERGE_FIELD_LABELS[k] || k); }
+      if (JSON.stringify(a) !== JSON.stringify(b)) {
+        var label = MERGE_FIELD_LABELS[k] || k;
+        if (MERGE_FIELD_LABELS[k]) conflicts.push({ key: k, label: label, from: b, to: a });
+        if (choices[k] === 'from') { patch[k] = b; savedTo[k] = a; took.push(label); }
+        else { saved[k] = b; notKept.push(label); }
+      }
     });
-    if (Object.keys(saved).length) {
-      patch.mergedFrom = (Array.isArray(toDoc.mergedFrom) ? toDoc.mergedFrom : []).concat([{ name: fromName, at: new Date().toISOString(), by: myDisplayName(), fields: saved }]);
-    }
-    return { patch: patch, notKept: notKept };
+    var entries = [], at = new Date().toISOString();
+    if (Object.keys(saved).length) entries.push({ name: fromName, at: at, by: myDisplayName(), fields: saved });
+    if (Object.keys(savedTo).length) entries.push({ name: toName || toDoc.name, at: at, by: myDisplayName(), fields: savedTo });
+    if (entries.length) patch.mergedFrom = (Array.isArray(toDoc.mergedFrom) ? toDoc.mergedFrom : []).concat(entries);
+    return { patch: patch, notKept: notKept, took: took, conflicts: conflicts, onlyFrom: onlyFrom };
   }
 
   // Runs batch ops (functions taking a batch) in chunks under Firestore's 500-write limit.
@@ -13403,7 +13570,7 @@
     return 'j:' + JSON.stringify(x);
   }
 
-  function mergeProjects(from, to) {
+  function mergeProjects(from, to, choices) {
     if (!canMergeProjects() || !from || !to || projectKey(from) === projectKey(to)) return;
     withArchivedTasksReady(function () {
       var live = tasks.filter(function (t) { return t.project === from; });
@@ -13420,10 +13587,11 @@
       // Project docs last, so a failure part-way leaves the duplicate's chat/brief in place and
       // merging again finishes the job.
       var projectOps = [];
-      var fromDoc = projectDeadlineDoc(from), toDoc = projectDeadlineDoc(to), notKept = [];
+      var fromDoc = projectDeadlineDoc(from), toDoc = projectDeadlineDoc(to), notKept = [], took = [];
       if (fromDoc && toDoc && fromDoc.id !== toDoc.id) {
-        var m = mergeProjectDocData(fromDoc, toDoc, from);
+        var m = mergeProjectDocData(fromDoc, toDoc, from, choices, to);
         notKept = m.notKept;
+        took = m.took;
         undo.fromDoc = Object.assign({}, fromDoc);
         undo.toDocId = toDoc.id;
         Object.keys(m.patch).forEach(function (k) {
@@ -13448,7 +13616,8 @@
         if (projectExpanded[from]) projectExpanded[to] = true;
         var n = live.length + arch.length;
         logActivity('project_merged', 'Merged project ' + from + ' into ' + to + ' (' + n + ' task' + (n === 1 ? '' : 's') + ')' +
-          (notKept.length ? '. ' + to + ' kept its own ' + notKept.join(', ') + '; ' + from + "'s is saved with the project" : ''));
+          (notKept.length ? '. ' + to + ' kept its own ' + notKept.join(', ') + '; ' + from + "'s is saved with the project" : '') +
+          (took.length ? '. ' + to + ' took ' + from + "'s " + took.join(', ') + '; its own is saved with the project' : ''));
         showToast('"' + from + '" merged into "' + to + '"', 'success', { action: { label: 'Undo', onClick: function () { undoMergeProjects(undo); } } });
         renderProjects();
         return moveMyProjectMarks(from, to);
@@ -21430,6 +21599,9 @@
      Item types: 'new' | 'improved' | 'fixed'.
   ========================================================= */
   var CHANGELOG = [
+    { id: '2026-11-24a', date: '2026-11-24', items: [
+      { type: 'improved', title: 'A clearer way to merge projects', text: "Merging a duplicate project now opens a window that shows both projects side by side. Swap which name stays with the arrows, see exactly which tasks, messages and links move across, and where both projects have a deadline, brief or WIP category, pick which one to keep. Nothing is deleted, and Undo still puts it all back." }
+    ] },
     { id: '2026-11-23d', date: '2026-11-23', items: [
       { type: 'new', title: 'Help, one click away', text: "Not sure how to do something? Click the ? in the bottom-right corner (or press ?) and type your question, like \"book leave\" or \"log time for someone else\". You get a short how-to, and \"Show me\" walks you through it on the page. Can't find an answer? Ask in Suggestions and we'll add it.", tourTarget: '#help-fab' }
     ] },
@@ -23085,7 +23257,7 @@
   // this fails scripts/check-syntax.mjs (so the push is blocked): look at what it changed, update
   // ONLY the articles it affects (or add one), then move this to its id. Asked: the help "needs to
   // be continuously updated ... but only the parts that affects it".
-  var HELP_CHECKED_THROUGH = '2026-11-23d';
+  var HELP_CHECKED_THROUGH = '2026-11-24a';
   var HELP_PAGE_NAMES = { mytasks: 'My Tasks', board: 'Board', gantt: 'Timeline', calendar: 'Calendar', projects: 'Projects', people: 'People', chat: 'Chat', weekly: 'Monday Meeting', wip: 'WIP Meeting', activity: 'Activity', archived: 'Archived', suggestions: 'Suggestions', updates: 'New Updates' };
   // page: the view it's about ("Go to" + "Show me" when that page has a tour). act: a button that
   // clicks something for you. steps: shown as a numbered list under the text.
@@ -23167,7 +23339,7 @@
     { id: 'closing-report', title: 'Closing reports', page: 'projects', keys: 'closing report end of project wrap up finance report',
       text: 'When you archive a finished project, click "Needs closing report" on the message so it shows under Closing reports on WIP. Mark it "Closing report done" from the ⋯ menu when it\'s written.' },
     { id: 'merge', title: 'Two projects that should be one', page: 'projects', keys: 'merge duplicate project same two combine typo wrong name',
-      text: 'Ask an admin (or Ming Song or Arvind): they can merge one project into the other from its ⋯ menu, with Undo straight after. To avoid duplicates, pick the project name from the suggestions as you type it.' },
+      text: "Ask an admin (or Ming Song or Arvind): from a project card's ⋯ menu, \"Merge into another project\" and pick the other one. A window shows both side by side: swap which name stays, check the tasks that move, and where both have a deadline, brief or WIP category, pick which to keep. Nothing is deleted, and there's Undo straight after. To avoid duplicates, pick the project name from the suggestions as you type it." },
 
     // Team
     { id: 'leave', title: 'Book time off', page: 'people', keys: 'leave holiday vacation off away annual sick mc time off ooo out of office',
@@ -26320,7 +26492,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-11-24T03:55:06Z";
+  var CURRENT_BUILD_VERSION = "2026-11-24T09:35:48Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
