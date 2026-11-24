@@ -23081,6 +23081,11 @@
      Desktop only (it lives inside #app, which the phone layout hides). Shift+/ ("?") opens it.
   ========================================================= */
   var HELP_ENABLED = true;
+  // The newest New Updates release these articles have been checked against. A release newer than
+  // this fails scripts/check-syntax.mjs (so the push is blocked): look at what it changed, update
+  // ONLY the articles it affects (or add one), then move this to its id. Asked: the help "needs to
+  // be continuously updated ... but only the parts that affects it".
+  var HELP_CHECKED_THROUGH = '2026-11-23d';
   var HELP_PAGE_NAMES = { mytasks: 'My Tasks', board: 'Board', gantt: 'Timeline', calendar: 'Calendar', projects: 'Projects', people: 'People', chat: 'Chat', weekly: 'Monday Meeting', wip: 'WIP Meeting', activity: 'Activity', archived: 'Archived', suggestions: 'Suggestions', updates: 'New Updates' };
   // page: the view it's about ("Go to" + "Show me" when that page has a tour). act: a button that
   // clicks something for you. steps: shown as a numbered list under the text.

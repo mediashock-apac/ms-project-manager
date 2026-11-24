@@ -158,6 +158,14 @@ but also still be visibly intuitive", then "the default look should stay as 1x".
 - Tested in `tests/monday-follow.test.js` (default 1x, picking 1.5x reaches both meetings and is
   remembered, WIP stacks at 1.5x on 1440px, the drag tracks the cursor).
 
+## Standing rule: the help stays current, only where a change touches it
+
+Stated directly (2026-11-24): the floating help "needs to be continuously updated as well. But only
+the parts that affects it." With every change (new feature, adjustment, removal), update the
+`HELP_ARTICLES` it affects in the same commit, and nothing else; see "Help (the floating ?)" below
+and step 2b of `/ship`. Enforced: `HELP_CHECKED_THROUGH` must equal the newest non-empty New Updates
+release, or `scripts/check-syntax.mjs` (and the pre-push hook) fails.
+
 ## Standing rule: learn from the reference tools
 
 Stated directly (2026-10-08): *"always take references from these tools when building new features and
@@ -389,6 +397,12 @@ HELP in index.html (`HELP_ARTICLES`, `helpSearch`, `buildHelp`, `#help-fab`, `#h
   article whose feature changes is updated with it. `tests/help.test.js` reads `HELP_ARTICLES`
   from the page and checks every article is found by its own title (top 3), its `page` exists and
   its `act` selector exists, so a renamed button or page fails the tests.
+- **Kept current, only where a change touches it** (2026-11-24, see the standing rule at the top).
+  `HELP_CHECKED_THROUGH` (next to `HELP_ENABLED`) is the newest New Updates release the articles
+  were checked against; `check-syntax.mjs` fails while a non-empty release is newer, naming it and
+  saying what to do: update only the affected articles (or add/remove one), then move the marker.
+  Releases emptied to `items: []` don't count. Changes with no New Updates entry are covered by
+  `/ship` step 2b and the help test's page/button checks.
 - Not in the welcome tour (that route is tested and fixed at 7 steps); existing teammates get a
   one-step "Show me" through New Updates (`cl-2026-11-23d`, added to every suite's `toursSeen`).
 - Switch off: `HELP_ENABLED = false`.

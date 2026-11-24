@@ -129,6 +129,28 @@ if (files.includes('index.html')) {
     process.exit(1);
   }
   console.log(`Build stamp matches (${stamp}).`);
+
+  // ---- help articles kept in step with New Updates (HELP in index.html) ----
+  // Every release that says something changed must have been checked against HELP_ARTICLES, so the
+  // floating help never describes the app as it used to be. Releases emptied to `items: []` are
+  // read-tracking leftovers and don't count.
+  const checkedThrough = (html.match(/HELP_CHECKED_THROUGH\s*=\s*'([^']*)'/) || [])[1];
+  if (checkedThrough) {
+    const unchecked = [];
+    for (const m of html.matchAll(/\{\s*id:\s*'(\d{4}-\d{2}-\d{2}[a-z]?)',\s*date:\s*'[^']*',\s*items:\s*\[(\s*\])?/g)) {
+      if (!m[2] && m[1] > checkedThrough) unchecked.push(m[1]);
+    }
+    if (unchecked.length) {
+      console.error('\nThe help articles have not been checked against these New Updates releases:');
+      console.error('  ' + unchecked.sort().join(', ') + '\n');
+      console.error('For each, update ONLY the HELP_ARTICLES it affects in index.html (change an');
+      console.error("article's text or keys, add one for a new feature, remove one for a removed");
+      console.error('feature). If none are affected, change nothing. Then set');
+      console.error(`HELP_CHECKED_THROUGH to '${unchecked.sort().pop()}'.\n`);
+      process.exit(1);
+    }
+    console.log(`Help checked through ${checkedThrough}.`);
+  }
 }
 
 console.log(`\nSyntax check passed (${checked} inline script${checked === 1 ? '' : 's'}).`);

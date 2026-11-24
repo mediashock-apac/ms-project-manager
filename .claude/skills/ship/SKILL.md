@@ -39,6 +39,24 @@ Add a release to the top of `var CHANGELOG = [` in `index.html`:
   than contradict it.
 - Pure internal fixes nobody would notice can skip this step.
 
+## 2b. Keep the help in step (only what this change affects)
+
+The floating "?" help (`HELP_ARTICLES` in `index.html`) must describe the app as it is now. For the
+change being shipped, ask: does any article name a page, button, label, menu, step or behaviour
+this change added, renamed, moved or removed? Search the articles for the words involved.
+
+- **Affected article:** rewrite just that article's `text` (and `keys` if people would now search
+  with different words). Keep it a few plain sentences.
+- **New feature someone could need help with:** add one article (`id`, `title` as the question's
+  answer, `page`, `keys` with the words people would type, `text`, optional `act`).
+- **Removed feature:** delete its article.
+- **Nothing affected:** change nothing. Don't touch unrelated articles.
+- Then set `HELP_CHECKED_THROUGH` to the newest New Updates release id. `check-syntax.mjs` (and so
+  the pre-push hook) fails while any release is newer than it.
+
+This applies even with no New Updates entry: if a renamed button or label appears in an article,
+fix the article. `tests/help.test.js` also fails when an article's page or button no longer exists.
+
 ## 3. Bump the build stamp (both places, same value)
 
 Set the same UTC timestamp (`date -u +%Y-%m-%dT%H:%M:%SZ`) in BOTH:
