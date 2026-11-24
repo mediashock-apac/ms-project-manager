@@ -159,7 +159,7 @@ async function docText(page, file) {
   check('one row per person with amounts', /Deane Cheng \| 2\.00 \| \$ 200\.00/.test(text) && /Mychelle Tan \| 1\.50 \| \$ 225\.00/.test(text) && /Harin Lee \| 1\.50 \| No rate set/.test(text));
   check('role table uses the saved rates', /Account director \(150\/hr\) \| 1\.50 \| \$ 225\.00/.test(text) && /Creative \(100\/hr\) \| 2\.00 \| \$ 200\.00/.test(text) && /Intern \(30\/hr\) \| 0\.00 \| \$ -/.test(text) && /Account executive \(no rate set\)/.test(text));
   check('hours with no rate get their own role row', /No rate set \(Harin\) \| 1\.50/.test(text));
-  check('every time entry listed, oldest first', /Deane Cheng \| November 5, 2026 \| Billable \| 2\.00 \| Edit \| First cut/.test(text) && /Mychelle Tan \| November 6, 2026 \| Billable \(OT\) \| 1\.00/.test(text) && text.indexOf('First cut') < text.indexOf('Sign off'));
+  check('every time entry listed, oldest first', /Deane Cheng \| 5 Nov 2026 \| Billable \| 2\.00 \| Edit \| First cut/.test(text) && /Mychelle Tan \| 6 Nov 2026 \| Billable \(OT\) \| 1\.00/.test(text) && text.indexOf('First cut') < text.indexOf('Sign off'));
   check('breakdown total', /^ \|  \|  \| 5\.50 \|  \| $/m.test(text));
   check('hours report chip set to Complete', /Project hours report: Complete$/m.test(text) && /w:lastValue="Complete"/.test(xml));
   check('learnings facts', /1 of 2 deliverables finished on or before the deadline/.test(text) && /Edit finished 2 days after its deadline/.test(text) && /Edit went through 2 client review rounds/.test(text) && /1h of overtime \(Mychelle 1h\)/.test(text));
@@ -247,19 +247,39 @@ async function docText(page, file) {
   check('finance summary filled', /Project total budget \| \$ 4,000\.00 \|  \| $/m.test(f3.text) && /Project external spend \| \$ 1,239\.15 \| N\.A\./.test(f3.text) &&
     /tGross profit margin vs spending \| 69\.02% \| 30\.98%/.test(f3.text) && /Profit margin including internal spend \| 58\.40% \| N\.A\./.test(f3.text), (f3.text.match(/Project total budget[\s\S]{0,300}/) || [''])[0]);
   check('finance note names the sources', /<Budget typed in Project Manager\. External spend from the QuickBooks Transaction Report \(Done Job transactions\.csv\)\. Internal spend is from Project Manager\.>/.test(f3.text));
-  check('expense table keeps QuickBooks\' layout', /^Post production \|/m.test(f3.text) && /^Contracted Post Production \|/m.test(f3.text) &&
-    / \| 31\/03\/2026 \| DAK\/INV\/0326-01 \| DAK IT HUB GROUP \|  \| 1,000\.00 \| Client Co:Done Job/.test(f3.text) &&
-    /Total for Contracted Post Production \|  \|  \|  \|  \| \$ 1,000\.00/.test(f3.text) && /Total for Post production \|  \|  \|  \|  \| \$ 1,000\.00/.test(f3.text) &&
-    /Zoom Communications \| Plan, monthly \| 117\.42/.test(f3.text) && /Total for Computer Software Fees \|  \|  \|  \|  \| \$ 189\.15/.test(f3.text), f3.text.slice(f3.text.indexOf('External spend report')).slice(0, 900));
+  check('expense table keeps QuickBooks\' layout', /^Post production$/m.test(f3.text) && /^Contracted Post Production$/m.test(f3.text) && /^Transaction date \| Number \| Name \| Line description \| Amount$/m.test(f3.text) &&
+    /^31\/03\/2026 \| DAK\/INV\/0326-01 \| DAK IT HUB GROUP \|  \| 1,000\.00$/m.test(f3.text) &&
+    /^Total for Contracted Post Production \| \$ 1,000\.00$/m.test(f3.text) && /^Total for Post production \| \$ 1,000\.00$/m.test(f3.text) &&
+    /Zoom Communications \| Plan, monthly \| 117\.42/.test(f3.text) && /^Total for Computer Software Fees \| \$ 189\.15$/m.test(f3.text), f3.text.slice(f3.text.indexOf('External spend report')).slice(0, 900));
   check('other projects\' rows left out of the table', !/Someone Else/.test(f3.text) && /for other projects left out/.test(f3.text));
-  check('TOTAL, accrual and grand total', /TOTAL \|  \|  \|  \| \$ 1,189\.15/.test(f3.text) && /Courier \| 50\.00/.test(f3.text) && /^ \|  \|  \|  \|  \| \$ 1,239\.15 \| $/m.test(f3.text));
+  check('TOTAL, accrual and grand total', /^TOTAL \| \$ 1,189\.15$/m.test(f3.text) && /^Courier \| 50\.00$/m.test(f3.text) && /^ \| \$ 1,239\.15$/m.test(f3.text));
   check('QuickBooks footer kept', /Tuesday, Apr 14, 2026 02:54:00 PM GMT\+8 - Accrual Basis/.test(f3.text));
+  // Google Docs cuts off a table wider than the text area (US Letter, 1in margins = 9360 twips).
+  const widths = (f3.xml.match(/<w:tblW [^>]*w:w="[\d.]+"/g) || []).map(m => parseFloat(/w:w="([\d.]+)"/.exec(m)[1]));
+  check('every table fits the page', widths.length >= 6 && widths.every(w => w <= 9360), widths.join(', '));
+
+  // QuickBooks' plain export: date first, "Description", no account headings, no TOTAL row
+  await q.page.click('#projects-grid .project-menu-toggle[data-project="Done Job"]'); await q.page.waitForTimeout(300);
+  await q.page.click('#projects-grid .project-report-btn[data-project="Done Job"]'); await q.page.waitForTimeout(800);
+  await q.page.click('[data-fin-remove]'); await q.page.waitForTimeout(200);
+  const flatCsv = ['MEDIASHOCK PRODUCTIONS PTE. LTD.,,,,,', 'Transaction Report,,,,,', 'All Dates,,,,,', ',,,,,',
+    'Transaction date,Number,Name,Description,Amount,Customer',
+    '26/10/2026,INV-1,Crew Co,Event coverage,500.00,Done Job',
+    '31/10/2026,RB-2,Some Driver,"Ride to the venue, 2 people",40.50,Done Job'].join('\n');
+  await q.page.setInputFiles('#closing-report-file', { name: 'flat.csv', mimeType: 'text/csv', buffer: Buffer.from(flatCsv) });
+  await q.page.waitForTimeout(500);
+  check('plain export read', /2 transactions, \$ 540\.50/.test(await q.page.textContent('#closing-report-fin')), await q.page.textContent('#closing-report-fin'));
+  const dl5 = q.page.waitForEvent('download', { timeout: 15000 });
+  await q.page.click('#closing-report-download');
+  const f5 = (await docText(q.page, await (await dl5).path())).text;
+  check('plain export: rows start at the date, no empty heading column', /^26\/10\/2026 \| INV-1 \| Crew Co \| Event coverage \| 500\.00$/m.test(f5) &&
+    /^31\/10\/2026 \| RB-2 \| Some Driver \| Ride to the venue, 2 people \| 40\.50$/m.test(f5) && /^TOTAL \| \$ 540\.50$/m.test(f5), f5.slice(f5.indexOf('External spend report')).slice(0, 500));
   check('finance never saved', await q.page.evaluate(() => !window.__fb.writes.some(w => /finance|projects/.test(w.col) && JSON.stringify(w).indexOf('1,189') !== -1) && !JSON.stringify(window.__fb.data).includes('DAK IT HUB')));
 
   // The team's Transaction Report sheet, downloaded as Excel: Summary gives the budget, Expenses the rows
   await q.page.click('#projects-grid .project-menu-toggle[data-project="Done Job"]'); await q.page.waitForTimeout(300);
   await q.page.click('#projects-grid .project-report-btn[data-project="Done Job"]'); await q.page.waitForTimeout(800);
-  check('reopened window keeps the file for this visit', /Done Job transactions\.csv/.test(await q.page.textContent('#closing-report-fin')));
+  check('reopened window keeps the file for this visit', /flat\.csv/.test(await q.page.textContent('#closing-report-fin')));
   await q.page.click('[data-fin-remove]'); await q.page.waitForTimeout(200);
   check('removing the file brings the drop zone back', !!(await q.page.$('#closing-report-drop')));
   const xlsxB64 = await q.page.evaluate(async (sheets) => {
@@ -298,7 +318,7 @@ async function docText(page, file) {
   const f4 = (await docText(q.page, await (await dl4).path())).text;
   check('Excel sheet: summary with other currency', /\| SGD \| Other Currency \(USD\) \| Exchange Rate/.test(f4) && /Project total budget \| \$ 35,560\.00 \| USD 28,000\.00 \| 1\.27/.test(f4) &&
     /Project external spend \| \$ 15,696\.97/.test(f4) && /tGross profit margin vs spending \| 55\.86% \| 44\.14%/.test(f4), (f4.match(/Other Currency[\s\S]{0,300}/) || [''])[0]);
-  check('Excel sheet: date serial shown as a date', / \| 31\/03\/2026 \| DAK\/INV\/0326-01/.test(f4), (f4.match(/[^\n]*DAK\/INV[^\n]*/) || [''])[0]);
+  check('Excel sheet: date serial shown as a date', /^31\/03\/2026 \| DAK\/INV\/0326-01/m.test(f4), (f4.match(/[^\n]*DAK\/INV[^\n]*/) || [''])[0]);
   check('Excel sheet: note says the budget came from it', /Budget from the Summary tab of Done Job_Transaction Report\.xlsx/.test(f4));
 
   // Something that isn't a transaction report

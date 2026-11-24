@@ -3666,6 +3666,12 @@ REPORT in index.html.
   shows external / budget, including internal = (budget - external - internal) / budget. The
   external spend table is rebuilt in QuickBooks' layout (headings, rows, "Total for", TOTAL,
   accruals, grand total, footer) from template rows `{{EG}}`/`{{ED}}`/`{{ES}}`; no file, no table.
+  **Every table in the template fits the page (9360 twips, Letter with 1in margins)**: Google Docs
+  cuts off a wider one, which the team template's pasted-in tables all were (reported 2026-11-24 from
+  the first real report). Expense table is Date | Number | Name | Line description | Amount (no empty
+  heading column, no Customer column: every row left is this project); headings span the row and
+  "Total for ..." spans up to Amount. Breakdown dates read "9 Oct 2026". QuickBooks' plain export
+  (date first, "Description", no headings or TOTAL) reads the same way.
   **Finance figures are never saved**: in memory for the visit (`reportFinance`, per project) and in
   the Doc only. Not built: a direct QuickBooks connection (needs a server for Intuit's secret key,
   so the Blaze plan) and a last-round finance comparison (that table still only compares internal

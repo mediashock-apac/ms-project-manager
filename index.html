@@ -12917,7 +12917,7 @@
           var n = closingReportNumbers(name, fr);
           var prev = prevName ? closingReportNumbers(prevName, fr) : null;
           var facts = closingReportFacts(name);
-          var entryDate = function (iso) { var d = new Date(iso); return isNaN(d) ? '' : d.toLocaleString('en-US', { month: 'long' }) + ' ' + d.getDate() + ', ' + d.getFullYear(); };
+          var entryDate = function (iso) { var d = new Date(iso); return isNaN(d) ? '' : d.getDate() + ' ' + d.toLocaleString('en-US', { month: 'short' }) + ' ' + d.getFullYear(); };   // "9 Oct 2026": fits the column
           var amountCell = function (min, amt, hasRate) { return hasRate || !min ? finMoney(amt) : 'No rate set'; };
           repeatBullet(xml, 'WELL', facts.well);
           repeatBullet(xml, 'DIDNT', facts.didnt);
@@ -26315,7 +26315,7 @@
      and losing an in-progress draft to a surprise reload would be worse
      than waiting a few seconds for the tab to be idle.
   ========================================================= */
-  var CURRENT_BUILD_VERSION = "2026-11-23T08:14:01Z";
+  var CURRENT_BUILD_VERSION = "2026-11-24T03:55:06Z";
   var pendingBuildVersion = null;
 
   function anyModalOpen() {
